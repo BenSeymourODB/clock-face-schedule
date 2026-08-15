@@ -300,9 +300,15 @@ elements get created changes.
   ordinal (`"1"`–`"11"`) or `""` when the event inherits the calendar default, so the adapter
   needs a Google-palette ordinal→hex table plus `Calendar.getColor()` as the final fallback.
   NDWC resolved this from a Tailwind enum that does not exist here.
-- Web app deployment mode. "Execute as me / access limited to me" is the safe default for a
-  personal calendar, but it requires the wall device to hold a logged-in Google session.
-  "Execute as me / anyone with the link" avoids that and leaks the calendar to anyone holding
-  the URL. Needs a decision before the display goes on a wall.
+- Web app deployment mode. "Execute as me / access limited to me" is the safe option, but it
+  requires the display to hold a logged-in Google session; "execute as me / anyone with the link"
+  avoids that and leaks the calendar to anyone holding the URL. The classroom setting raises the
+  stakes on the second option considerably — a school calendar may carry student names, which
+  makes a shared URL a different class of problem than it would be in a kitchen.
+
+  Narrowed, not yet closed: the smart boards at the intended pilot school appear to be Android TV
+  or ChromeOS based, so a persistent per-device session is plausible rather than out of the
+  question. That points at the safe option. **Needs verifying against the actual hardware** before
+  it is treated as settled.
 - Whether the all-day aside (NDWC never built it; yuvomi-kiosk#58) belongs in the MVP or
   immediately after.

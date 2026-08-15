@@ -66,6 +66,42 @@ Planning. Nothing is implemented yet.
 - [docs/DESIGN.md](docs/DESIGN.md) — architecture and ADRs
 - [docs/plans/2026-08-15-mvp-clock-face.md](docs/plans/2026-08-15-mvp-clock-face.md) — MVP work breakdown
 
+## Local development
+
+Requires Node ≥ 20.
+
+```bash
+npm install
+```
+
+### One-time Google setup
+
+The **Apps Script API must be enabled** for the account that will own the script. clasp can
+neither create nor push a project without it, and the error it returns does not appear until you
+try:
+
+1. Visit <https://script.google.com/home/usersettings> and turn on the Apps Script API
+2. `npx clasp login`
+3. `npx clasp create-script --type standalone --title "clock-face-schedule" --rootDir build`
+
+`--type standalone` is correct even though this is a web app. `webapp` is **not** a container
+type in clasp 3 — it was dropped, the `--help` text still advertises it, and the resulting error
+(`Invalid container file type`) does not say why. Web-app deployment comes from the `webapp`
+block in `static/appsscript.json`, not from the container type.
+
+### Everyday commands
+
+| Command | Does |
+| --- | --- |
+| `npm run build` | esbuild → `build/` (`Code.gs`, `Client.html`, statics) |
+| `npm run build:watch` | rebuild `src/` and `static/` on change |
+| `npm test` | vitest — node project for `shared/` + `server/`, jsdom for `client/` |
+| `npm run check-types` | tsc over both tsconfigs |
+| `npm run push` | build, then `clasp push` |
+
+`build/` is generated and gitignored; it is also clasp's `rootDir`, so a push only ever uploads
+generated output. Edits made in the Apps Script online editor are overwritten by the next push.
+
 ## Relationship to the prior implementations
 
 This is a **third implementation, not a fork**. It reuses the part that is worth reusing:
