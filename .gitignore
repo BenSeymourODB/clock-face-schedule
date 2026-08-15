@@ -1,0 +1,16 @@
+node_modules/
+
+# esbuild output — this is what clasp pushes
+build/
+
+# Bound to one Apps Script project; copy .clasp.json.example and fill in scriptId
+.clasp.json
+
+# clasp credentials — normally in ~/.clasprc.json, never in the repo
+.clasprc.json
+
+*.log
+.env
+.env.local
+.DS_Store
+Thumbs.db
