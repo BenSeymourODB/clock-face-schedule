@@ -188,6 +188,40 @@ This project ships no Tailwind and no shadcn. `yuvomi-kiosk` chose to rename the
 
 ---
 
+## Platform constraints
+
+Hard limits of the Apps Script + `HtmlService` runtime. These are not preferences to revisit —
+they are the shape of the platform, and several ADRs above exist only to work around them.
+
+**No ES modules server-side.** `.gs` files share a single global scope with no `import` or
+`export`, and entry points must be reachable as top-level functions. → ADR 0002.
+
+**Client JavaScript cannot be served as a file.** It has to be inlined from an `.html` file via
+`HtmlService` templating; there is no path on an origin we control that serves a `.js` file.
+→ ADR 0002.
+
+**The client↔server bridge is `google.script.run`, not HTTP.** Callback-based, and typically
+0.5–2 s per round trip. → ADR 0006, and the first-paint ordering it forces.
+
+**No service workers, no Notification API, no PWA manifest.** The page runs in a nested,
+cross-origin, sandboxed iframe on an ephemeral `googleusercontent.com` origin that rotates
+between sessions. Service worker registration requires a same-origin script at a path we
+control, which Apps Script cannot provide. Independently, Chrome and Firefox both refuse
+`Notification.requestPermission()` from a cross-origin iframe, and `notifications` is
+deliberately excluded from Permissions-Policy delegation — so it cannot be granted via `allow=`
+either, and manual permission does not survive the origin rotation.
+
+Neither half can be closed from inside Apps Script, so **anything notification-shaped must be
+in-page**. Post-MVP reminder work is scoped as in-page toasts for exactly this reason: named
+otherwise, it would accrue a service-worker dependency it can never satisfy. Full investigation
+and the workable alternatives are in issue #11.
+
+**Execution and quota ceilings.** Six minutes per execution. Trigger runtime is capped in
+aggregate per day — 90 minutes on consumer accounts, six hours on Workspace — which bounds how
+often any off-device alerting can poll. → ADR 0006.
+
+---
+
 ## Overlapping events and concentric rings
 
 This was an open worry going in, so: **it is already solved, and the solution is optimal in
