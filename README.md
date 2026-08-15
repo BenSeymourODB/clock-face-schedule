@@ -9,6 +9,39 @@ carries the event's emoji and a curved title. Overlapping events stack onto conc
 rings. Titles too long for their arc are promoted to a floating label outside the dial with a
 connector line back to the arc.
 
+## Purpose
+
+This is a **visual aid for tracking time**, not a calendar app.
+
+A conventional agenda answers "what is on today" but says nothing about *how much of the day is
+left*, or *how long until the next thing*. Both of those require holding an abstraction — clock
+arithmetic — that many people cannot do quickly, and some cannot do at all. Rendering the day as
+occupied and unoccupied space on a dial removes the arithmetic: the gap you can see is the time
+you have.
+
+Intended for:
+
+- **Classrooms** — projector screens and smart boards, as a shared reference the whole room reads
+  at a glance
+- **Home wall displays** — the same view for a family, on a screen nobody has to interact with
+
+It is aimed particularly at **students with learning disabilities, and anyone who finds tracking
+time difficult** — which includes a lot of people who would never describe themselves that way.
+
+Three consequences that outrank feature count:
+
+1. **Legibility at distance beats information density.** The dial is read from across a room, off
+   a projector, often at poor contrast. Every layout decision resolves toward "readable from the
+   back row", not "fits more on screen".
+2. **No interaction required.** The display must be correct and complete standing still. Nothing
+   is behind a hover, a tap, or a menu.
+3. **Do not encode meaning in colour alone.** Colour distinguishes events; position, text, and
+   emoji carry the meaning. This matters for colour vision deficiency and for washed-out
+   projectors in equal measure.
+
+The scope is deliberately small — the simplest possible version of the clock face designed for
+`next-digital-wall-calendar`, doing one thing legibly.
+
 ## Why Apps Script
 
 The two prior versions of this interface each needed infrastructure the display itself did not

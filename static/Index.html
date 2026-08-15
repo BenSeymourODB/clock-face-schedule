@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <base target="_top" />
+    <meta charset="utf-8" />
+    <?!= include('Styles'); ?>
+  </head>
+  <body>
+    <main>
+      <h1>clock-face-schedule</h1>
+      <p class="lede">Scaffold check — issue #1. No dial yet.</p>
+
+      <section>
+        <h2>Colour emoji</h2>
+        <p class="emoji">🔴 🟠 🟡 🟢 🔵 🟣 ⚫ ⚪ 🟤</p>
+        <p class="emoji">🎮 🏋️ 🍽️ 📚 🎂 ⚽</p>
+        <p class="note">
+          Every glyph above must render in colour. Monochrome outlines or empty boxes mean this
+          device has no colour emoji font — which would silently break the dial's entire colour
+          scheme, with nothing in the code to indicate why. Check this on the display that will
+          actually run the clock, not on a workstation.
+        </p>
+      </section>
+
+      <section>
+        <h2>Entry-point resolution</h2>
+        <dl id="probe-results">
+          <dt>calling…</dt>
+          <dd>no response yet</dd>
+        </dl>
+        <p class="note">
+          <code>probeDeclared</code> is re-declared at top level by the build footer.
+          <code>probeAssigned</code> is only assigned onto the global object from inside the
+          bundle. If both are reachable, the footer is unnecessary machinery and ADR 0002 can be
+          simplified; if only the first is, every future entry point must be registered in it.
+        </p>
+      </section>
+    </main>
+    <?!= include('Client'); ?>
+  </body>
+</html>
