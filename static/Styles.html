@@ -69,7 +69,9 @@
     width: 100%;
     max-width: 34rem;
     height: auto;
-    margin: 0 auto;
+    /* Floating labels sit outside the viewBox by design. */
+    overflow: visible;
+    margin: 2rem auto;
   }
 
   .emoji {
