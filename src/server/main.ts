@@ -7,6 +7,8 @@
  * is all that is required. See ADR 0002 and scripts/build.mjs.
  */
 
+export { getEvents } from "./calendar";
+
 export function doGet(): GoogleAppsScript.HTML.HtmlOutput {
   return HtmlService.createTemplateFromFile("Index")
     .evaluate()

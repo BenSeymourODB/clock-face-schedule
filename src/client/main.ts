@@ -6,7 +6,7 @@
  * colour emoji font. Replaced by the real page shell in #8, which swaps the sample events below
  * for a live calendar.
  */
-import { type ClockEventInput, getPeriodStart } from "../shared/clock";
+import { type ClockEventInput, getPeriodBounds, getPeriodStart } from "../shared/clock";
 import { analogClock } from "./render/analog-clock";
 
 interface Pong {
@@ -78,6 +78,28 @@ async function renderDiagnostics(): Promise<void> {
   }
 
   addRow(list, "browser time", new Date().toString(), "ok");
+  await reportCalendar(list);
+}
+
+/**
+ * Reads the accessing user's calendar for the current period. The dial still draws sample events
+ * — wiring it to this, with polling and failure states, is #8 — but this proves the adapter works
+ * on the deployed app, which is the one thing about it no spec can cover.
+ */
+async function reportCalendar(list: Element): Promise<void> {
+  const { periodStart, periodEnd } = getPeriodBounds(new Date());
+
+  try {
+    const events = await callServer<ClockEventInput[]>(
+      "getEvents",
+      periodStart.toISOString(),
+      periodEnd.toISOString()
+    );
+    const plural = events.length === 1 ? "event" : "events";
+    addRow(list, "calendar", `${events.length} ${plural} in this period`, "ok");
+  } catch (error) {
+    addRow(list, "calendar", `unavailable — ${(error as Error).message}`, "fail");
+  }
 }
 
 const TICK_INTERVAL_MS = 1000;

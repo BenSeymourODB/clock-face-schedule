@@ -18,7 +18,7 @@ export {
   polarToCartesian,
   roundCoord
 } from './clock-utils';
-export { readableTextColor } from './contrast';
+export { readableTextColor, relativeLuminance } from './contrast';
 export { fitTitleToArc, type FitTitleResult } from './fit-title';
 export { rectEdgeIntersection } from './rect-edge';
 export { assignRingIndices } from './ring-layout';
