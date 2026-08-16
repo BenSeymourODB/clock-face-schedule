@@ -93,7 +93,7 @@ block in `static/appsscript.json`, not from the container type.
 
 | Command | Does |
 | --- | --- |
-| `npm run build` | esbuild → `build/` (`Code.gs`, `Client.html`, statics) |
+| `npm run build` | esbuild → `build/` (`Code.gs`, `Client.html`, statics, plus `preview.html`) |
 | `npm run build:watch` | rebuild `src/` and `static/` on change |
 | `npm test` | vitest — node project for `shared/` + `server/`, jsdom for `client/` |
 | `npm run check-types` | tsc over both tsconfigs |
@@ -101,6 +101,12 @@ block in `static/appsscript.json`, not from the container type.
 
 `build/` is generated and gitignored; it is also clasp's `rootDir`, so a push only ever uploads
 generated output. Edits made in the Apps Script online editor are overwritten by the next push.
+
+**`build/preview.html`** resolves the HtmlService `include()` templating into a standalone page,
+so the UI can be opened straight from disk. This is the fast loop for visual work — no push, no
+deployment. Nothing server-side runs, so anything behind `google.script.run` shows its failure
+state; it is a complement to checking the deployed app, not a replacement. `.claspignore` keeps
+it out of the pushed project.
 
 ### The manifest is the source of truth
 

@@ -6,6 +6,8 @@
  * colour emoji font. Replaced by the dial itself in #8.
  */
 
+import { clockFace } from "./render/clock-face";
+
 interface Pong {
   serverTime: string;
   timeZone: string;
@@ -77,4 +79,26 @@ async function renderDiagnostics(): Promise<void> {
   addRow(list, "browser time", new Date().toString(), "ok");
 }
 
+/**
+ * A standing preview of the dial. Rendered once — ticking is #7, event arcs are #5 and #7 —
+ * so the geometry can be judged on the display it will actually run on rather than in jsdom.
+ *
+ * `radius` is what #7 will pass: half the viewBox, less an 8px margin, less the 48px band
+ * reserved for event arcs. The empty ring around the face is that band.
+ */
+function mountClockFace(): void {
+  const mount = document.querySelector("#clock-mount");
+  if (!mount) return;
+
+  const { element } = clockFace({
+    radius: 244,
+    cx: 300,
+    cy: 300,
+    time: new Date(),
+    showSeconds: true,
+  });
+  mount.append(element);
+}
+
+mountClockFace();
 void renderDiagnostics();

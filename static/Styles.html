@@ -7,12 +7,18 @@
    *
    * Values here are a first pass. #4 tunes them against the real dial, at projector contrast.
    */
+  /*
+   * Contrast ratios below are against --card, the dial's own background, and are the reason
+   * these particular values were chosen. WCAG asks 4.5:1 for body text and 3:1 for graphical
+   * objects; a display read from the back of a room has no margin to give away, so nothing
+   * here sits near the floor.
+   */
   :root {
     --card: #16181d;
-    --card-foreground: #f2f4f8;
-    --border: #3a3f4b;
-    --muted-foreground: #9aa3b2;
-    --destructive: #ef4444;
+    --card-foreground: #f2f4f8; /* 17:1 — numerals, hour markers, hands */
+    --border: #6b7280; /*  3.7:1 — face outline, minute ticks */
+    --muted-foreground: #9aa3b2; /*  7:1   — AM/PM */
+    --destructive: #ef4444; /*  4.7:1 — second hand */
   }
 
   * {
@@ -56,6 +62,14 @@
     background: var(--card);
     border: 1px solid var(--border);
     border-radius: 0.5rem;
+  }
+
+  #clock-mount {
+    display: block;
+    width: 100%;
+    max-width: 34rem;
+    height: auto;
+    margin: 0 auto;
   }
 
   .emoji {

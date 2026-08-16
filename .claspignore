@@ -1,0 +1,3 @@
+# Local-only page for visual work — build/ is clasp's rootDir, so without this the preview
+# would be pushed into the Apps Script project as a stray HTML file.
+preview.html

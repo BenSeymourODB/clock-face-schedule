@@ -83,11 +83,32 @@ async function buildClient() {
   await rm(`${OUT}/Client.js`);
 }
 
+/**
+ * Resolve the HtmlService `include()` templating into a standalone page, so the UI can be opened
+ * from disk without a push. This is the only fast loop available for visual work — every
+ * alternative costs a build, a push, and a browser round trip per change.
+ *
+ * Not a substitute for checking on the deployed app: nothing server-side runs here, so anything
+ * behind `google.script.run` shows its failure state.
+ */
+async function writePreview() {
+  const shell = await readFile(`${OUT}/Index.html`, "utf8");
+  const parts = [...shell.matchAll(/<\?!=\s*include\('([^']+)'\);?\s*\?>/g)];
+
+  let page = shell;
+  for (const [tag, name] of parts) {
+    page = page.replace(tag, await readFile(`${OUT}/${name}.html`, "utf8"));
+  }
+  await writeFile(`${OUT}/preview.html`, page, "utf8");
+}
+
 async function buildAll() {
   await rm(OUT, { recursive: true, force: true });
   const [entryPoints] = await Promise.all([buildServer(), buildClient()]);
   await cp("static", OUT, { recursive: true });
+  await writePreview();
   console.log(`built ${OUT}/ — entry points: ${entryPoints.join(", ")}`);
+  console.log(`preview: ${OUT}/preview.html`);
 }
 
 await buildAll();
