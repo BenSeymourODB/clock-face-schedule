@@ -72,8 +72,12 @@ is `rootDir` in `.clasp.json`. `clasp push` therefore uploads only generated out
 - One build step between editing and seeing a change. Acceptable; `esbuild --watch` plus
   `clasp push --watch` keeps it short.
 - The Apps Script online editor becomes read-only in practice — edits there are overwritten by
-  the next push. This is the normal clasp trade and is worth stating in the README when the
-  scaffold lands.
+  the next push. This extends to **deployment configuration**: `executeAs` and `access` live in
+  `appsscript.json`, and the UI's deployment dialog writes back to that same file, so the two
+  can silently diverge. `npm run push` passes `--force` for this reason. Without it clasp prompts
+  before overwriting a differing remote manifest, declining skips the *entire* push rather than
+  just the manifest, and with no TTY it auto-declines and exits 0 — a scripted push that uploads
+  nothing and reports success.
 - **The footer is structurally required — resolved on the deployed scaffold (#1).** A probe
   deployed two functions: one declared at top level by the footer, one only assigned onto
   `globalThis` from inside the bundle. The declared one was reachable; the assigned one was not

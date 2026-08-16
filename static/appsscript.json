@@ -5,7 +5,7 @@
   "runtimeVersion": "V8",
   "oauthScopes": ["https://www.googleapis.com/auth/calendar.readonly"],
   "webapp": {
-    "executeAs": "USER_DEPLOYING",
-    "access": "MYSELF"
+    "executeAs": "USER_ACCESSING",
+    "access": "ANYONE"
   }
 }

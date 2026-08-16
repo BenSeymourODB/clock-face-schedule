@@ -14,7 +14,7 @@
     "check-types": "tsc -p tsconfig.server.json --noEmit && tsc -p tsconfig.client.json --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "push": "npm run build && clasp push",
+    "push": "npm run build && clasp push --force",
     "open": "clasp open-script"
   },
   "devDependencies": {

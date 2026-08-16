@@ -97,10 +97,26 @@ block in `static/appsscript.json`, not from the container type.
 | `npm run build:watch` | rebuild `src/` and `static/` on change |
 | `npm test` | vitest — node project for `shared/` + `server/`, jsdom for `client/` |
 | `npm run check-types` | tsc over both tsconfigs |
-| `npm run push` | build, then `clasp push` |
+| `npm run push` | build, then `clasp push --force` |
 
 `build/` is generated and gitignored; it is also clasp's `rootDir`, so a push only ever uploads
 generated output. Edits made in the Apps Script online editor are overwritten by the next push.
+
+### The manifest is the source of truth
+
+`static/appsscript.json` carries the web app's deployment configuration — `executeAs` and
+`access` — and the Apps Script UI **writes back to the same file**. Change deployment settings
+here, not in the UI, or the next push reverts them.
+
+`--force` is deliberate, not laziness. Without it, clasp prompts before overwriting a differing
+remote manifest and **declining skips the entire push, not just the manifest**. Worse, with no
+TTY it auto-declines, prints `Skipping push.`, and exits 0 — so a scripted push would silently
+upload nothing whenever the manifest had drifted.
+
+> **If you are deploying a fork, change `access` first.** The committed value is `ANYONE`, which
+> suits a proof of concept and nothing else. An organisation deploying its own instance almost
+> certainly wants `"access": "DOMAIN"`, which also avoids Google's unverified-app review entirely,
+> since that only applies to users outside the owning domain. See issue #13.
 
 ## Relationship to the prior implementations
 
