@@ -23,16 +23,17 @@
       </section>
 
       <section>
-        <h2>Entry-point resolution</h2>
-        <dl id="probe-results">
+        <h2>Server bridge</h2>
+        <dl id="bridge-results">
           <dt>calling…</dt>
           <dd>no response yet</dd>
         </dl>
         <p class="note">
-          <code>probeDeclared</code> is re-declared at top level by the build footer.
-          <code>probeAssigned</code> is only assigned onto the global object from inside the
-          bundle. If both are reachable, the footer is unnecessary machinery and ADR 0002 can be
-          simplified; if only the first is, every future entry point must be registered in it.
+          A round trip through <code>google.script.run</code>. The server timestamp is in the
+          offset-bearing ISO-8601 format every event will use, so this also confirms Apps Script's
+          date formatter before the calendar adapter depends on it. Script and browser timezones
+          differing is not a fault — the browser is authoritative — but it means the manifest
+          <code>timeZone</code> is wrong for wherever this display lives.
         </p>
       </section>
     </main>

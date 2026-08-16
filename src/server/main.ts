@@ -1,9 +1,10 @@
 /**
  * Apps Script entry points.
  *
- * Anything callable from outside the bundle — doGet, template helpers, google.script.run
- * targets — must also be listed in SERVER_ENTRY_POINTS in scripts/build.mjs, which re-declares
- * it at top level. An IIFE bundle otherwise hides every export from the runtime.
+ * Every export here is re-declared as a top-level function by the build footer — Apps Script
+ * resolves entry points by a static scan of top-level declarations, and an IIFE bundle declares
+ * nothing. The footer is generated from the bundle's own export list, so adding an export here
+ * is all that is required. See ADR 0002 and scripts/build.mjs.
  */
 
 export function doGet(): GoogleAppsScript.HTML.HtmlOutput {
@@ -21,19 +22,19 @@ export function include(filename: string): string {
   return HtmlService.createHtmlOutputFromFile(filename).getContent();
 }
 
-/** Reachable because the build footer declares it at top level. Half of the ADR 0002 probe. */
-export function probeDeclared(): string {
-  return "reachable";
-}
-
 /**
- * The other half: assigned onto the global object from inside the IIFE, with no footer entry.
+ * Round-trip check for the google.script.run bridge, kept on the scaffold page so the same
+ * diagnostic can be run from the display device rather than only from a workstation.
  *
- * If google.script.run resolves this one too, the footer is unnecessary machinery. If it does
- * not, the footer is load-bearing and every future entry point has to be registered in it —
- * which is a standing trap worth knowing about now rather than discovering in #8.
+ * Returns the offset-bearing ISO-8601 format ADR 0005 requires of every timestamp, which makes
+ * this a live check that `XXX` is supported by Apps Script's date formatter before #3 depends
+ * on it. The timezone is reported alongside so the page can show whether server and browser
+ * agree — a silent disagreement draws arcs against a different 12-hour period than the hands.
  */
-(globalThis as unknown as Record<string, unknown>)["probeAssigned"] =
-  function probeAssigned(): string {
-    return "reachable";
+export function ping(): { serverTime: string; timeZone: string } {
+  const timeZone = Session.getScriptTimeZone();
+  return {
+    serverTime: Utilities.formatDate(new Date(), timeZone, "yyyy-MM-dd'T'HH:mm:ssXXX"),
+    timeZone,
   };
+}

@@ -93,10 +93,15 @@
     margin: 0;
   }
 
-  /* State is carried by a word as well as a colour — never colour alone. */
+  /* State is carried by a glyph as well as a colour — never colour alone. */
   dd[data-state="ok"]::before {
     content: "✓ ";
     color: #22c55e;
+  }
+
+  dd[data-state="note"]::before {
+    content: "• ";
+    color: var(--muted-foreground);
   }
 
   dd[data-state="fail"]::before {

@@ -62,7 +62,7 @@ Two entry points produce two artefacts:
 
 | Entry | Format | Output | Notes |
 | --- | --- | --- | --- |
-| `src/server/main.ts` | IIFE | `build/Code.gs` | Needs a footer re-exporting the Apps Script entry points as top-level `function` declarations |
+| `src/server/main.ts` | IIFE | `build/Code.gs` | Plus a generated footer re-declaring every export as a top-level `function` |
 | `src/client/main.ts` | IIFE | `build/Client.html` | Bundle wrapped in `<script>…</script>` by a post-build step |
 
 Static files (`appsscript.json`, `Index.html`, `Styles.html`) are copied into `build/`, which
@@ -74,10 +74,22 @@ is `rootDir` in `.clasp.json`. `clasp push` therefore uploads only generated out
 - The Apps Script online editor becomes read-only in practice — edits there are overwritten by
   the next push. This is the normal clasp trade and is worth stating in the README when the
   scaffold lands.
-- **To verify on the first spike:** whether `google.script.run` and the editor's function
-  picker resolve entry points assigned onto the global object, or whether they require literal
-  top-level `function` declarations. The footer approach above assumes the latter, which is the
-  conservative choice; if assignment works, the footer can be simplified.
+- **The footer is structurally required — resolved on the deployed scaffold (#1).** A probe
+  deployed two functions: one declared at top level by the footer, one only assigned onto
+  `globalThis` from inside the bundle. The declared one was reachable; the assigned one was not
+  present on `google.script.run` **at all** — the client-side failure was "no such method",
+  not a server-side lookup error.
+
+  That places the constraint in the client stub list rather than in server name resolution:
+  Apps Script generates `google.script.run`'s methods from a static scan of top-level function
+  declarations when it serves the page, so a global assigned at runtime is invisible to it. No
+  amount of server-side cleverness can work around that, and the footer can never be dropped.
+
+  Because forgetting a footer entry fails silently in the browser rather than at build time, the
+  footer is **generated from the bundle's own export list**, not hand-maintained. Adding an
+  `export` to `src/server/main.ts` is the whole of the work. esbuild only reports exports for
+  `esm` output, so the build harvests them from a throwaway in-memory `esm` pass alongside the
+  real IIFE one.
 
 ## ADR 0003 — Geometry and rendering run client-side; the server is a calendar adapter
 
@@ -290,8 +302,6 @@ elements get created changes.
 
 ## Open questions
 
-- Whether Apps Script entry points survive an IIFE bundle via global assignment, or need
-  literal `function` declarations in a footer (ADR 0002).
 - `CalendarApp` vs. the Advanced Calendar Service. `CalendarApp` is simpler and sufficient for
   one calendar; the advanced service returns `colorId` and richer fields in one batched call and
   will likely be needed when multi-calendar support lands. Starting with `CalendarApp` behind
