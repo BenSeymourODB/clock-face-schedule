@@ -13,6 +13,7 @@ import {
   describeArc,
   describeTextArc,
   polarToCartesian,
+  readableTextColor,
   roundCoord,
 } from "../../shared/clock";
 import { svg } from "../svg";
@@ -154,10 +155,10 @@ export function eventArc({
           {
             "font-size": titleFontSize,
             "font-weight": 500,
-            // Inherited literal — titles sit on the event colour, which no token describes.
-            // NDWC claimed white holds WCAG AA against any of them; it does not, and fails
-            // badly on yellow. Left as the port's baseline, measured in #15.
-            fill: "white",
+            // Chosen per arc: the title sits on the event's own colour, which no token
+            // describes and which the calendar may supply. NDWC used a fixed white, which
+            // measures 1.9:1 on the palette's yellow (#15).
+            fill: readableTextColor(color),
             "font-family": FONT_STACK,
           },
           [

@@ -185,6 +185,21 @@ describe("eventArc", () => {
       expect(radii).toEqual([layout.titleRadius + offset, layout.titleRadius - offset]);
     });
 
+    it.each([
+      ["🟡 yellow", "#EAB308", "#000000"],
+      ["🟢 green", "#22C55E", "#000000"],
+      ["⚫ near-black", "#1F2937", "#ffffff"],
+      ["🟤 brown", "#92400E", "#ffffff"],
+    ])("colours the title for legibility on %s", (_name, color, expected) => {
+      // The ratios themselves are asserted at `contrast`; this only checks the arc consults it
+      // rather than shipping the fixed white the source used (#15).
+      const group = render({ color });
+
+      expect(
+        group.querySelector('[data-testid="event-title-e1"] text')?.getAttribute("fill")
+      ).toBe(expected);
+    });
+
     it("uses the layout it is given rather than recomputing one", () => {
       const layout = computeArcTitleLayout({
         cleanTitle: "Team Meeting",
