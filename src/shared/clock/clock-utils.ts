@@ -1,0 +1,217 @@
+/**
+ * Geometry and time-window helpers for the analog clock face.
+ * Ported from next-digital-wall-calendar's `analog-clock/clock-utils.ts`.
+ */
+import type { ArcAngles, ClockEvent, ClockEventInput, ParsedEventTitle } from './types';
+
+/** Colour-dot emoji a title may be prefixed with, and the hex each selects. */
+const COLOR_EMOJI_MAP: Record<string, string> = {
+  '\u{1F534}': '#EF4444', // 🔴 red-500
+  '\u{1F7E0}': '#F97316', // 🟠 orange-500
+  '\u{1F7E1}': '#EAB308', // 🟡 yellow-500
+  '\u{1F7E2}': '#22C55E', // 🟢 green-500
+  '\u{1F535}': '#3B82F6', // 🔵 blue-500
+  '\u{1F7E3}': '#A855F7', // 🟣 purple-500
+  '\u26AB': '#1F2937', // ⚫ gray-800
+  '\u26AA': '#F3F4F6', // ⚪ gray-100
+  '\u{1F7E4}': '#92400E' // 🟤 amber-800
+};
+
+const EMOJI_REGEX =
+  /^(\p{Emoji_Presentation}|\p{Emoji}\uFE0F|\p{Emoji_Modifier_Base}\p{Emoji_Modifier}?)/u;
+
+/** Floor on arc width, in degrees — ~15 minutes on a 12-hour dial. */
+const MIN_ARC_DEGREES = 7.5;
+
+/** Minutes in a 12-hour period. */
+const PERIOD_MINUTES = 720;
+
+/**
+ * Split an event title into an optional colour-dot prefix, an optional event emoji,
+ * and the remaining text.
+ *
+ * - "🔴 Deadline"             → colour=red, no event emoji
+ * - "🟢 🎮 Family Game Night" → colour=green, eventEmoji=🎮
+ * - "🏋️ Gym Session"         → fallback colour, eventEmoji=🏋️
+ * - "Team Meeting"            → fallback colour, no emoji
+ */
+export function parseEventTitle(title: string, fallbackColor: string): ParsedEventTitle {
+  let remaining = title;
+  let colorEmoji: string | undefined;
+  let eventEmoji: string | undefined;
+  let color = fallbackColor;
+
+  const colorMatch = remaining.match(EMOJI_REGEX);
+  if (colorMatch) {
+    const candidate = colorMatch[0];
+    if (COLOR_EMOJI_MAP[candidate]) {
+      colorEmoji = candidate;
+      color = COLOR_EMOJI_MAP[candidate];
+      remaining = remaining.slice(candidate.length).replace(/^ /, '');
+    }
+  }
+
+  // A second emoji (or the first, when no colour dot matched) is the event's own.
+  const eventMatch = remaining.match(EMOJI_REGEX);
+  if (eventMatch) {
+    eventEmoji = eventMatch[0];
+    remaining = remaining.slice(eventEmoji.length).replace(/^ /, '');
+  }
+
+  return { colorEmoji, eventEmoji, cleanTitle: remaining, color };
+}
+
+/**
+ * Start of the 12-hour period containing `time`: midnight for 00:00–11:59,
+ * noon for 12:00–23:59.
+ */
+export function getPeriodStart(time: Date): Date {
+  const periodStart = new Date(time);
+  periodStart.setMinutes(0, 0, 0);
+  periodStart.setHours(time.getHours() < 12 ? 0 : 12);
+  return periodStart;
+}
+
+/** Both ends of the 12-hour period containing `time`. */
+export function getPeriodBounds(time: Date): { periodStart: Date; periodEnd: Date } {
+  const periodStart = getPeriodStart(time);
+  const periodEnd = new Date(periodStart.getTime() + 12 * 60 * 60 * 1000);
+  return { periodStart, periodEnd };
+}
+
+/**
+ * Narrow events to those overlapping a 12-hour period. All-day events are dropped —
+ * they have no start or end angle, so they belong in a separate list beside the dial.
+ *
+ * Overlap is exclusive at both ends: an event ending exactly at `periodStart`, or
+ * starting exactly at `periodEnd`, is not included.
+ */
+export function filterEventsForPeriod(
+  events: ClockEventInput[],
+  periodStart: Date,
+  periodEnd: Date
+): ClockEventInput[] {
+  const startMs = periodStart.getTime();
+  const endMs = periodEnd.getTime();
+  return events.filter((event) => {
+    if (event.isAllDay) return false;
+    const eventStart = new Date(event.startDate).getTime();
+    const eventEnd = new Date(event.endDate).getTime();
+    return eventStart < endMs && eventEnd > startMs;
+  });
+}
+
+/**
+ * Resolve events into drawable arcs: parse each title's emoji prefixes and compute
+ * arc angles against `periodStart`.
+ *
+ * Does not filter — pass through `filterEventsForPeriod` first for the current period.
+ */
+export function eventsToClockEvents(events: ClockEventInput[], periodStart: Date): ClockEvent[] {
+  return events.map((event) => {
+    const parsed = parseEventTitle(event.title, event.fallbackColor);
+    const angles = calculateArcAngles(
+      new Date(event.startDate),
+      new Date(event.endDate),
+      periodStart
+    );
+    return {
+      id: event.id,
+      title: event.title,
+      cleanTitle: parsed.cleanTitle,
+      startAngle: angles.startAngle,
+      endAngle: angles.endAngle,
+      color: parsed.color,
+      eventEmoji: parsed.eventEmoji,
+      isAllDay: event.isAllDay
+    };
+  });
+}
+
+/**
+ * Map an event's times onto arc angles within a 12-hour period, where 0° is
+ * 12 o'clock and 90°/180°/270° are 3, 6, and 9 o'clock.
+ *
+ * Events are clamped to the period; a floor of MIN_ARC_DEGREES keeps short events visible.
+ */
+export function calculateArcAngles(eventStart: Date, eventEnd: Date, periodStart: Date): ArcAngles {
+  const periodEndMs = periodStart.getTime() + PERIOD_MINUTES * 60 * 1000;
+
+  const clampedStart = Math.max(eventStart.getTime(), periodStart.getTime());
+  const clampedEnd = Math.min(eventEnd.getTime(), periodEndMs);
+
+  const startMinutes = (clampedStart - periodStart.getTime()) / (60 * 1000);
+  const endMinutes = (clampedEnd - periodStart.getTime()) / (60 * 1000);
+
+  let startAngle = (startMinutes / PERIOD_MINUTES) * 360;
+  let endAngle = (endMinutes / PERIOD_MINUTES) * 360;
+
+  if (endAngle - startAngle < MIN_ARC_DEGREES) {
+    endAngle = startAngle + MIN_ARC_DEGREES;
+    // Widening past 12 o'clock would wrap the arc, so pull the start back instead.
+    if (endAngle > 360) {
+      endAngle = 360;
+      startAngle = Math.max(0, endAngle - MIN_ARC_DEGREES);
+    }
+  }
+
+  return { startAngle, endAngle };
+}
+
+/**
+ * Round a computed coordinate to a stable precision.
+ *
+ * Inherited to guard against two runtimes disagreeing at the least-significant bit; this
+ * project renders only in the browser, so that particular hazard does not arise. Kept
+ * because trigonometry otherwise yields 15-significant-digit path strings, and because
+ * geometry tests can assert exact values rather than approximations. Four decimals is far
+ * below sub-pixel precision at any dial size.
+ */
+export function roundCoord(n: number, decimals = 4): number {
+  const factor = 10 ** decimals;
+  return Math.round(n * factor) / factor;
+}
+
+/**
+ * Polar (degrees, radius) → cartesian (x, y), with 0° at 12 o'clock, clockwise.
+ * Output is rounded via `roundCoord` for render stability.
+ */
+export function polarToCartesian(
+  cx: number,
+  cy: number,
+  radius: number,
+  angleDegrees: number
+): { x: number; y: number } {
+  // -90° so that 0° lands at 12 o'clock rather than 3 o'clock.
+  const angleRad = ((angleDegrees - 90) * Math.PI) / 180;
+  return {
+    x: roundCoord(cx + radius * Math.cos(angleRad)),
+    y: roundCoord(cy + radius * Math.sin(angleRad))
+  };
+}
+
+/** SVG path for a donut-arc (annular sector) between two radii and two angles. */
+export function describeArc(
+  cx: number,
+  cy: number,
+  outerRadius: number,
+  innerRadius: number,
+  startAngle: number,
+  endAngle: number
+): string {
+  const outerStart = polarToCartesian(cx, cy, outerRadius, startAngle);
+  const outerEnd = polarToCartesian(cx, cy, outerRadius, endAngle);
+  const innerStart = polarToCartesian(cx, cy, innerRadius, startAngle);
+  const innerEnd = polarToCartesian(cx, cy, innerRadius, endAngle);
+
+  const arcSpan = endAngle - startAngle;
+  const largeArcFlag = arcSpan > 180 ? 1 : 0;
+
+  return [
+    `M ${outerStart.x} ${outerStart.y}`,
+    `A ${outerRadius} ${outerRadius} 0 ${largeArcFlag} 1 ${outerEnd.x} ${outerEnd.y}`,
+    `L ${innerEnd.x} ${innerEnd.y}`,
+    `A ${innerRadius} ${innerRadius} 0 ${largeArcFlag} 0 ${innerStart.x} ${innerStart.y}`,
+    'Z'
+  ].join(' ');
+}
