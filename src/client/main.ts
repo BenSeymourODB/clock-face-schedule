@@ -3,19 +3,11 @@
  *
  * Confirms the things everything later depends on: the client bundle reaches the browser, the
  * google.script.run bridge round-trips, server and browser agree on time, and the display has a
- * colour emoji font. Replaced by the dial itself in #8.
+ * colour emoji font. Replaced by the real page shell in #8, which swaps the sample events below
+ * for a live calendar.
  */
-
-import {
-  type ClockEventInput,
-  computeArcTitleLayout,
-  eventsToClockEvents,
-  getPeriodStart,
-} from "../shared/clock";
-import { clockFace } from "./render/clock-face";
-import { eventArc } from "./render/event-arc";
-import { floatingLabel } from "./render/floating-label";
-import { svg } from "./svg";
+import { type ClockEventInput, getPeriodStart } from "../shared/clock";
+import { analogClock } from "./render/analog-clock";
 
 interface Pong {
   serverTime: string;
@@ -73,7 +65,7 @@ async function renderDiagnostics(): Promise<void> {
     addRow(list, "server time", pong.serverTime, "ok");
     addRow(list, "script timezone", pong.timeZone, "ok");
     // A mismatch is not a failure — ADR 0005 makes the browser authoritative — but it means the
-    // manifest timeZone is wrong for wherever this display lives, which is worth correcting.
+    // manifest timeZone is wrong for wherever this display lives.
     addRow(
       list,
       "browser timezone",
@@ -88,9 +80,15 @@ async function renderDiagnostics(): Promise<void> {
   addRow(list, "browser time", new Date().toString(), "ok");
 }
 
-const DIAL = { size: 600, margin: 8, arcThickness: 48 } as const;
+const TICK_INTERVAL_MS = 1000;
 
-/** Sample events across the current period, so the arcs have something to draw. */
+/**
+ * Sample events across whichever twelve hours the page is opened in, so the dial has something
+ * to draw before #3 supplies a calendar.
+ *
+ * The first three deliberately overlap, two of them three deep, because concentric ring stacking
+ * is the part hardest to judge from a specification.
+ */
 function sampleEvents(periodStart: Date): ClockEventInput[] {
   const at = (hours: number, minutes: number) =>
     new Date(periodStart.getTime() + (hours * 60 + minutes) * 60_000).toISOString();
@@ -98,72 +96,27 @@ function sampleEvents(periodStart: Date): ClockEventInput[] {
 
   return [
     { id: "a", title: "🟢 🎮 Game Time", startDate: at(0, 30), endDate: at(2, 0), isAllDay: false, fallbackColor },
-    { id: "b", title: "🔴 Deadline", startDate: at(2, 30), endDate: at(3, 0), isAllDay: false, fallbackColor },
-    { id: "c", title: "🟡 🍽️ Lunch", startDate: at(4, 0), endDate: at(6, 30), isAllDay: false, fallbackColor },
-    { id: "d", title: "📚 Reading", startDate: at(8, 0), endDate: at(8, 10), isAllDay: false, fallbackColor },
-    { id: "e", title: "🔵 Parent Teacher Conference Planning Committee", startDate: at(9, 30), endDate: at(10, 40), isAllDay: false, fallbackColor },
+    { id: "b", title: "🔴 Deadline", startDate: at(1, 0), endDate: at(3, 0), isAllDay: false, fallbackColor },
+    { id: "c", title: "🟣 Study", startDate: at(1, 30), endDate: at(2, 30), isAllDay: false, fallbackColor },
+    { id: "d", title: "🟡 🍽️ Lunch", startDate: at(4, 30), endDate: at(6, 30), isAllDay: false, fallbackColor },
+    { id: "e", title: "📚 Reading", startDate: at(8, 0), endDate: at(8, 10), isAllDay: false, fallbackColor },
+    { id: "f", title: "🔵 Parent Teacher Conference Planning Committee", startDate: at(9, 30), endDate: at(10, 40), isAllDay: false, fallbackColor },
   ];
 }
 
-/**
- * A standing preview of the dial, so the geometry can be judged on the display it will actually
- * run on rather than in jsdom.
- *
- * Deliberately *not* the real orchestration — there is no ring stacking and no tick; both are
- * #7. Every event here sits on a single ring, which is why none of them overlap.
- */
 function mountDial(): void {
   const mount = document.querySelector("#clock-mount");
   if (!mount) return;
 
-  const cx = DIAL.size / 2;
-  const cy = DIAL.size / 2;
-  const outerRadius = cx - DIAL.margin;
-  const innerRadius = outerRadius - DIAL.arcThickness;
-
   const now = new Date();
-  const periodStart = getPeriodStart(now);
-  const events = eventsToClockEvents(sampleEvents(periodStart), periodStart);
+  const clock = analogClock({
+    events: sampleEvents(getPeriodStart(now)),
+    showSeconds: true,
+    time: now,
+  });
 
-  const arcs = svg("g");
-  const labels = svg("g");
-
-  for (const event of events) {
-    const arcSpan = event.endAngle - event.startAngle;
-    const layout = computeArcTitleLayout({
-      cleanTitle: event.cleanTitle,
-      arcSpan,
-      innerRadius,
-      outerRadius,
-    });
-    // A label only helps if the arc it points at is wide enough to see.
-    const isOverflow = layout.fit.didOverflow && arcSpan >= 10;
-
-    arcs.append(
-      eventArc({ event, cx, cy, innerRadius, outerRadius, layout, forceHideTitle: isOverflow })
-    );
-
-    if (isOverflow) {
-      labels.append(
-        floatingLabel({
-          id: event.id,
-          text: event.cleanTitle,
-          anchorAngle: (event.startAngle + event.endAngle) / 2,
-          anchorRadius: outerRadius,
-          labelRadius: outerRadius + DIAL.arcThickness * 0.6,
-          color: event.color,
-          cx,
-          cy,
-          clockBox: { top: cy - outerRadius, bottom: cy + outerRadius, height: outerRadius * 2 },
-          fontSize: layout.titleFontSize,
-        })
-      );
-    }
-  }
-
-  // Face last so the hands draw over any label bleeding toward the centre.
-  const face = clockFace({ radius: innerRadius, cx, cy, time: now, showSeconds: true });
-  mount.append(arcs, labels, face.element);
+  mount.append(clock.element);
+  window.setInterval(() => clock.setTime(new Date()), TICK_INTERVAL_MS);
 }
 
 mountDial();
