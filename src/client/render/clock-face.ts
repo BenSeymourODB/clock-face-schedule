@@ -28,9 +28,22 @@ const RADIUS = {
   minuteTickInner: 0.905,
   numeral: 0.72,
   periodIndicator: 0.35,
-  hourHand: 0.55,
-  minuteHand: 0.75,
-  secondHand: 0.8,
+  /**
+   * Hand lengths, each reaching the thing it is read against.
+   *
+   * The inherited 0.55 / 0.75 / 0.8 left both pointers short of their own scale: the hour hand
+   * stopped 20.5 units before the numerals it indicates, and the minute hand 31.7 before the
+   * minute ticks. Both asked a viewer to extrapolate along a line to a mark it never touches,
+   * which is exactly the small act of inference this dial exists to remove.
+   *
+   * The hour hand now stops just inside the numerals' glyphs, so it points *at* a numeral without
+   * covering it; the minute hand lands on the inner end of the tick track. Length is also how the
+   * three are told apart, so the second hand had to grow with them to stay the longest — a minute
+   * hand outreaching the second hand would swap their identities at a glance.
+   */
+  hourHand: 0.64,
+  minuteHand: 0.9,
+  secondHand: 0.93,
   /** The second hand overhangs the centre by this much, as a counterweight. */
   secondHandTail: 0.12,
   centreDot: 0.035,

@@ -164,7 +164,8 @@ readable ring:
 | 2 | 65.0 | |
 | 5 | 26.0 | |
 | 8 | 16.3 | |
-| 10 | 13.0 | just clears |
+| 9 | 14.4 | the practical maximum — see layering below |
+| 10 | 13.0 | just clears, but only if the timer keeps the full radius |
 | 12 | 10.8 | **too thin** |
 | 20 | 6.5 | **too thin** |
 | 60 | 2.2 | **unusable** |
@@ -230,18 +231,24 @@ Consequences worth building around:
 ### Layering: keep the hands on top, and outline them
 
 Drawing the timer *over* the hands would stop the rings being chopped, but it costs far more than it
-saves. Against a timer radius of ~130 on a 600-unit dial:
+saves. The hands were lengthened so each reaches its own scale — 0.64 / 0.90 / 0.93 of the face
+radius, up from 0.55 / 0.75 / 0.80 — which also bought the hour hand some clearance:
 
-| Hand | Length | Covered | Tip left |
+| Hand | Length | Was | Covered by a 130 timer |
 | --- | --- | --- | --- |
-| Hour | 112.4 | **100%** | **0.0 — entirely hidden** |
-| Minute | 153.3 | 85% | 23.3 |
-| Second | 163.5 | 80% | 33.5 |
+| Hour | 130.8 | 112.4 | **essentially all of it** |
+| Minute | 184.0 | 153.3 | 71% |
+| Second | 190.1 | 163.5 | 68% |
 
-**The hour hand disappears completely.** It is shorter than the timer is wide, so there is no
-arrangement in which it survives underneath. That is the answer to "what time is it" gone for the
-duration of every timer, on a display whose entire purpose is time-tracking — the same cost #21
-judged unacceptable when floating labels covered the face.
+**The hour hand still all but disappears.** Even lengthened it is barely longer than the timer is
+wide, so there is no arrangement in which a full-radius timer leaves it readable. That is the answer
+to "what time is it" gone for the duration of every timer, on a display whose entire purpose is
+time-tracking — the same cost #21 judged unacceptable when floating labels covered the face.
+
+**So the timer's radius is bounded by the hour hand, not by the numerals.** To leave a clearly
+visible tip — say twelve units — the timer can have about **118** rather than the 130 assumed above,
+which is 0.58 of the face radius. At the 12.1-unit readable floor that is **nine bands**, not ten:
+one fewer minute before the unit has to scale.
 
 So: **hands on top, with a contrasting outline** — a `var(--card)` halo so each hand reads against
 whatever band it crosses. That is the same device already proposed for the numerals, which argues
