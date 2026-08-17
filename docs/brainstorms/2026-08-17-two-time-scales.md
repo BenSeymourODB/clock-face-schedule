@@ -85,8 +85,13 @@ pointing where it naturally would. But "the next 60 minutes" from 10:45 runs to 
 **wrap through the twelve position**. That is natural on a clock face and probably right — but it is
 a case the geometry does not currently handle at all: `calculateArcAngles` clamps to the window
 rather than wrapping, `describeArc` assumes a single non-wrapping sweep, and `assignRings` sorts by
-start angle, which is meaningless across a wrap. Costing this is the first thing to do, because it
-may dominate the work.
+start angle, which is meaningless across a wrap.
+
+**This is no longer this feature's cost to bear.** The 12-hour view is itself going rolling — 8 hours
+ahead of the hand and 3 behind, filed as #25 — and at 330° that band wraps at *every* time of day,
+not occasionally. So the wrap work lands there first and a 1-hour mode inherits it rather than
+paying for it. Worth re-reading #25's notes on keeping angles unnormalised past 360° before starting
+here, since that decision constrains both.
 
 **Does a toggle violate "no interaction required"?** Constraint 2 says the display must be complete
 standing still, and neither mode is complete on its own — one hides minute detail, the other hides
@@ -175,8 +180,15 @@ collides with overlap stacking, which already owns the radial axis — recorded 
 
 **Accept it and change the window.** A 12-hour dial is the source of the compression. A 6-hour or
 "next 4 hours" dial doubles or triples angular resolution for free, at the cost of not showing the
-whole day. Worth pricing before building anything clever, since it may be that the window is simply
-wrong for a classroom rather than the encoding.
+whole day.
+
+**Considered and declined for now.** #25 changes the window but deliberately keeps twelve hours per
+revolution, spending the change on *coverage* — a guaranteed 8-hour look-ahead — rather than on
+resolution. So this direction is still open and still the cheapest thing on the list: shortening the
+revolution itself would compound with #25 rather than conflict with it, since #25 leaves the
+degrees-per-minute mapping untouched. The reason not to do both at once is that they change
+different things about what the dial means, and one of them is easier to judge on a wall than in a
+discussion.
 
 ## Interactions to be aware of
 
