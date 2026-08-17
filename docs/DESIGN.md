@@ -204,6 +204,41 @@ This project ships no Tailwind and no shadcn. `yuvomi-kiosk` chose to rename the
 
 ---
 
+## ADR 0008 — Interactive controls sit in a top bar, out of small children's reach
+
+**Status:** accepted, explicitly provisional
+
+**Context.** Everything built so far renders a calendar nobody touches, so there were no controls
+to place. Two planned features change that: a teacher-set countdown timer, and the 1h/12h scale
+toggle. Both are operated by an adult, mid-lesson, on a wall-mounted touch smart board in a room
+full of children — several of whom will press anything within reach, and one of whom pressing
+"cancel timer" during a lesson is a real cost rather than a hypothetical one.
+
+**Decision.** Interactive controls live in a **navigation-bar-style top bar**, along the upper edge
+of the display. Height is the affordance: an adult standing at the board reaches it easily and a
+five-year-old does not.
+
+**Consequences.**
+
+- It works, and it is close to free — no modes, no gestures to teach, no state to get wrong.
+- **It trades one accessibility problem for another, and this is understood, not overlooked.** A
+  teacher who uses a wheelchair, or who is simply short, is locked out by the same property that
+  locks out the children. That is not acceptable as an end state; it is acceptable as a first pass
+  on a pilot deployment where the affected user can say so.
+- Height is a **weak lock** in any case. It stops the youngest students and nothing else. The
+  durable answers are a deliberate gesture (long-press, two-finger tap) or a short PIN — hostile to
+  casual pressing rather than to short people — and either would supersede this.
+- A persistent bar costs vertical space on a page whose dial is square and already tight for
+  radius. Whether the bar is always visible or reveals on interaction is unsettled; revealing keeps
+  the radius but adds the discoverability problem a wall display can least afford.
+- "Up high" is not one physical height. A projector screen, a wall-mounted board and a desk-height
+  display put the same top bar at very different reaches. Verify on the hardware (#10).
+
+**Revisit when** the pilot has real users, or as soon as anyone the top bar excludes is among them —
+whichever comes first.
+
+---
+
 ## Platform constraints
 
 Hard limits of the Apps Script + `HtmlService` runtime. These are not preferences to revisit —

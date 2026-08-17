@@ -79,6 +79,15 @@ issues.
 - [docs/plans/2026-08-15-mvp-clock-face.md](docs/plans/2026-08-15-mvp-clock-face.md) — the MVP work
   breakdown, kept as written for the record
 
+Sketches for work not yet costed, each written to be picked up cold:
+
+- [Two time scales](docs/brainstorms/2026-08-17-two-time-scales.md) — the dial cannot distinguish
+  "this lasts minutes" from "this lasts hours"
+- [Agenda panel](docs/brainstorms/2026-08-17-agenda-panel.md) — a card list beside the dial, with a
+  playhead tracking the day
+- [Class timer](docs/brainstorms/2026-08-17-class-timer.md) — a teacher-set countdown drawn on the
+  face, and the point where this becomes a tool rather than a display
+
 ## Local development
 
 Requires Node ≥ 20.
