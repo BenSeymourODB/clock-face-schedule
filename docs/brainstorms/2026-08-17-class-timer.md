@@ -185,27 +185,42 @@ is probably right — counting is the feature — but the discrepancy should be 
 accepted, because "looks nearly done when it is half done" is the kind of error this display exists
 to prevent.
 
-### Aligning to the second hand costs exact minutes
+### The second hand *is* the drain edge — settled
 
-The sketch notes it assumes the timer started on a minute boundary. That assumption is load-bearing,
-and dropping it forces a choice:
+Anchor every band's seam at the **seconds-past-the-minute at which the timer was started**, rather
+than at twelve o'clock. Both properties then hold at once:
 
-- **Align each band's sweep to the second hand.** The draining edge then rides the second hand, which
-  is a strong "this is time passing" cue and ties the timer to the clock — the same appeal as
-  starting the sector at the minute hand, discussed above. But a timer started at :20 has a 40-second
-  first band, so **bands stop being minutes** and the count no longer answers "how many minutes left".
-- **Align each band to the timer's own start.** Bands are exactly 60 seconds and the count is exact,
-  but the draining edge and the second hand sweep at the same rate out of phase — two things going
-  round at once, which may read as two second hands.
+- Adding 60 seconds preserves seconds-past-the-minute, so **every band is exactly one minute** and
+  the ring count answers "how many minutes left" exactly.
+- The drain edge within a band sits at `seam + (elapsed mod 60) × 6°`, which reduces to
+  `secondsOf(now) × 6°` — **the second hand's own angle**, identically, for any start offset.
 
-Countability is the whole point of this encoding, so exact bands probably win. Worth deciding
-explicitly rather than inheriting the sketch's assumption.
+So the second hand does not merely resemble the drain edge; it is the drain edge. It consumes the
+band ahead of it as it sweeps, and the remaining arc always runs from the hand clockwise round to
+the seam. Verified against fractional start offsets as well as whole seconds.
+
+*(An earlier draft of this section claimed the two goals were mutually exclusive. That was wrong,
+and it came from assuming the seam had to sit at twelve o'clock.)*
+
+Consequences worth building around:
+
+- **The timer must force the second hand on.** `showSeconds` defaults to `false` on `analogClock`;
+  `main.ts` happens to pass `true`, but a coupling this load-bearing cannot rest on a default. With
+  the hand hidden the design loses the thing that makes it legible.
+- **Durations that are not whole minutes need the odd seconds spent first.** A 2:30 timer should
+  clear a 30-second *outermost* band before any whole minute begins. Put the remainder innermost
+  instead and the timer ends mid-band, truncating the solid-disc finale — which is the part the room
+  is watching. Spending it first also means every subsequent band shares one seam.
+- **Loading mode inverts cleanly.** The filled arc runs from the seam to the second hand and grows
+  behind it, so the same identity holds with the hand as the leading edge rather than the consuming
+  one.
 
 ### Two more things to check
 
-- **The hands cross every band.** One pie under two opaque hands is fine; eight concentric rings
-  chopped by the hour and minute hands may be much harder to count than the static drawing suggests.
-  This is the first thing to render.
+- **The hour and minute hands cross every band.** The second hand is now meaningful where it
+  crosses — it is the drain edge — but the other two just chop the rings, and eight concentric rings
+  interrupted twice may be much harder to count than the static drawing suggests. This is the first
+  thing to render.
 - **The loading outline and #25's track are the same device.** A rolling window wants a faint
   full-ring track to distinguish "nothing scheduled" from "not shown"; loading mode wants an outline
   to show where growth ends. One convention, used twice, rather than two similar-but-different marks
