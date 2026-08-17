@@ -56,9 +56,86 @@ Constraints, not preferences — a solution that breaks these is solving a diffe
 5. **It must not need a second glance to interpret.** If a viewer has to work out which scale they
    are looking at, the tool has failed the people it is for.
 
-## Starting directions
+## Developed proposal: selectable scale modes
+
+The leading candidate. A two-state toggle between a **1-hour** and a **12-hour** view, rather than
+showing both scales at once.
+
+| | 1-hour view | 12-hour view |
+| --- | --- | --- |
+| Numerals | 5-minute values (0, 5, 10 … 55) in the hour numbers' positions | hour numbers only |
+| Hour numbers | pulled inward, greyed to de-emphasise | normal |
+| Hour hand | greyed | normal |
+| Minute hand | normal | greyed |
+| Events shown | those overlapping the next 60 minutes | those overlapping the period |
+
+The de-emphasis is what makes it work: both hands and both numeral sets stay present, so the dial is
+never lying about the time — it is only saying which scale it is currently *about*. That answers the
+"which scale am I looking at" hazard without a label.
+
+**Why the density is better than showing both.** In a 60-minute window the dial runs at 6° per
+minute — 12× the current resolution. Overlaps that are unreadable slivers today become legible arcs,
+so the mode may largely dissolve the density problem inside the window rather than adding to it.
+
+### Open questions
+
+**Rolling window or clock hour?** Putting 5-minute numerals in the hour positions implies the
+numerals are *fixed* (0 at twelve o'clock, 15 at three, and so on), which keeps the minute hand
+pointing where it naturally would. But "the next 60 minutes" from 10:45 runs to 11:45, so arcs must
+**wrap through the twelve position**. That is natural on a clock face and probably right — but it is
+a case the geometry does not currently handle at all: `calculateArcAngles` clamps to the window
+rather than wrapping, `describeArc` assumes a single non-wrapping sweep, and `assignRings` sorts by
+start angle, which is meaningless across a wrap. Costing this is the first thing to do, because it
+may dominate the work.
+
+**Does a toggle violate "no interaction required"?** Constraint 2 says the display must be complete
+standing still, and neither mode is complete on its own — one hides minute detail, the other hides
+most of the day. The honest reading is that the *toggle* is fine as configuration but a problem as a
+live control, because a person glancing at the wall has no way to know the mode was changed.
+
+Worth considering **automatic** switching as a variant, or as well: default to 12-hour, and drop to
+1-hour when the next event starts within some threshold. That keeps the constraint intact and puts
+the resolution where it matters exactly when it matters. It also removes the "who left it in the
+wrong mode" failure, which on a shared classroom display is a real one.
+
+**Is greying the hour hand safe?** It is the answer to "which hour is it". Greyed, with the hour
+numerals also pulled in and dimmed, a viewer could lose that anchor — which matters most for the
+people this is for. Probably fine, since both are still drawn, but worth looking at rather than
+assuming.
+
+---
+
+## Window-edge feathering — worth doing regardless
+
+Part of the proposal above, but **it fixes something that is wrong today** and should be separated
+from the mode work.
+
+Any window frequently begins or ends mid-event. Instead of drawing the arc to the event's true
+extent, terminate it at the window boundary and ramp opacity from 100% to 0% over a few degrees, so
+the arc visibly *continues past* the edge.
+
+**The current behaviour is actively misleading.** `calculateArcAngles` clamps an event to the period
+with a hard edge, so an event running 11:30–12:30 is drawn ending exactly at twelve. The dial states
+that it finishes at noon. It does not. For a display whose whole purpose is answering "how long until
+this is over", asserting a false end time is worse than any legibility defect found so far.
+
+Implementation needs a spike. An SVG `linearGradient` is defined in user or bounding-box space, not
+along a path, so it cannot follow an arc directly. Options: orient a gradient along the chord near
+the boundary (approximate, but over a few degrees probably indistinguishable); split the final
+degrees into several small segments with stepped opacity (crude, exact, and works with the existing
+`describeArc`); or a gradient `<mask>`. The segmented approach is the most predictable.
+
+---
+
+## Other directions
 
 Unevaluated. Listed to give a fresh session something to push against, not as a shortlist.
+
+**Both scales at once — an inner "next hour" ring and an outer "next 12 hours" ring.** Considered and
+set aside as the likely-too-dense option: each ring still needs concentric stacking for its own
+overlaps, so a busy hour would be competing for radial space twice over. Kept because some version
+may work — perhaps the inner ring showing only the *current and next* event rather than everything,
+which would bound its depth at two. Recorded as its own issue.
 
 **A second band at minute scale.** Borrow the minute hand's scale: an inner or outer band where one
 revolution is one hour, showing only the current (and perhaps next) hour at 6° per minute — 12× the

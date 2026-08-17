@@ -47,6 +47,43 @@ across. It costs legibility of the face, not correctness of the schedule.
 
 ---
 
+## Show both time scales at once, on two concentric rings
+
+Set aside in favour of selectable scale modes, but kept because some version of it may work. See
+[the two-time-scales brainstorm](brainstorms/2026-08-17-two-time-scales.md) for the problem it
+addresses.
+
+### The idea
+
+An **inner ring** showing events in the next hour at minute scale (6° per minute), and an **outer
+ring** showing the next 12 hours at hour scale (0.5° per minute). Both scales visible simultaneously,
+mirroring how the two hands already work.
+
+### Why it was set aside
+
+Visual density. Each ring still needs concentric stacking for its own overlaps, so a busy hour is
+competing for radial space twice: once to divide the inner ring by its overlap depth, and again
+because the inner ring is itself only a fraction of the available band. The dial already loses text
+at three-deep overlap on a full-width band; halving the band first would make that two-deep.
+
+### The version that might work
+
+Bound the inner ring's depth instead of letting it stack arbitrarily. If it showed only the
+**current and next event** rather than everything in the hour, its depth is at most two by
+construction, and it becomes a "what is happening now / what is next" strip at high resolution
+rather than a second full schedule.
+
+That is a different feature from the one that was rejected, and possibly a better one — it answers
+"how long until the next thing" directly, which is one of the two questions the README names.
+
+### Worth checking first
+
+Whether the selectable-mode approach makes this redundant. If a 1-hour mode already gives minute
+resolution when it matters, a permanent second ring may be paying radial space for something a mode
+switch provides for free.
+
+---
+
 ## Render the event emoji inline with the title, as authored
 
 At present the emoji sits on its own radial line beneath the title. Titles are authored as
