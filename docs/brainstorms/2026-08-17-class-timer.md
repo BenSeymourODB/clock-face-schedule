@@ -126,6 +126,91 @@ One timer, not several. On a touch board with a teacher standing at the front mi
 buttons** (1 / 2 / 5 / 10 / 20 minutes) beat any numeric entry field, and a running timer needs
 exactly two affordances: cancel, and add a minute. Placement is ADR 0008.
 
+## Candidate encoding: one concentric band per minute
+
+Sketched as a candidate, not a decision — there are many ways to draw a timer radially.
+
+**A fixed outer diameter, always**, whatever the duration, subdivided into one concentric band per
+minute. The innermost is a solid disc; the rest are rings. In **vanishing** mode the bands drain
+outside-in, so the timer shrinks toward the centre and the final minute is the solid disc — the most
+visually emphatic state, arriving exactly when attention matters most. In **loading** mode the bands
+build outward, which needs an **outline at the full radius** so a viewer can see where the growth
+will stop.
+
+Within a band, the partial sweep runs clockwise and shows seconds.
+
+### What is strong about it
+
+**It makes minutes countable rather than estimable.** That is the same argument that settled #26 in
+favour of hollow-versus-filled over opacity: a categorical difference reads across a room where a
+graded one does not. "Three rings left" survives distance, projection and a glance; "the wedge is
+about 60% full" does not.
+
+It also carries **two scales at once** — rings for minutes, sweep for seconds — which is precisely
+what the dial itself cannot do for events, and the reason the
+[two-time-scales brainstorm](2026-08-17-two-time-scales.md) exists. Worth noticing that the timer
+solves by *subdivision* a problem the event band tries to solve by *window*.
+
+### The ceiling is about ten minutes, not an hour
+
+The timer must stay inside the numeral ring to avoid the contrast problem above. Numerals sit at
+0.72 of the face radius, so on a 600-unit dial the timer has roughly **130 units of radius** to work
+with. Divided into equal bands, against the 12.1-unit floor #9 already established as the thinnest
+readable ring:
+
+| Minutes | Band thickness | |
+| --- | --- | --- |
+| 2 | 65.0 | |
+| 5 | 26.0 | |
+| 8 | 16.3 | |
+| 10 | 13.0 | just clears |
+| 12 | 10.8 | **too thin** |
+| 20 | 6.5 | **too thin** |
+| 60 | 2.2 | **unusable** |
+
+So the proposed 1-hour cap is far beyond what this encoding supports; the real limit is around ten
+bands. That is not fatal — **scale the unit instead of the count.** One band per minute up to ten,
+then one band per five minutes, so an hour is twelve bands and still countable. The cap belongs on
+*bands*, not on duration.
+
+### Equal thickness is not equal area, and the sketch's own example shows it
+
+Equal-thickness bands make counting easy and area misleading. On the sketched 2-minute timer the
+outer ring has **three times the area** of the inner disc, so at a glance a half-spent timer looks
+two-thirds spent.
+
+Equal-*area* bands fix the impression and break the counting: bands would thin toward the outside,
+which is exactly where the draining happens and where thickness is already scarcest. Equal thickness
+is probably right — counting is the feature — but the discrepancy should be seen before it is
+accepted, because "looks nearly done when it is half done" is the kind of error this display exists
+to prevent.
+
+### Aligning to the second hand costs exact minutes
+
+The sketch notes it assumes the timer started on a minute boundary. That assumption is load-bearing,
+and dropping it forces a choice:
+
+- **Align each band's sweep to the second hand.** The draining edge then rides the second hand, which
+  is a strong "this is time passing" cue and ties the timer to the clock — the same appeal as
+  starting the sector at the minute hand, discussed above. But a timer started at :20 has a 40-second
+  first band, so **bands stop being minutes** and the count no longer answers "how many minutes left".
+- **Align each band to the timer's own start.** Bands are exactly 60 seconds and the count is exact,
+  but the draining edge and the second hand sweep at the same rate out of phase — two things going
+  round at once, which may read as two second hands.
+
+Countability is the whole point of this encoding, so exact bands probably win. Worth deciding
+explicitly rather than inheriting the sketch's assumption.
+
+### Two more things to check
+
+- **The hands cross every band.** One pie under two opaque hands is fine; eight concentric rings
+  chopped by the hour and minute hands may be much harder to count than the static drawing suggests.
+  This is the first thing to render.
+- **The loading outline and #25's track are the same device.** A rolling window wants a faint
+  full-ring track to distinguish "nothing scheduled" from "not shown"; loading mode wants an outline
+  to show where growth ends. One convention, used twice, rather than two similar-but-different marks
+  on one screen.
+
 ## What would settle it
 
 Two mock-ups, looked at from across a room:
