@@ -234,6 +234,17 @@ five-year-old does not.
 - "Up high" is not one physical height. A projector screen, a wall-mounted board and a desk-height
   display put the same top bar at very different reaches. Verify on the hardware (#10).
 
+**This ADR governs placement, not whether a control may be live.** Those get conflated, so the
+distinction is worth stating: the hazard recorded in the two-time-scales brainstorm — that a person
+glancing at a wall display has no way to know a mode was changed — applies only to a control that
+**changes the meaning of what is already on screen**. A 1h/12h scale toggle is such a control: after
+it, the same arcs mean something different and a later viewer misreads them silently.
+
+A control that **adds or removes a self-describing element** carries no such hazard. Starting a
+timer is the clear case: the timer is evidently present or absent, nothing else on the dial is
+reinterpreted, and no viewer can be misled by its appearance. Live controls of that kind are fine,
+and the timer's start, pause and stop are all of that kind.
+
 **Revisit when** the pilot has real users, or as soon as anyone the top bar excludes is among them —
 whichever comes first.
 

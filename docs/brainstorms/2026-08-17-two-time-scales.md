@@ -96,9 +96,12 @@ here, since that decision constrains both.
 **Does a toggle violate "no interaction required"?** Constraint 2 says the display must be complete
 standing still, and neither mode is complete on its own — one hides minute detail, the other hides
 most of the day. The honest reading is that the *toggle* is fine as configuration but a problem as a
-live control, because a person glancing at the wall has no way to know the mode was changed. Where
-the control itself sits is settled by ADR 0008, which this toggle and the
-[class timer](2026-08-17-class-timer.md) prompted between them.
+live control, because a person glancing at the wall has no way to know the mode was changed.
+
+Note the hazard is specific to this kind of control: it lands because a scale toggle **changes what
+the arcs already on screen mean**. A control that adds or removes something self-describing — the
+timer's start button — carries none of it. ADR 0008 draws that line, and settles where the control
+itself sits.
 
 Worth considering **automatic** switching as a variant, or as well: default to 12-hour, and drop to
 1-hour when the next event starts within some threshold. That keeps the constraint intact and puts

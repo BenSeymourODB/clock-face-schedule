@@ -123,9 +123,64 @@ The rest needs care:
 
 ### The control itself
 
-One timer, not several. On a touch board with a teacher standing at the front mid-lesson, **preset
-buttons** (1 / 2 / 5 / 10 / 20 minutes) beat any numeric entry field, and a running timer needs
-exactly two affordances: cancel, and add a minute. Placement is ADR 0008.
+Sketched as a top-bar button that opens a small panel:
+
+```
+top bar ..................................... [ + 🕐 Add timer ]
+                              ┌──────────────────────────────┐
+                              │   [ 02 ] : [ 30 ]            │
+                              │   > More options    [ START ]│
+                              ├ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─┤
+                              │   ∨ Hide options             │
+                              │   Display  [Additive/Subtr.] │
+                              │   Show digital          [✓]  │
+                              └──────────────────────────────┘
+```
+
+While a timer runs, **Add timer** is replaced by **Pause** and **Stop**, so the bar's footprint
+never changes.
+
+**Progressive disclosure is the right shape.** The common case — set a duration, start — is two
+interactions, and the display options a teacher sets once are folded away. That matters more here
+than in most UIs: this is operated standing at a board with a class waiting.
+
+Open questions the sketch raises:
+
+- **How do the digits get entered?** This is the crux on a touch board, where there may be no
+  keyboard and an on-screen one is fiddly with a room watching. The boxes should be **steppers** —
+  tap up/down, or tap to cycle — or be filled by **preset buttons** (1 / 2 / 5 / 10 / 20 minutes)
+  rather than typed into. Presets and the MM:SS field are complementary: presets fill the field,
+  the field stays available for anything unusual.
+- **"Additive / Subtractive" is jargon.** The two modes are described elsewhere in this document as
+  *loading* and *vanishing*, which is not much better. A teacher reaching for this mid-lesson wants
+  either plain words — "fills up" / "empties out" — or two small icons showing a circle filling and
+  emptying. Prefer the icons: they survive not reading English, which matters in the rooms this is
+  for.
+- **"Add timer" implies more than one, and the banded encoding cannot support that.** The bands
+  occupy a fixed radius subdivided by duration; a second concurrent timer has nowhere to go, and
+  nesting two sets of rings would be unreadable. Either the label means "add *the* timer" and
+  singular is enforced, or the encoding has to change. Worth settling before the label ships,
+  because it is a promise.
+- **Stop is the dangerous control, pause is not.** ADR 0008 exists because a stray press costs
+  something; a mis-tapped **Stop** discards a running timer with no way back, while a mis-tapped
+  **Pause** is trivially undone. If either gets a confirmation or an undo, it is Stop — and putting
+  them adjacent at equal size makes the wrong one easy to hit.
+
+### Pause breaks the second-hand identity, and resume has to repair it
+
+Not obvious, and it falls straight out of the alignment above. The identity holds because band
+boundaries preserve seconds-past-the-minute; a pause of duration `P` shifts every subsequent
+boundary by `P`, so the drain edge and the second hand agree again **only if `P` is an exact
+multiple of 60 seconds**. Any other pause and the two drift apart permanently — the timer keeps
+working, but the property that made it legible is gone.
+
+The repair is cheap: **re-seam on resume.** Set the new seam to
+`(secondsOf(resume) − elapsedInCurrentBand) × 6°`, and the drain edge lands back on the second hand
+with bands still exactly 60 seconds. The visible cost is a one-off jump in where the remaining arc
+terminates, which is honest — something did just happen.
+
+A paused timer also needs a distinct resting state of its own. A drain edge that has stopped while
+the second hand sweeps past it reads as a broken display, not a paused one.
 
 ## Candidate encoding: one concentric band per minute
 
