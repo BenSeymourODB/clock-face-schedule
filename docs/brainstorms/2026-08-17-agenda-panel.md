@@ -124,10 +124,18 @@ busiest days.
 at a wall display has no way to know the mode was changed. Anyone who changes it must be standing
 in front of it. See ADR 0008 for where the control lives.
 
-**The layout stops being square.** The dial currently fills a square viewBox on a page with nothing
-beside it. On a 16:9 board there is horizontal room going spare right now, so this is the feature
-that finally uses it — but it is a real layout change, and the dial's own size must not be the
-thing that pays for the panel.
+**The layout stops being square, and the panel is not the only claimant.** The dial currently fills
+a square viewBox on a page with nothing beside it. On a 16:9 board there is horizontal room going
+spare, so this is the feature that finally uses it — but it is a real layout change, and the dial's
+own size must not be the thing that pays for the panel.
+
+Note that **#21 established a competing claim on exactly that room.** Floating labels are supposed
+to sit outside the dial, and the dial is inscribed in the frame with an 8-unit margin, so there is
+barely an outside: at 9 o'clock a label had 25.7 units of width to work with. That was mitigated by
+wrapping and by pulling the label ring inward, at the cost of cards now sitting over the arc band.
+The durable fix is the same horizontal room this panel wants. Deciding the layout here means
+deciding it for labels too — how much of the width the panel takes determines whether labels get
+their margin back or stay on the band.
 
 **The server fetch needs widening, once.** `main.ts` requests `[periodStart, periodStart + 12h)`.
 The panel needs the whole day. Widen that single request and let `filterEventsForPeriod` narrow it
