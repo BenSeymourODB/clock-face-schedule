@@ -54,6 +54,15 @@ const TITLE_LINE_OFFSET_RATIO = 0.55;
 const ARC_FILL_OPACITY = 0.85;
 
 /**
+ * Fill left under an elapsed arc.
+ *
+ * Zero draws the pure outline #26 specifies. A little body might read better at distance, so this
+ * is a constant rather than an omission — but note it can only add *weight*, never contrast: 10% of
+ * `#1F2937` over `#16181d` is still `#16181d` to the eye. Colour legibility is #27's problem.
+ */
+const ELAPSED_FILL_OPACITY = 0;
+
+/**
  * Separator between adjacent arcs, as a fraction of the ring's height, with an absolute floor.
  *
  * A fraction so it thickens with the band rather than thinning as the dial grows; a floor because
@@ -62,6 +71,34 @@ const ARC_FILL_OPACITY = 0.85;
  */
 const ARC_SEPARATOR_RATIO = 0.03;
 const ARC_SEPARATOR_MIN = 1;
+
+/**
+ * An elapsed arc's outline, and the neutral band beneath it, as fractions of **the whole band** —
+ * not of this arc's ring.
+ *
+ * Heavier than the separator because the outline now *is* the arc: with no fill behind it, a
+ * hairline is all that stands between the event and not being drawn. Sizing from the ring got that
+ * exactly backwards on a stacked cluster, where the ring is a third of the band: rendering showed a
+ * 1.56-unit outline against a 2.28-unit *live* separator, so the arcs that had least room also got
+ * the faintest outline. The band does not change with overlap depth, so every elapsed arc on the
+ * dial now carries the same weight.
+ *
+ * The neutral band is load-bearing rather than decorative. Outlined, an event's colour becomes the
+ * foreground against a background it did not choose, and two of the palette's nine fail there —
+ * ⚫ gray-800 measures 1.21:1 on `--card`, which is not a faint edge but no edge. Drawing
+ * `var(--border)` (3.7:1) wider and underneath means the shape always reads and the colour carries
+ * identity rather than legibility. #27 fixes the colours themselves, and may retire this.
+ */
+const ELAPSED_BORDER_RATIO = 0.07;
+const ELAPSED_HALO_RATIO = 0.12;
+
+/**
+ * Ceiling on either stroke, as a fraction of the ring it is drawn on.
+ *
+ * A stroke straddles its path, so one wider than the ring closes the hollow interior back up and
+ * the arc reads as filled again — which is the one thing an elapsed arc must not do.
+ */
+const ELAPSED_STROKE_MAX_RATIO = 0.4;
 
 interface FeatherMaskParams {
   id: string;
@@ -182,6 +219,13 @@ export interface EventArcParams {
   layout?: ArcTitleLayout;
   /** The title is rendering as a floating label instead, so suppress the in-arc copy. */
   forceHideTitle?: boolean;
+  /** The event has finished: draw it hollow, as an outline rather than a filled block. */
+  isElapsed?: boolean;
+  /**
+   * Width of the whole arc band, which an elapsed outline is sized from so that its weight does
+   * not shrink with overlap depth. Defaults to this arc's own ring, for standalone rendering.
+   */
+  bandThickness?: number;
 }
 
 export function eventArc({
@@ -192,6 +236,8 @@ export function eventArc({
   outerRadius,
   layout,
   forceHideTitle = false,
+  isElapsed = false,
+  bandThickness,
 }: EventArcParams): SVGGElement {
   const { id, cleanTitle, color, eventEmoji, startAngle, endAngle } = event;
 
@@ -223,19 +269,61 @@ export function eventArc({
   });
   if (mask) defs.append(mask);
 
+  // Fill and outline are separate paths because an elapsed arc needs them treated differently —
+  // the fill goes and the outline stays. Sharing one path, as this did, forces the two to move
+  // together. Both carry the fade mask, so a clamped arc still fades whole.
+  const d = describeArc(cx, cy, outerRadius, innerRadius, startAngle, endAngle);
+  const fade = mask ? `url(#arc-fade-${id})` : undefined;
+  // Sized from the band, capped by the ring: uniform weight wherever there is room for it, and
+  // narrower only where the ring genuinely cannot carry it.
+  const band = bandThickness ?? arcHeight;
+  const stroke = (ratio: number) =>
+    roundCoord(
+      Math.max(
+        ARC_SEPARATOR_MIN,
+        Math.min(band * ratio, arcHeight * ELAPSED_STROKE_MAX_RATIO)
+      )
+    );
+
   group.append(
     svg("path", {
       "data-testid": `event-arc-${id}`,
-      d: describeArc(cx, cy, outerRadius, innerRadius, startAngle, endAngle),
+      // Which layer of the arc this is. `data-testid` says which event; this says which part,
+      // so a caller can find the fill alone — which is what a drain mask (#28) needs.
+      "data-arc-part": "fill",
+      d,
       fill: color,
-      "fill-opacity": ARC_FILL_OPACITY,
-      // A token, not a literal: this is the separator between adjacent arcs and between the
-      // arcs and the face, so it has to track whichever background sits behind them.
-      stroke: "var(--card)",
-      "stroke-width": separatorWidth,
-      mask: mask ? `url(#arc-fade-${id})` : undefined,
+      "fill-opacity": isElapsed ? ELAPSED_FILL_OPACITY : ARC_FILL_OPACITY,
+      stroke: "none",
+      mask: fade,
+    }),
+    svg("path", {
+      "data-testid": `event-arc-border-${id}`,
+      "data-arc-part": "separator",
+      d,
+      fill: "none",
+      // Live, this is the separator between adjacent arcs and between the arcs and the face, so it
+      // tracks whatever sits behind them. Elapsed, it is the guaranteed-visible band that keeps a
+      // low-contrast event from disappearing along with its fill.
+      stroke: isElapsed ? "var(--border)" : "var(--card)",
+      "stroke-width": isElapsed ? stroke(ELAPSED_HALO_RATIO) : separatorWidth,
+      mask: fade,
     })
   );
+
+  if (isElapsed) {
+    group.append(
+      svg("path", {
+        "data-testid": `event-arc-outline-${id}`,
+        "data-arc-part": "outline",
+        d,
+        fill: "none",
+        stroke: color,
+        "stroke-width": stroke(ELAPSED_BORDER_RATIO),
+        mask: fade,
+      })
+    );
+  }
 
   if (eventEmoji && arcSpan >= EMOJI_MIN_SPAN_DEGREES) {
     const position = polarToCartesian(
@@ -307,7 +395,12 @@ export function eventArc({
             // Chosen per arc: the title sits on the event's own colour, which no token
             // describes and which the calendar may supply. NDWC used a fixed white, which
             // measures 1.9:1 on the palette's yellow (#15).
-            fill: readableTextColor(color),
+            //
+            // Once the fill is gone the text sits on the dial's own background instead, and the
+            // theme already guarantees a pairing for that — `--card-foreground` is 16:1 on
+            // `--card`. Computing a ratio there would need the token's hex, which this does not
+            // have; the event colour would reintroduce the very failures #27 is about.
+            fill: isElapsed ? "var(--card-foreground)" : readableTextColor(color),
             "font-family": FONT_STACK,
           },
           [

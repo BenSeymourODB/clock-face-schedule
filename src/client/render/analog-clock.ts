@@ -6,6 +6,7 @@ import {
   type ClockEventInput,
   assignRings,
   computeArcTitleLayout,
+  elapsedEventIds,
   eventsToClockEvents,
   filterEventsForPeriod,
   getPeriodBounds,
@@ -152,6 +153,8 @@ export function analogClock({
   let currentEvents = events;
   let periodStart = getPeriodStart(time);
   let renderedCount = 0;
+  /** Size only — the change detector for arcs whose event has finished since the last tick. */
+  let elapsedCount = 0;
 
   function describe(): void {
     const plural = renderedCount === 1 ? "event" : "events";
@@ -174,6 +177,9 @@ export function analogClock({
       bounds.periodStart
     );
     renderedCount = resolved.length;
+
+    const elapsed = elapsedEventIds(currentEvents, currentTime);
+    elapsedCount = elapsed.size;
 
     // True angles, not drawn ones: a five-minute event widened to the 7.5° minimum must not
     // appear to clash with a neighbour six minutes later, or every arc on the dial pays for a
@@ -224,6 +230,8 @@ export function analogClock({
           outerRadius: ringOuterRadius,
           layout,
           forceHideTitle: isOverflow,
+          isElapsed: elapsed.has(event.id),
+          bandThickness: arcThickness,
         })
       );
 
@@ -262,7 +270,11 @@ export function analogClock({
       currentTime = next;
       face.setTime(next);
 
-      if (getPeriodStart(next).getTime() !== periodStart.getTime()) {
+      // Arcs used to be rebuilt only on period rollover, since nothing else about them changed
+      // with the clock. An elapsed arc is drawn differently, so they now also rebuild the moment
+      // an event finishes — a handful of times a day rather than once a second.
+      const rolledOver = getPeriodStart(next).getTime() !== periodStart.getTime();
+      if (rolledOver || elapsedEventIds(currentEvents, next).size !== elapsedCount) {
         renderEvents();
       }
       describe();

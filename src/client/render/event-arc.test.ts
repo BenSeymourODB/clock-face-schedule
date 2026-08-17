@@ -64,8 +64,19 @@ describe("eventArc", () => {
     });
 
     it("separates adjacent arcs with a token, not a literal", () => {
-      // The separator has to track whichever background sits behind the band.
-      expect(path?.getAttribute("stroke")).toBe("var(--card)");
+      // The separator has to track whichever background sits behind the band. It lives on its own
+      // path now, so that an elapsed arc can keep an outline after losing its fill.
+      const border = group.querySelector('[data-testid="event-arc-border-e1"]');
+
+      expect(border?.getAttribute("stroke")).toBe("var(--card)");
+      expect(border?.getAttribute("fill")).toBe("none");
+      expect(path?.getAttribute("stroke")).toBe("none");
+    });
+
+    it("draws fill and border on the same geometry", () => {
+      const border = group.querySelector('[data-testid="event-arc-border-e1"]');
+
+      expect(border?.getAttribute("d")).toBe(path?.getAttribute("d"));
     });
 
     it("draws a closed donut segment", () => {
@@ -408,5 +419,145 @@ describe("eventArc at a period boundary", () => {
     expect(titlePaths).toHaveLength(1);
     expect(wedges).toHaveLength(1);
     expect(titlePaths[0].getAttribute("id")).toBe("text-path-e1-0");
+  });
+});
+
+/**
+ * #26: an event that has finished is drawn hollow — a coloured outline over an empty interior —
+ * so a viewer can tell what is spent from what is coming without decoding the hands.
+ */
+describe("eventArc once the event has ended", () => {
+  const ARC_HEIGHT = OUTER - INNER;
+
+  function parts(overrides: Partial<ClockEvent> = {}, isElapsed = true) {
+    const group = eventArc({
+      event: makeEvent(overrides),
+      cx: CX,
+      cy: CY,
+      innerRadius: INNER,
+      outerRadius: OUTER,
+      isElapsed,
+    });
+    const at = (part: string) => group.querySelector(`[data-arc-part="${part}"]`);
+    return { group, fill: at("fill"), separator: at("separator"), outline: at("outline") };
+  }
+
+  it("empties the fill rather than removing the path", () => {
+    // The path stays so that every arc has the same shape whatever its state — and so a drain
+    // mask (#28) always has something to target.
+    const { fill } = parts();
+
+    expect(fill).not.toBeNull();
+    expect(fill?.getAttribute("fill-opacity")).toBe("0");
+    expect(fill?.getAttribute("fill")).toBe("#22c55e");
+  });
+
+  it("keeps the fill while the event is still to come", () => {
+    expect(parts({}, false).fill?.getAttribute("fill-opacity")).toBe("0.85");
+  });
+
+  it("outlines in the event colour, so identity survives losing the fill", () => {
+    const { outline } = parts();
+
+    expect(outline?.getAttribute("stroke")).toBe("#22c55e");
+    expect(outline?.getAttribute("fill")).toBe("none");
+  });
+
+  it("draws no outline layer while the event is still to come", () => {
+    expect(parts({}, false).outline).toBeNull();
+  });
+
+  it.each([
+    ["⚫ gray-800, which measures 1.21:1 on the dial", "#1F2937"],
+    ["🟤 amber-800, which measures 2.50:1", "#92400E"],
+    ["🟡 yellow, which needs no help", "#EAB308"],
+  ])("backs %s with a neutral band, so the shape reads whatever the colour", (_label, color) => {
+    // Outlined, the event's colour is the foreground against a ground it did not choose, and two
+    // of the palette's nine fail there. The neutral band is not decoration (#27).
+    const { separator, outline } = parts({ color });
+
+    expect(separator?.getAttribute("stroke")).toBe("var(--border)");
+    expect(Number(separator?.getAttribute("stroke-width"))).toBeGreaterThan(
+      Number(outline?.getAttribute("stroke-width"))
+    );
+  });
+
+  it("weights the outline well above the separator hairline it replaces", () => {
+    // With no fill behind it, a hairline is all that stands between the event and not being drawn.
+    const elapsed = Number(parts().outline?.getAttribute("stroke-width"));
+    const live = Number(parts({}, false).separator?.getAttribute("stroke-width"));
+
+    expect(elapsed).toBeGreaterThan(live * 2);
+    expect(elapsed).toBeCloseTo(ARC_HEIGHT * 0.07, 4);
+  });
+
+  it("keeps its outline weight when stacking thins the ring", () => {
+    // Found by rendering, not by testing: sizing the outline from the *ring* gave a three-deep
+    // cluster a 1.56-unit outline against a 2.28-unit live separator — the arcs with the least
+    // room got the faintest outline, which is backwards. The band does not change with depth.
+    const BAND = 75.92;
+    const ring = (thickness: number) =>
+      eventArc({
+        event: makeEvent(),
+        cx: CX,
+        cy: CY,
+        innerRadius: OUTER - thickness,
+        outerRadius: OUTER,
+        isElapsed: true,
+        bandThickness: BAND,
+      }).querySelector('[data-arc-part="outline"]');
+
+    const full = Number(ring(BAND)?.getAttribute("stroke-width"));
+    const stacked = Number(ring(22.27)?.getAttribute("stroke-width"));
+
+    expect(stacked).toBe(full);
+    expect(full).toBeCloseTo(BAND * 0.07, 4);
+  });
+
+  it("caps the stroke on a ring too thin to stay hollow underneath it", () => {
+    // A stroke straddles its path, so one wider than the ring closes the interior back up and the
+    // arc reads as filled again.
+    const THIN = 6;
+    const outline = eventArc({
+      event: makeEvent(),
+      cx: CX,
+      cy: CY,
+      innerRadius: OUTER - THIN,
+      outerRadius: OUTER,
+      isElapsed: true,
+      bandThickness: 200,
+    }).querySelector('[data-arc-part="outline"]');
+
+    expect(Number(outline?.getAttribute("stroke-width"))).toBeCloseTo(THIN * 0.4, 4);
+  });
+
+  it("falls back to its own ring when rendered without a band", () => {
+    expect(Number(parts().outline?.getAttribute("stroke-width"))).toBeCloseTo(ARC_HEIGHT * 0.07, 4);
+  });
+
+  it("switches the title to the theme's own pairing, not the event colour", () => {
+    // The text now sits on the dial background; `--card-foreground` is 16:1 on `--card` by
+    // construction, and the event colour would reintroduce exactly the failures above.
+    const title = parts().group.querySelector('[data-testid="event-title-e1"] text');
+
+    expect(title?.getAttribute("fill")).toBe("var(--card-foreground)");
+  });
+
+  it("still contrasts against the fill while the event is live", () => {
+    const title = parts({ color: "#EAB308" }, false).group.querySelector(
+      '[data-testid="event-title-e1"] text'
+    );
+
+    expect(title?.getAttribute("fill")).toBe("#000000");
+  });
+
+  it("fades every layer when the period also clipped the arc", () => {
+    // A clamped elapsed arc has to fade whole — an outline surviving a fade would cap the boundary
+    // with exactly the crisp edge #22 removed.
+    const { fill, separator, outline } = parts({ continuesAfter: true });
+
+    for (const layer of [fill, separator, outline]) {
+      expect(layer?.getAttribute("mask")).toBe("url(#arc-fade-e1)");
+    }
   });
 });

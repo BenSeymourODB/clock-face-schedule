@@ -15,6 +15,7 @@ export {
   calculateArcAngles,
   calculateTrueArcAngles,
   describeArc,
+  elapsedEventIds,
   eventsToClockEvents,
   filterEventsForPeriod,
   getPeriodBounds,

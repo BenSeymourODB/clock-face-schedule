@@ -191,6 +191,20 @@ export function calculateArcAngles(eventStart: Date, eventEnd: Date, periodStart
 }
 
 /**
+ * Ids of the events that have finished by `now`.
+ *
+ * A set rather than a flag on `ClockEvent`, because the resolved shape carries angles and not
+ * times — and because its size doubles as the dial's change detector: elapsed state is the one
+ * thing about an arc that changes between period rollovers.
+ */
+export function elapsedEventIds(events: ClockEventInput[], now: Date): Set<string> {
+  const nowMs = now.getTime();
+  return new Set(
+    events.filter((event) => new Date(event.endDate).getTime() <= nowMs).map((event) => event.id)
+  );
+}
+
+/**
  * Round a computed coordinate to a stable precision.
  *
  * Inherited to guard against two runtimes disagreeing at the least-significant bit; this

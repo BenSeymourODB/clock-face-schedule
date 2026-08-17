@@ -45,7 +45,8 @@ function build(events: ClockEventInput[], overrides: Partial<AnalogClockParams> 
 }
 
 function arcs(root: SVGSVGElement): Element[] {
-  return [...root.querySelectorAll('path[data-testid^="event-arc-"]')];
+  // The fill layer only — an arc is three paths now, and the others carry the same id prefix.
+  return [...root.querySelectorAll('path[data-arc-part="fill"]')];
 }
 
 /** `M x y A R R … L x y A r r …` — the two radii of a donut segment. */
@@ -264,6 +265,24 @@ describe("analogClock", () => {
       clock.setTime(AFTERNOON);
 
       expect(testIds(arcs(clock.element))).toEqual(["event-arc-afternoon"]);
+    });
+
+    it("rebuilds the arcs the moment an event finishes", () => {
+      // Elapsed arcs are drawn hollow (#26), so the tick can no longer assume nothing about an
+      // arc changes between rollovers — but it must still not rebuild on every second.
+      const clock = build([input("lesson", 9.5, 10)]);
+      const before = clock.element.querySelector('path[data-arc-part="fill"]');
+      expect(before?.getAttribute("fill-opacity")).toBe("0.85");
+
+      clock.setTime(new Date(2026, 7, 15, 9, 45, 0));
+      expect(clock.element.querySelector('path[data-arc-part="fill"]')).toBe(before);
+
+      clock.setTime(new Date(2026, 7, 15, 10, 15, 0));
+      const after = clock.element.querySelector('path[data-arc-part="fill"]');
+
+      expect(after).not.toBe(before);
+      expect(after?.getAttribute("fill-opacity")).toBe("0");
+      expect(clock.element.querySelector('[data-arc-part="outline"]')).not.toBeNull();
     });
 
     it("flips the period indicator across noon", () => {

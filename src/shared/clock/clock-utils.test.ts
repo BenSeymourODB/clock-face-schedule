@@ -3,6 +3,7 @@ import {
   calculateArcAngles,
   calculateTrueArcAngles,
   describeArc,
+  elapsedEventIds,
   eventsToClockEvents,
   filterEventsForPeriod,
   getPeriodBounds,
@@ -398,5 +399,41 @@ describe('describeArc', () => {
 
   it('closes the annular sector', () => {
     expect(describeArc(300, 300, 292, 244, 0, 90).endsWith('Z')).toBe(true);
+  });
+});
+
+describe('elapsedEventIds', () => {
+  const now = new Date(2026, 3, 12, 10, 0, 0);
+
+  function endingAt(id: string, endHour: number) {
+    return makeEvent({
+      id,
+      startDate: new Date(2026, 3, 12, endHour - 1, 0, 0).toISOString(),
+      endDate: new Date(2026, 3, 12, endHour, 0, 0).toISOString()
+    });
+  }
+
+  it('collects the events that have finished and no others', () => {
+    const ids = elapsedEventIds(
+      [endingAt('done', 9), endingAt('running', 11), endingAt('later', 15)],
+      now
+    );
+
+    expect([...ids]).toEqual(['done']);
+  });
+
+  it('counts an event ending exactly now as finished', () => {
+    // The boundary has to fall one way, and an arc still drawn as upcoming at its own end time
+    // would be wrong for a whole render cycle.
+    expect(elapsedEventIds([endingAt('flush', 10)], now).has('flush')).toBe(true);
+  });
+
+  it.each([
+    ['nothing has finished', [15]],
+    ['there is nothing at all', []]
+  ])('reports none when %s', (_label, endHours) => {
+    const events = (endHours as number[]).map((hour) => endingAt(`e${hour}`, hour));
+
+    expect(elapsedEventIds(events, now).size).toBe(0);
   });
 });
