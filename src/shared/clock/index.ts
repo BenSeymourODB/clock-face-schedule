@@ -8,6 +8,7 @@ export {
 export { clampLabelPosition, type ClockBox } from './clamp-label';
 export {
   calculateArcAngles,
+  calculateTrueArcAngles,
   describeArc,
   eventsToClockEvents,
   filterEventsForPeriod,
@@ -18,8 +19,21 @@ export {
   roundCoord
 } from './clock-utils';
 export { readableTextColor, relativeLuminance } from './contrast';
+export {
+  FEATHER_DEGREES,
+  FEATHER_MAX_SPAN_RATIO,
+  computeArcFeathers,
+  type ArcFeathers,
+  type FeatherSpan
+} from './feather';
 export { fitTitleToArc, type FitTitleResult } from './fit-title';
 export { rectEdgeIntersection } from './rect-edge';
 export { assignRings, type RingAssignment, type RingCandidate } from './ring-layout';
 export { describeTextArc } from './text-arc';
-export type { ArcAngles, ClockEvent, ClockEventInput, ParsedEventTitle } from './types';
+export type {
+  ArcAngles,
+  ClampedArcAngles,
+  ClockEvent,
+  ClockEventInput,
+  ParsedEventTitle
+} from './types';

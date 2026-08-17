@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   calculateArcAngles,
+  calculateTrueArcAngles,
   describeArc,
   eventsToClockEvents,
   filterEventsForPeriod,
@@ -222,6 +223,26 @@ describe('calculateArcAngles', () => {
   });
 });
 
+describe('calculateTrueArcAngles', () => {
+  const periodStart = new Date(2026, 3, 12, 0, 0, 0);
+
+  it.each([
+    { label: 'wholly inside', start: [3, 0], end: [4, 0], before: false, after: false },
+    { label: 'starting before', start: [-1, 0], end: [1, 0], before: true, after: false },
+    { label: 'ending after', start: [11, 0], end: [13, 0], before: false, after: true },
+    { label: 'spanning the period', start: [-1, 0], end: [13, 0], before: true, after: true },
+    { label: 'flush with both ends', start: [0, 0], end: [12, 0], before: false, after: false }
+  ])('$label → continuesBefore=$before, continuesAfter=$after', ({ start, end, before, after }) => {
+    const angles = calculateTrueArcAngles(
+      new Date(2026, 3, 12, start[0], start[1], 0),
+      new Date(2026, 3, 12, end[0], end[1], 0),
+      periodStart
+    );
+    expect(angles.continuesBefore).toBe(before);
+    expect(angles.continuesAfter).toBe(after);
+  });
+});
+
 describe('filterEventsForPeriod', () => {
   const periodStart = new Date(2026, 3, 12, 0, 0, 0);
   const periodEnd = new Date(2026, 3, 12, 12, 0, 0);
@@ -298,6 +319,20 @@ describe('eventsToClockEvents', () => {
   it('preserves the all-day flag rather than filtering', () => {
     const [result] = eventsToClockEvents([makeEvent({ isAllDay: true })], periodStart);
     expect(result.isAllDay).toBe(true);
+  });
+
+  it('carries the clamped ends through, so the renderer can fade them', () => {
+    const [result] = eventsToClockEvents(
+      [
+        makeEvent({
+          startDate: new Date(2026, 3, 11, 23, 0, 0).toISOString(),
+          endDate: new Date(2026, 3, 12, 13, 0, 0).toISOString()
+        })
+      ],
+      periodStart
+    );
+    expect(result.continuesBefore).toBe(true);
+    expect(result.continuesAfter).toBe(true);
   });
 });
 

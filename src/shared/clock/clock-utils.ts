@@ -2,7 +2,13 @@
  * Geometry and time-window helpers for the analog clock face.
  * Ported from next-digital-wall-calendar's `analog-clock/clock-utils.ts`.
  */
-import type { ArcAngles, ClockEvent, ClockEventInput, ParsedEventTitle } from './types';
+import type {
+  ArcAngles,
+  ClampedArcAngles,
+  ClockEvent,
+  ClockEventInput,
+  ParsedEventTitle
+} from './types';
 
 /** Colour-dot emoji a title may be prefixed with, and the hex each selects. */
 const COLOR_EMOJI_MAP: Record<string, string> = {
@@ -123,6 +129,8 @@ export function eventsToClockEvents(events: ClockEventInput[], periodStart: Date
       endAngle: drawn.endAngle,
       trueStartAngle: actual.startAngle,
       trueEndAngle: actual.endAngle,
+      continuesBefore: actual.continuesBefore,
+      continuesAfter: actual.continuesAfter,
       color: parsed.color,
       eventEmoji: parsed.eventEmoji,
       isAllDay: event.isAllDay
@@ -142,12 +150,15 @@ export function eventsToClockEvents(events: ClockEventInput[], periodStart: Date
  *
  * This is what ring stacking should read. Widened angles describe where the arc is *painted*,
  * which is a drawing concern and not evidence that two events clash.
+ *
+ * Reports which ends the clamp moved, because an arc drawn to a boundary looks exactly like an
+ * arc that ends there, and the two mean very different things to someone asking how long is left.
  */
 export function calculateTrueArcAngles(
   eventStart: Date,
   eventEnd: Date,
   periodStart: Date
-): ArcAngles {
+): ClampedArcAngles {
   const periodEndMs = periodStart.getTime() + PERIOD_MINUTES * 60 * 1000;
 
   const clampedStart = Math.max(eventStart.getTime(), periodStart.getTime());
@@ -159,6 +170,8 @@ export function calculateTrueArcAngles(
   return {
     startAngle: (startMinutes / PERIOD_MINUTES) * 360,
     endAngle: (endMinutes / PERIOD_MINUTES) * 360,
+    continuesBefore: eventStart.getTime() < periodStart.getTime(),
+    continuesAfter: eventEnd.getTime() > periodEndMs,
   };
 }
 

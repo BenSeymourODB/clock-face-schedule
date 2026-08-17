@@ -105,25 +105,37 @@ assuming.
 
 ---
 
-## Window-edge feathering — worth doing regardless
+## Window-edge feathering — done (#22), and the mode work inherits it
 
-Part of the proposal above, but **it fixes something that is wrong today** and should be separated
-from the mode work. Filed as #22.
+Part of the proposal above, but it fixed something that was already wrong, so it shipped ahead of
+the mode work. Any window frequently begins or ends mid-event; the arc now terminates at the
+boundary as before, but ramps to nothing over the last few degrees so it visibly *continues past*
+the edge rather than stopping at it.
 
-Any window frequently begins or ends mid-event. Instead of drawing the arc to the event's true
-extent, terminate it at the window boundary and ramp opacity from 100% to 0% over a few degrees, so
-the arc visibly *continues past* the edge.
+What landed, so a scale mode does not have to rediscover it:
 
-**The current behaviour is actively misleading.** `calculateArcAngles` clamps an event to the period
-with a hard edge, so an event running 11:30–12:30 is drawn ending exactly at twelve. The dial states
-that it finishes at noon. It does not. For a display whose whole purpose is answering "how long until
-this is over", asserting a false end time is worse than any legibility defect found so far.
+- **`calculateTrueArcAngles` reports which ends it clamped**, as `continuesBefore` / `continuesAfter`
+  on `ClockEvent`. A 1-hour window would set the same two flags against its own bounds, and
+  everything downstream follows.
+- **`computeArcFeathers` (`shared/clock/feather.ts`) owns the depth**: 10°, capped at 35% of the arc
+  per end. The cap matters — a short event *at* the boundary is the one most worth seeing, and an
+  uncapped fade erases it. At 6°/minute a 1-hour window's arcs are 12× wider, so the fixed depth
+  will want revisiting there; the ratio cap will not.
+- **A luminance `<mask>`, not a tinted fill.** The arc carries a `var(--card)` separator stroke
+  around its whole outline, so fading only the fill leaves a crisp line capping the boundary — the
+  exact thing the fade exists to deny. Masking the path takes fill and stroke together.
+- **The gradient is painted onto a wedge, not the mask's whole box.** A `linearGradient` pads its end
+  stops across the entire plane, and an arc past 180° curves back into the region behind its own
+  start — bounding the gradient to the feather wedge is what stops it masking the far end.
+- **The chord approximation is fine.** A gradient axis is straight and the arc is not, but a radial
+  offset is perpendicular to that axis and so projects onto it only to second order. Over ten
+  degrees it is not visible.
+- **Text is not faded.** The fade is a property of the band; blurring the event's name helps nobody.
 
-Implementation needs a spike. An SVG `linearGradient` is defined in user or bounding-box space, not
-along a path, so it cannot follow an arc directly. Options: orient a gradient along the chord near
-the boundary (approximate, but over a few degrees probably indistinguishable); split the final
-degrees into several small segments with stepped opacity (crude, exact, and works with the existing
-`describeArc`); or a gradient `<mask>`. The segmented approach is the most predictable.
+Two decisions the issue raised and this settled: **both** ends feather, since an event that started
+before the window is misrepresented exactly as badly as one running past it; and the fade
+**supplements** `MIN_ARC_DEGREES` rather than replacing it — the ratio cap is what keeps a floored
+arc visible, not a change to the floor.
 
 ---
 

@@ -37,6 +37,14 @@ export interface ArcAngles {
   endAngle: number;
 }
 
+/** Arc bounds plus which ends the period cut off. */
+export interface ClampedArcAngles extends ArcAngles {
+  /** The event was already running when the period began. */
+  continuesBefore: boolean;
+  /** The event runs on past the period's end. */
+  continuesAfter: boolean;
+}
+
 /** An event resolved to everything the dial needs to draw it. */
 export interface ClockEvent {
   id: string;
@@ -54,6 +62,15 @@ export interface ClockEvent {
    */
   trueStartAngle: number;
   trueEndAngle: number;
+  /**
+   * Whether the period cut the event short at either end.
+   *
+   * An arc is drawn to the period boundary whatever the event's real extent, so without these the
+   * dial asserts that an 11:30–12:30 event finishes at noon. The renderer fades the affected end
+   * out rather than capping it.
+   */
+  continuesBefore: boolean;
+  continuesAfter: boolean;
   color: string;
   eventEmoji?: string;
   isAllDay: boolean;

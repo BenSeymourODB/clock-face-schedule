@@ -7,8 +7,11 @@
  * restoration; there is no detail surface here, and inventing one is a UX task rather than a port.
  */
 import {
+  type ArcFeathers,
   type ArcTitleLayout,
   type ClockEvent,
+  type FeatherSpan,
+  computeArcFeathers,
   computeArcTitleLayout,
   describeArc,
   describeTextArc,
@@ -60,6 +63,111 @@ const ARC_FILL_OPACITY = 0.85;
 const ARC_SEPARATOR_RATIO = 0.03;
 const ARC_SEPARATOR_MIN = 1;
 
+interface FeatherMaskParams {
+  id: string;
+  feathers: ArcFeathers;
+  cx: number;
+  cy: number;
+  innerRadius: number;
+  outerRadius: number;
+  separatorWidth: number;
+}
+
+/**
+ * A luminance mask that fades the arc out where the period, not the event, ended it.
+ *
+ * Masks the whole path rather than tinting its fill, because the separator stroke traces the arc's
+ * closed outline — leave it alone and a crisp line still caps the boundary, which is the very
+ * thing the fade exists to deny.
+ *
+ * A white ground makes everything opaque; each fade lays a black gradient over it, running from
+ * opaque black at the boundary to zero alpha where the arc resumes full strength. The gradient is
+ * painted onto a wedge rather than the whole box so that `pad` spread cannot reach the far side of
+ * an arc that curves back around past 180°.
+ */
+function featherMask({
+  id,
+  feathers,
+  cx,
+  cy,
+  innerRadius,
+  outerRadius,
+  separatorWidth,
+}: FeatherMaskParams): SVGMaskElement | undefined {
+  const spans = [
+    { key: "start", span: feathers.start },
+    { key: "end", span: feathers.end },
+  ].filter((entry): entry is { key: string; span: FeatherSpan } => entry.span !== undefined);
+
+  if (spans.length === 0) return undefined;
+
+  // The wedge has to swallow the stroke, which straddles the path by half its width in every
+  // direction — including angularly, past the boundary.
+  const padDegrees = (separatorWidth / outerRadius) * (180 / Math.PI);
+  const box = {
+    x: roundCoord(cx - outerRadius - separatorWidth),
+    y: roundCoord(cy - outerRadius - separatorWidth),
+    size: roundCoord((outerRadius + separatorWidth) * 2),
+  };
+  // A linear gradient runs along a straight axis, and over ten degrees the chord it follows is
+  // indistinguishable from the arc: a radial offset is perpendicular to that axis, so it projects
+  // onto it only to second order.
+  const midRadius = (innerRadius + outerRadius) / 2;
+
+  const mask = svg("mask", {
+    id: `arc-fade-${id}`,
+    maskUnits: "userSpaceOnUse",
+    x: box.x,
+    y: box.y,
+    width: box.size,
+    height: box.size,
+  });
+
+  mask.append(
+    svg("rect", { x: box.x, y: box.y, width: box.size, height: box.size, fill: "#ffffff" })
+  );
+
+  for (const { key, span } of spans) {
+    const gradientId = `arc-fade-${id}-${key}`;
+    const boundary = polarToCartesian(cx, cy, midRadius, span.fromAngle);
+    const resumes = polarToCartesian(cx, cy, midRadius, span.toAngle);
+
+    const towardArc = Math.sign(span.toAngle - span.fromAngle);
+    const wedgeEdge = span.fromAngle - towardArc * padDegrees;
+
+    mask.append(
+      svg(
+        "linearGradient",
+        {
+          id: gradientId,
+          gradientUnits: "userSpaceOnUse",
+          x1: boundary.x,
+          y1: boundary.y,
+          x2: resumes.x,
+          y2: resumes.y,
+        },
+        [
+          svg("stop", { offset: "0", "stop-color": "#000000", "stop-opacity": 1 }),
+          svg("stop", { offset: "1", "stop-color": "#000000", "stop-opacity": 0 }),
+        ]
+      ),
+      svg("path", {
+        d: describeArc(
+          cx,
+          cy,
+          outerRadius + separatorWidth,
+          Math.max(0, innerRadius - separatorWidth),
+          Math.min(wedgeEdge, span.toAngle),
+          Math.max(wedgeEdge, span.toAngle)
+        ),
+        fill: `url(#${gradientId})`,
+      })
+    );
+  }
+
+  return mask;
+}
+
 export interface EventArcParams {
   event: ClockEvent;
   cx: number;
@@ -98,6 +206,23 @@ export function eventArc({
     "aria-label": eventEmoji ? `Event: ${cleanTitle}, ${eventEmoji}` : `Event: ${cleanTitle}`,
   });
 
+  const defs = svg("defs");
+  group.append(defs);
+
+  const separatorWidth = roundCoord(
+    Math.max(ARC_SEPARATOR_MIN, arcHeight * ARC_SEPARATOR_RATIO)
+  );
+  const mask = featherMask({
+    id,
+    feathers: computeArcFeathers(event),
+    cx,
+    cy,
+    innerRadius,
+    outerRadius,
+    separatorWidth,
+  });
+  if (mask) defs.append(mask);
+
   group.append(
     svg("path", {
       "data-testid": `event-arc-${id}`,
@@ -107,9 +232,8 @@ export function eventArc({
       // A token, not a literal: this is the separator between adjacent arcs and between the
       // arcs and the face, so it has to track whichever background sits behind them.
       stroke: "var(--card)",
-      "stroke-width": roundCoord(
-        Math.max(ARC_SEPARATOR_MIN, arcHeight * ARC_SEPARATOR_RATIO)
-      ),
+      "stroke-width": separatorWidth,
+      mask: mask ? `url(#arc-fade-${id})` : undefined,
     })
   );
 
@@ -159,7 +283,6 @@ export function eventArc({
           : [titleRadius + lineOffset, titleRadius - lineOffset]
         : [titleRadius];
 
-    const defs = svg("defs");
     const titleGroup = svg("g", { "data-testid": `event-title-${id}` });
 
     radii.forEach((radius, index) => {
@@ -203,7 +326,7 @@ export function eventArc({
       );
     });
 
-    group.append(defs, titleGroup);
+    group.append(titleGroup);
   }
 
   return group;

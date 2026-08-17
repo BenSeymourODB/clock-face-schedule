@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { type ClockEvent, computeArcTitleLayout } from "../../shared/clock";
+import {
+  FEATHER_DEGREES,
+  type ClockEvent,
+  computeArcTitleLayout,
+} from "../../shared/clock";
 import { eventArc } from "./event-arc";
 
 const CX = 300;
@@ -21,6 +25,8 @@ function makeEvent(overrides: Partial<ClockEvent> = {}): ClockEvent {
     // they simply mirror them.
     trueStartAngle: startAngle,
     trueEndAngle: endAngle,
+    continuesBefore: false,
+    continuesAfter: false,
     color: "#22c55e",
     isAllDay: false,
     ...overrides,
@@ -300,5 +306,107 @@ describe("eventArc", () => {
       expect(group.querySelector('[data-testid="event-title-e1"] text')?.getAttribute("font-size"))
         .toBe("9");
     });
+  });
+});
+
+describe("eventArc at a period boundary", () => {
+  const SEPARATOR = 1.44; // (OUTER − INNER) × ARC_SEPARATOR_RATIO
+
+  function fade(overrides: Partial<ClockEvent>) {
+    const group = render(overrides);
+    return {
+      path: group.querySelector('[data-testid="event-arc-e1"]'),
+      mask: group.querySelector("mask"),
+      gradients: [...group.querySelectorAll("linearGradient")],
+      wedges: [...group.querySelectorAll("mask path")],
+      titlePaths: [...group.querySelectorAll("defs > path")],
+    };
+  }
+
+  /** Angle of an `M x y` or an arc endpoint, in the dial's 0°-at-twelve convention. */
+  function angleOf(x: number, y: number): number {
+    return (Math.atan2(y - CY, x - CX) * (180 / Math.PI) + 450) % 360;
+  }
+
+  /** Angular span a mask wedge covers, from its `M` point round to its outer arc endpoint. */
+  function wedgeSpan(d: string): number {
+    const [mx, my, , , , , , ax, ay] = d.split(/[ A]+/).slice(1).map(Number);
+    return (angleOf(ax, ay) - angleOf(mx, my) + 360) % 360;
+  }
+
+  it("leaves an arc the period did not clip unmasked", () => {
+    const { path, mask } = fade({});
+
+    expect(path?.hasAttribute("mask")).toBe(false);
+    expect(mask).toBeNull();
+  });
+
+  it.each([
+    ["already running when the period began", { continuesBefore: true }],
+    ["still running when the period ends", { continuesAfter: true }],
+  ])("fades an event %s", (_label, overrides) => {
+    const { path, mask, gradients } = fade(overrides);
+
+    expect(path?.getAttribute("mask")).toBe("url(#arc-fade-e1)");
+    expect(mask?.getAttribute("id")).toBe("arc-fade-e1");
+    expect(gradients).toHaveLength(1);
+  });
+
+  it("fades both ends of an event that outruns the period at each", () => {
+    const { gradients } = fade({ continuesBefore: true, continuesAfter: true });
+
+    expect(gradients.map((g) => g.getAttribute("id"))).toEqual([
+      "arc-fade-e1-start",
+      "arc-fade-e1-end",
+    ]);
+  });
+
+  it("ramps from nothing at the boundary to full strength where the arc resumes", () => {
+    const [gradient] = fade({ continuesBefore: true }).gradients;
+    const stops = [...gradient.querySelectorAll("stop")];
+
+    expect(stops.map((s) => s.getAttribute("stop-opacity"))).toEqual(["1", "0"]);
+    // A luminance mask, so the ramp is black-on-white: opaque black hides, transparent reveals.
+    expect(stops.every((s) => s.getAttribute("stop-color") === "#000000")).toBe(true);
+  });
+
+  it("anchors the gradient axis on the boundary and points it into the arc", () => {
+    // startAngle 0 is twelve o'clock, so the fade runs clockwise from straight up.
+    const [gradient] = fade({ startAngle: 0, endAngle: 60, continuesBefore: true }).gradients;
+    const at = (name: string) => Number(gradient.getAttribute(name));
+
+    expect(at("x1")).toBeCloseTo(CX, 4);
+    expect(at("y1")).toBeLessThan(CY);
+    expect(angleOf(at("x2"), at("y2"))).toBeCloseTo(FEATHER_DEGREES, 4);
+  });
+
+  it("covers the separator stroke, which would otherwise cap the boundary with a crisp line", () => {
+    const [wedge] = fade({ startAngle: 0, endAngle: 60, continuesBefore: true }).wedges;
+    const d = wedge.getAttribute("d") ?? "";
+    // `matchAll` would be tidier, but the target is ES2019.
+    const radii = d.split("A ").slice(1).map(parseFloat);
+
+    // The stroke straddles the path by half its width in every direction — radially…
+    expect(radii).toEqual([OUTER + SEPARATOR, INNER - SEPARATOR]);
+    // …and angularly, past the boundary, where a bare wedge would leave a hairline behind.
+    const padDegrees = (SEPARATOR / OUTER) * (180 / Math.PI);
+    expect(wedgeSpan(d)).toBeCloseTo(FEATHER_DEGREES + padDegrees, 3);
+  });
+
+  it("leaves the title unmasked, so the name stays readable where the band does not", () => {
+    const group = render({ continuesAfter: true });
+    const title = group.querySelector('[data-testid="event-title-e1"]');
+
+    expect(title).not.toBeNull();
+    expect(title?.hasAttribute("mask")).toBe(false);
+  });
+
+  it("keeps the title's baseline paths out of the mask", () => {
+    // Both live in the same <defs> now; only the fade wedges belong inside the <mask>.
+    const { titlePaths, wedges } = fade({ continuesBefore: true });
+
+    expect(titlePaths).toHaveLength(1);
+    expect(wedges).toHaveLength(1);
+    expect(titlePaths[0].getAttribute("id")).toBe("text-path-e1-0");
   });
 });

@@ -7,7 +7,8 @@
  * is not a plan.
  *
  * Chosen to exercise what is hardest to judge from a specification — three-deep overlap, a title
- * too long for its arc, and an event short enough to need the minimum-width floor.
+ * too long for its arc, an event short enough to need the minimum-width floor, and an event
+ * crossing each end of the period.
  */
 import type { ClockEventInput } from "../shared/clock";
 
@@ -17,6 +18,8 @@ export function sampleEvents(periodStart: Date): ClockEventInput[] {
   const fallbackColor = "#3b82f6";
 
   return [
+    // Already running when the period began — its leading end is the period's, not the event's.
+    { id: "z", title: "⚪ Breakfast Club", startDate: at(-1, 10), endDate: at(0, 20), isAllDay: false, fallbackColor },
     // Three deep between 01:00 and 02:00.
     { id: "a", title: "🟢 🎮 Game Time", startDate: at(0, 30), endDate: at(2, 0), isAllDay: false, fallbackColor },
     { id: "b", title: "🔴 Deadline", startDate: at(1, 0), endDate: at(3, 0), isAllDay: false, fallbackColor },
@@ -29,5 +32,7 @@ export function sampleEvents(periodStart: Date): ClockEventInput[] {
     { id: "f", title: "🔵 Parent Teacher Conference Planning Committee", startDate: at(9, 30), endDate: at(10, 40), isAllDay: false, fallbackColor },
     // Title wraps to two lines *and* carries an emoji — the tightest radial case there is.
     { id: "g", title: "🟠 🎂 Reading and Snacks", startDate: at(6, 40), endDate: at(7, 55), isAllDay: false, fallbackColor },
+    // Runs on past the period's end, so the dial must not claim it finishes there.
+    { id: "y", title: "🟢 Aftercare", startDate: at(11, 5), endDate: at(13, 30), isAllDay: false, fallbackColor },
   ];
 }
