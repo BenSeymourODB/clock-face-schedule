@@ -10,6 +10,7 @@ import {
   filterEventsForPeriod,
   getPeriodBounds,
   getPeriodStart,
+  roundCoord,
 } from "../../shared/clock";
 import { svg } from "../svg";
 import { clockFace } from "./clock-face";
@@ -55,8 +56,26 @@ const EMOJI_MIN_SPAN_DEGREES = 10;
 const RING_GAP_RATIO = 0.06;
 const RING_GAP_MIN = 2;
 
-/** Floating labels sit this far beyond the band, as a fraction of it. */
-const LABEL_RADIUS_RATIO = 0.6;
+/**
+ * Floating labels sit this far beyond the band, as a fraction of the dial's radius.
+ *
+ * Was 0.6 of the *band*, which put the label ring at 337 units on a dial whose frame is only 300
+ * from the centre — so at 3 and 9 o'clock a label's centre was off-screen entirely and the clamp
+ * had to drag it back across the dial (#21). A small fraction of the radius keeps every centre
+ * inside the frame while still clearing the band.
+ */
+const LABEL_RADIUS_RATIO = 0.02;
+
+/**
+ * Label text size, as a fraction of the dial's radius.
+ *
+ * Deliberately **not** derived from the arc band the way in-arc titles are. A label sits outside
+ * the dial, so band thickness is arbitrary to it — and since thickness divides by overlap depth, a
+ * band-derived size meant an event in a three-deep cluster got a label a third the size of its
+ * neighbour's for no reason a viewer could see. Slightly smaller than an arc title, which it can
+ * afford: the card is a light chip carrying dark text rather than text curved over a colour.
+ */
+const LABEL_FONT_SIZE_RATIO = 0.06;
 
 export interface AnalogClockParams {
   events: ClockEventInput[];
@@ -101,7 +120,8 @@ export function analogClock({
     Math.floor((arcThickness + ringGap) / (arcThickness * MIN_RING_THICKNESS_RATIO + ringGap))
   );
 
-  const labelRadius = outerRadius + arcThickness * LABEL_RADIUS_RATIO;
+  const labelRadius = outerRadius * (1 + LABEL_RADIUS_RATIO);
+  const labelFontSize = roundCoord(outerRadius * LABEL_FONT_SIZE_RATIO);
   const clockBox = {
     top: cy - outerRadius,
     bottom: cy + outerRadius,
@@ -220,7 +240,8 @@ export function analogClock({
             cx,
             cy,
             clockBox,
-            fontSize: layout.titleFontSize,
+            faceRadius,
+            fontSize: labelFontSize,
           }),
         });
       }

@@ -5,6 +5,7 @@ const CX = 300;
 const CY = 300;
 const ANCHOR_RADIUS = 292;
 const LABEL_RADIUS = 320.8;
+const FACE_RADIUS = 204.4;
 
 /** A 600px dial: face plus arc band spans 8 → 592 on both axes, so the allowance is 58.4. */
 const CLOCK_BOX = {
@@ -29,12 +30,24 @@ function render(overrides: Partial<Parameters<typeof floatingLabel>[0]> = {}): S
     cx: CX,
     cy: CY,
     clockBox: CLOCK_BOX,
+    faceRadius: FACE_RADIUS,
     ...overrides,
   });
 }
 
 function part(group: SVGGElement, name: string): Element | null {
   return group.querySelector(`[data-testid="floating-label-${name}-e1"]`);
+}
+
+/** One wrapped line of label text, outermost first. */
+function line(group: SVGGElement, index = 0): Element | null {
+  return group.querySelector(`[data-testid="floating-label-text-e1-${index}"]`);
+}
+
+function lineTexts(group: SVGGElement): string[] {
+  return [...group.querySelectorAll('[data-testid^="floating-label-text-e1-"]')].map(
+    (node) => node.textContent ?? ""
+  );
 }
 
 function numbers(element: Element | null, ...names: string[]): number[] {
@@ -56,7 +69,7 @@ describe("floatingLabel", () => {
 
     it("centres on the label position", () => {
       const [x, y, width, height] = numbers(rect, "x", "y", "width", "height");
-      const [textX, textY] = numbers(part(group, "text"), "x", "y");
+      const [textX, textY] = numbers(line(group), "x", "y");
 
       expect(x + width / 2).toBeCloseTo(textX, 4);
       expect(y + height / 2).toBeCloseTo(textY, 4);
@@ -64,7 +77,7 @@ describe("floatingLabel", () => {
 
     it("inverts the face tokens rather than hard-coding a light chip", () => {
       expect(rect?.getAttribute("fill")).toBe("var(--card-foreground)");
-      expect(part(group, "text")?.getAttribute("fill")).toBe("var(--card)");
+      expect(line(group)?.getAttribute("fill")).toBe("var(--card)");
     });
 
     it("borders in the event colour", () => {
@@ -72,8 +85,8 @@ describe("floatingLabel", () => {
       expect(part(group, "connector")?.getAttribute("stroke")).toBe("#22c55e");
     });
 
-    it("renders the full text — truncation is the arc's job, not the label's", () => {
-      expect(part(group, "text")?.textContent).toBe("Parent Teacher Conference");
+    it("renders the full text on one line when the card has room for it", () => {
+      expect(lineTexts(group)).toEqual(["Parent Teacher Conference"]);
     });
   });
 
@@ -121,20 +134,20 @@ describe("floatingLabel", () => {
       // A radius well past the dial, so the label would otherwise escape and grow the row.
       const group = render({ anchorAngle, labelRadius: 400 });
 
-      expect(numbers(part(group, "text"), "y")[0]).toBeCloseTo(limit, 4);
+      expect(numbers(line(group), "y")[0]).toBeCloseTo(limit, 4);
     });
 
     it("slides vertically without re-projecting around the circle", () => {
       // x is preserved so the label stays visually attached to the arc it points at.
       const group = render({ anchorAngle: 0, labelRadius: 400 });
 
-      expect(numbers(part(group, "text"), "x")[0]).toBeCloseTo(CX, 4);
+      expect(numbers(line(group), "x")[0]).toBeCloseTo(CX, 4);
     });
 
     it("leaves a label inside the box alone", () => {
       const group = render({ anchorAngle: 90 });
 
-      expect(numbers(part(group, "text"), "y")[0]).toBeCloseTo(CY, 4);
+      expect(numbers(line(group), "y")[0]).toBeCloseTo(CY, 4);
     });
   });
 
@@ -158,10 +171,96 @@ describe("floatingLabel", () => {
       // x is preserved whenever the card has room, so labels stay pointing outward radially.
       const group = render({ anchorAngle: 45, text: "Short" });
 
-      expect(numbers(part(group, "text"), "x")[0]).toBeCloseTo(
+      expect(numbers(line(group), "x")[0]).toBeCloseTo(
         CX + LABEL_RADIUS * Math.sin((45 * Math.PI) / 180),
         3
       );
     });
+  });
+});
+
+/**
+ * #21: a card sized to its title rather than to the room available ended up lying across the
+ * numerals and the hands. These use the dial's real proportions rather than the fixture above,
+ * because the defect was a consequence of them.
+ */
+describe("floatingLabel against the dial's real geometry", () => {
+  const OUTER = 292;
+  const FACE = FACE_RADIUS;
+  const LABEL_RADIUS_REAL = OUTER * 1.02;
+  const FONT = 17.52;
+  const LONG = "Parent Teacher Conference Planning Committee";
+  const EVERY_15_DEGREES = Array.from({ length: 24 }, (_unused, i) => i * 15);
+
+  function card(anchorAngle: number, text = LONG) {
+    const group = floatingLabel({
+      id: "e1",
+      text,
+      anchorAngle,
+      anchorRadius: OUTER,
+      labelRadius: LABEL_RADIUS_REAL,
+      color: "#22c55e",
+      cx: CX,
+      cy: CY,
+      clockBox: CLOCK_BOX,
+      faceRadius: FACE,
+      fontSize: FONT,
+    });
+    const [x, y, width, height] = numbers(part(group, "rect"), "x", "y", "width", "height");
+    return { group, x, y, width, height };
+  }
+
+  /** Distance from the dial's centre to the nearest point of the card. */
+  function gapToCentre({ x, y, width, height }: ReturnType<typeof card>): number {
+    const dx = Math.max(x - CX, 0, CX - (x + width));
+    const dy = Math.max(y - CY, 0, CY - (y + height));
+    return Math.hypot(dx, dy);
+  }
+
+  it.each(EVERY_15_DEGREES)("clears the clock face at %i°", (anchorAngle) => {
+    // The defect verbatim: the card covered the numerals 11, 12 and 1. Nothing the positioning
+    // rule could do would fix it, because the card was simply too big for the dial.
+    expect(gapToCentre(card(anchorAngle))).toBeGreaterThan(FACE);
+  });
+
+  it.each(EVERY_15_DEGREES)("needs no horizontal clamping at %i°", (anchorAngle) => {
+    // Sizing to `labelWidthLimit` is supposed to make the clamp a no-op, and the clamp pulling a
+    // card inward is precisely how it landed on the face. Assert the card is where the angle put
+    // it, not where the clamp had to put it.
+    const { x, width } = card(anchorAngle);
+    const natural = CX + LABEL_RADIUS_REAL * Math.sin((anchorAngle * Math.PI) / 180);
+
+    expect(x + width / 2).toBeCloseTo(natural, 4);
+  });
+
+  it("wraps a long title rather than widening the card", () => {
+    const upperLeft = card(302.5);
+
+    expect(lineTexts(upperLeft.group).length).toBeGreaterThan(1);
+    // The card that provoked the issue was 561 units wide on a 600-unit viewBox.
+    expect(upperLeft.width).toBeLessThan(300);
+  });
+
+  it("grows downward one line at a time", () => {
+    const { group, height } = card(302.5);
+    const ys = [...group.querySelectorAll('[data-testid^="floating-label-text-e1-"]')].map((node) =>
+      Number(node.getAttribute("y"))
+    );
+
+    expect(ys).toEqual([...ys].sort((a, b) => a - b));
+    expect(height).toBeCloseTo(ys.length * FONT * 1.4 + 6, 4);
+  });
+
+  it("caps the lines and marks the cut rather than growing without bound", () => {
+    // Three lines is not enough for this title at nine o'clock, where the frame leaves the least
+    // room. Ellipsized is the compromise; silently dropping words is not.
+    const lines = lineTexts(card(270).group);
+
+    expect(lines.length).toBeLessThanOrEqual(3);
+    expect(lines[lines.length - 1]).toMatch(/(\.\.\.|…)$/);
+  });
+
+  it("keeps a short title to a single line", () => {
+    expect(lineTexts(card(302.5, "Lunch").group)).toEqual(["Lunch"]);
   });
 });

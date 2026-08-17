@@ -5,7 +5,12 @@ export {
   computeArcTitleLayout,
   type ArcTitleLayout
 } from './arc-title-layout';
-export { clampLabelPosition, type ClockBox } from './clamp-label';
+export {
+  clampLabelPosition,
+  faceClearanceLimit,
+  labelWidthLimit,
+  type ClockBox
+} from './clamp-label';
 export {
   calculateArcAngles,
   calculateTrueArcAngles,
@@ -26,7 +31,22 @@ export {
   type ArcFeathers,
   type FeatherSpan
 } from './feather';
+export {
+  LINE_HEIGHT_RATIO,
+  fitLabelToWidth,
+  labelCardHeight,
+  labelLineOffsets,
+  type LabelLayout
+} from './fit-label';
 export { fitTitleToArc, type FitTitleResult } from './fit-title';
+export {
+  CHAR_WIDTH_RATIO,
+  charBudget,
+  normaliseText,
+  packLines,
+  textWidth,
+  type FitTextResult
+} from './pack-lines';
 export { rectEdgeIntersection } from './rect-edge';
 export { assignRings, type RingAssignment, type RingCandidate } from './ring-layout';
 export { describeTextArc } from './text-arc';

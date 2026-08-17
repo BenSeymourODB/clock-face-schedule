@@ -62,3 +62,54 @@ export function clampLabelPosition(
 
   return { x, y };
 }
+
+/**
+ * Widest card that can sit centred at `x` without the horizontal clamp having to move it.
+ *
+ * Sizing a card to this and then clamping is a no-op by construction, which is the point: the
+ * clamp's only remaining option for an oversized card is to pull it inward over the face (#21),
+ * so the fix is to never hand it one. Callers wrap their text to this width instead.
+ *
+ * The room is the *nearer* of the two edges, because the card is centred and both of its sides
+ * have to land inside. At 3 and 9 o'clock that is a small number — the dial fills the frame, and
+ * there is genuinely almost no "outside the dial" on the horizontal axis.
+ */
+export function labelWidthLimit(x: number, clockBox: ClockBox): number {
+  const allowance = clockBox.width * OVERFLOW_RATIO;
+  const room = Math.min(
+    x - (clockBox.left - allowance),
+    clockBox.right + allowance - x
+  );
+  return Math.max(0, room * 2);
+}
+
+/**
+ * Widest card centred at `centre` that stays clear of a circle of `faceRadius` about the dial.
+ *
+ * The frame limit above is not enough on its own: it constrains a card against the *edges of the
+ * page*, and the thing #21 is about is the card reaching the clock face. Those bind in different
+ * places — on the diagonals the frame leaves plenty of width and the card's inner corner walks
+ * into the face anyway, since a centred card grows toward the dial as well as away from it.
+ *
+ * `maxHeight` is the tallest the card may grow to. A taller card passes closer to the face from
+ * the side, so sizing against the maximum stays safe whatever the text turns out to need — and
+ * avoids a circular dependency, since height comes from the line count and the line count comes
+ * from the width.
+ *
+ * Returns `Infinity` where there is no horizontal constraint to apply: directly above or below the
+ * dial the card clears the face however wide it gets, which is why a label at twelve o'clock may
+ * be the full width of the page.
+ */
+export function faceClearanceLimit(
+  centre: { x: number; y: number },
+  cx: number,
+  cy: number,
+  faceRadius: number,
+  maxHeight: number
+): number {
+  const verticalGap = Math.abs(centre.y - cy) - maxHeight / 2;
+  if (verticalGap >= faceRadius) return Number.POSITIVE_INFINITY;
+
+  const faceHalfWidth = Math.sqrt(faceRadius ** 2 - Math.max(0, verticalGap) ** 2);
+  return Math.max(0, (Math.abs(centre.x - cx) - faceHalfWidth) * 2);
+}

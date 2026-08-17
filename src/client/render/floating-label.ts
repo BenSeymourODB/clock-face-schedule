@@ -12,6 +12,11 @@
 import {
   type ClockBox,
   clampLabelPosition,
+  faceClearanceLimit,
+  fitLabelToWidth,
+  labelCardHeight,
+  labelLineOffsets,
+  labelWidthLimit,
   polarToCartesian,
   rectEdgeIntersection,
   roundCoord,
@@ -20,9 +25,16 @@ import { svg } from "../svg";
 
 const FONT_STACK = "system-ui, -apple-system, sans-serif";
 
-/** Rough advance width per character, as a fraction of font size. */
-const CHAR_WIDTH_RATIO = 0.6;
-const LINE_HEIGHT_RATIO = 1.4;
+/**
+ * Lines a card may grow to before its text is cut instead.
+ *
+ * Three is a compromise the geometry forces rather than a preference. The frame's inscribed circle
+ * leaves roughly 105 units of width at 3 and 9 o'clock, so lines are short and a long title needs
+ * many of them — but a card tall enough to hold five reaches the face from the side, which is the
+ * defect being fixed. Beyond three lines the title is ellipsized and the arc still carries the
+ * event's colour and emoji.
+ */
+const MAX_LINES = 3;
 
 const RECT_PADDING_X = 6;
 const RECT_PADDING_Y = 3;
@@ -57,6 +69,8 @@ export interface FloatingLabelParams {
   cy: number;
   /** Vertical extents of the dial, defining the clamp band. */
   clockBox: ClockBox;
+  /** Radius of the clock face, which the card must not reach. */
+  faceRadius: number;
   fontSize?: number;
 }
 
@@ -70,20 +84,32 @@ export function floatingLabel({
   cx,
   cy,
   clockBox,
+  faceRadius,
   fontSize = DEFAULT_FONT_SIZE,
 }: FloatingLabelParams): SVGGElement {
   const anchor = polarToCartesian(cx, cy, anchorRadius, anchorAngle);
 
-  const width = text.length * fontSize * CHAR_WIDTH_RATIO + RECT_PADDING_X * 2;
-  const height = fontSize * LINE_HEIGHT_RATIO + RECT_PADDING_Y * 2;
-
-  // Width is computed first because the horizontal clamp needs it: unlike the vertical one, it
-  // holds the card's edges inside the box rather than just its centre.
-  const centre = clampLabelPosition(
-    polarToCartesian(cx, cy, labelRadius, anchorAngle),
-    clockBox,
-    width / 2
+  // Where the label wants to be, before any clamping — and therefore how much width is available
+  // there. Sizing the card to that room is what keeps the clamp from having to pull a too-wide
+  // card inward across the numerals (#21); the clamp below is left in place as a backstop and,
+  // for any card this function produces, does nothing horizontally.
+  const natural = polarToCartesian(cx, cy, labelRadius, anchorAngle);
+  const maxWidth = Math.min(
+    labelWidthLimit(natural.x, clockBox),
+    faceClearanceLimit(
+      natural,
+      cx,
+      cy,
+      faceRadius,
+      labelCardHeight(MAX_LINES, fontSize, RECT_PADDING_Y)
+    )
   );
+  const { lines, width, height } = fitLabelToWidth(text, maxWidth, fontSize, MAX_LINES, {
+    x: RECT_PADDING_X,
+    y: RECT_PADDING_Y,
+  });
+
+  const centre = clampLabelPosition(natural, clockBox, width / 2);
 
   // Stop the connector at the card's edge rather than letting it run underneath the fill.
   const connectorEnd = rectEdgeIntersection(centre, width, height, anchor);
@@ -118,19 +144,22 @@ export function floatingLabel({
       "stroke-opacity": RECT_BORDER_OPACITY,
       "stroke-width": strokeWidth,
     }),
-    svg(
-      "text",
-      {
-        "data-testid": `floating-label-text-${id}`,
-        x: roundCoord(centre.x),
-        y: roundCoord(centre.y),
-        "text-anchor": "middle",
-        "dominant-baseline": "central",
-        "font-size": fontSize,
-        "font-family": FONT_STACK,
-        fill: "var(--card)",
-      },
-      [text]
+    // One <text> per line, as the arc does for its curved lines — no tspan baseline arithmetic.
+    ...labelLineOffsets(lines.length, fontSize).map((offset, index) =>
+      svg(
+        "text",
+        {
+          "data-testid": `floating-label-text-${id}-${index}`,
+          x: roundCoord(centre.x),
+          y: roundCoord(centre.y + offset),
+          "text-anchor": "middle",
+          "dominant-baseline": "central",
+          "font-size": fontSize,
+          "font-family": FONT_STACK,
+          fill: "var(--card)",
+        },
+        [lines[index]]
+      )
     )
   );
 
