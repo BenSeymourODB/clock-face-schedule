@@ -42,8 +42,18 @@ export interface ClockEvent {
   id: string;
   title: string;
   cleanTitle: string;
+  /** Angles the arc is drawn at, widened to the minimum visible width if the event is short. */
   startAngle: number;
   endAngle: number;
+  /**
+   * Angles before that widening.
+   *
+   * Ring stacking reads these, so a five-minute event held open to 7.5° does not appear to clash
+   * with a neighbour starting six minutes later. Using the drawn angles there manufactures
+   * overlaps that do not exist, and each phantom costs every arc on the dial some thickness.
+   */
+  trueStartAngle: number;
+  trueEndAngle: number;
   color: string;
   eventEmoji?: string;
   isAllDay: boolean;

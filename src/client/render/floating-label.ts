@@ -28,10 +28,15 @@ const RECT_PADDING_X = 6;
 const RECT_PADDING_Y = 3;
 const RECT_CORNER_RADIUS = 3;
 const RECT_BORDER_OPACITY = 0.4;
-const RECT_BORDER_WIDTH = 1;
-
 const CONNECTOR_OPACITY = 0.6;
-const CONNECTOR_STROKE_WIDTH = 1;
+
+/**
+ * Connector and card border, as a fraction of the label's font size with an absolute floor. The
+ * label already scales with the band it belongs to, so its linework should too — a fixed 1-unit
+ * hairline disappeared as the dial grew.
+ */
+const STROKE_RATIO = 0.08;
+const STROKE_MIN = 1;
 
 const DEFAULT_FONT_SIZE = 14;
 
@@ -68,16 +73,21 @@ export function floatingLabel({
   fontSize = DEFAULT_FONT_SIZE,
 }: FloatingLabelParams): SVGGElement {
   const anchor = polarToCartesian(cx, cy, anchorRadius, anchorAngle);
-  const centre = clampLabelPosition(
-    polarToCartesian(cx, cy, labelRadius, anchorAngle),
-    clockBox
-  );
 
   const width = text.length * fontSize * CHAR_WIDTH_RATIO + RECT_PADDING_X * 2;
   const height = fontSize * LINE_HEIGHT_RATIO + RECT_PADDING_Y * 2;
 
+  // Width is computed first because the horizontal clamp needs it: unlike the vertical one, it
+  // holds the card's edges inside the box rather than just its centre.
+  const centre = clampLabelPosition(
+    polarToCartesian(cx, cy, labelRadius, anchorAngle),
+    clockBox,
+    width / 2
+  );
+
   // Stop the connector at the card's edge rather than letting it run underneath the fill.
   const connectorEnd = rectEdgeIntersection(centre, width, height, anchor);
+  const strokeWidth = roundCoord(Math.max(STROKE_MIN, fontSize * STROKE_RATIO));
 
   const group = svg("g", { "data-testid": `floating-label-${id}` });
 
@@ -90,7 +100,7 @@ export function floatingLabel({
       y2: roundCoord(connectorEnd.y),
       stroke: color,
       "stroke-opacity": CONNECTOR_OPACITY,
-      "stroke-width": CONNECTOR_STROKE_WIDTH,
+      "stroke-width": strokeWidth,
     }),
     // The card deliberately inverts the face tokens — a light chip carrying dark text, sitting
     // off the dial. NDWC hard-coded white and #1f2937 for this; using the tokens gives the same
@@ -106,7 +116,7 @@ export function floatingLabel({
       fill: "var(--card-foreground)",
       stroke: color,
       "stroke-opacity": RECT_BORDER_OPACITY,
-      "stroke-width": RECT_BORDER_WIDTH,
+      "stroke-width": strokeWidth,
     }),
     svg(
       "text",

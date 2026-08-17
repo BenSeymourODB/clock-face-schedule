@@ -7,6 +7,7 @@
  */
 import { type ClockEventInput, getPeriodBounds, getPeriodStart } from "../shared/clock";
 import { analogClock } from "./render/analog-clock";
+import { sampleEvents } from "./sample-events";
 import { type ScheduleStatus, describeStatus, nextStatus } from "./schedule-status";
 
 const TICK_INTERVAL_MS = 1_000;
@@ -62,13 +63,29 @@ function startDisplay(): void {
   // help a cold start, so the wall shows a working clock rather than an empty panel.
   window.setInterval(() => clock.setTime(new Date()), TICK_INTERVAL_MS);
 
+  function setStatusText(text: string | null): void {
+    if (!statusLine) return;
+    statusLine.textContent = text ?? "";
+    statusLine.toggleAttribute("hidden", text === null);
+  }
+
+  /**
+   * Sample events instead of a calendar, for judging legibility on the display itself.
+   *
+   * Set by `?demo=1` on the deployed app, and always on in the local preview, which has no server
+   * to ask. Deliberately says so on screen: a wall left in this mode must not be mistaken for a
+   * real schedule, and the whole point of the mode is that someone is standing in front of it.
+   */
+  if (mount instanceof HTMLElement && mount.dataset["demo"] === "1") {
+    clock.setEvents(sampleEvents(getPeriodStart(new Date())));
+    setStatusText("Sample events — not a real calendar");
+    return;
+  }
+
   let status: ScheduleStatus = { kind: "loading" };
 
   function showStatus(): void {
-    if (!statusLine) return;
-    const text = describeStatus(status);
-    statusLine.textContent = text ?? "";
-    statusLine.toggleAttribute("hidden", text === null);
+    setStatusText(describeStatus(status));
   }
 
   async function refresh(): Promise<void> {

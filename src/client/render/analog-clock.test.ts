@@ -4,8 +4,15 @@ import { type AnalogClockParams, analogClock } from "./analog-clock";
 
 const SIZE = 600;
 const OUTER_RADIUS = SIZE / 2 - 8;
-const ARC_THICKNESS = 48;
+/** Mirrors the radial budget: band 26% of the radius, face gap 4%. */
+const ARC_THICKNESS = OUTER_RADIUS * 0.26;
 const CLOCK_RADIUS = OUTER_RADIUS - ARC_THICKNESS;
+const FACE_GAP = OUTER_RADIUS * 0.04;
+const RING_GAP = Math.max(2, ARC_THICKNESS * 0.06);
+/** Rings the band can carry before they stop reading as arcs. */
+const MAX_RINGS = Math.floor(
+  (ARC_THICKNESS + RING_GAP) / (ARC_THICKNESS * 0.16 + RING_GAP)
+);
 
 /** Nine in the morning, so the period runs midnight → noon. */
 const MORNING = new Date(2026, 7, 15, 9, 0, 0);
@@ -88,8 +95,20 @@ describe("analogClock", () => {
       );
       const gap = CLOCK_RADIUS - faceRadius;
 
-      expect(gap).toBeCloseTo(ARC_THICKNESS * 0.15, 4);
+      expect(gap).toBeCloseTo(FACE_GAP, 4);
       expect(gap).toBeLessThan(ARC_THICKNESS / 2);
+    });
+
+    it("gives the arc band a share of the radius, not a fixed pixel width", () => {
+      // Guards #20: a fixed 48-unit band could not be widened for a room without editing code,
+      // and did not track the dial at all.
+      const wide = analogClock({ events: [], time: MORNING, size: 1200 });
+      const band =
+        Number(wide.element.querySelector('[data-testid="clock-face-bg"]')?.getAttribute("r")) /
+        (1200 / 2 - 8);
+
+      // Face keeps the same fraction of the radius at any size.
+      expect(band).toBeCloseTo((CLOCK_RADIUS - FACE_GAP) / OUTER_RADIUS, 4);
     });
   });
 
@@ -126,14 +145,12 @@ describe("analogClock", () => {
     it("stacks overlapping events inward, earliest outermost", () => {
       const { element } = build([input("a", 2, 4), input("b", 2.5, 4.5), input("c", 3, 5)]);
 
-      // gap = max(2, 48 × 0.06) = 2.88; thickness = (48 − 2 × 2.88) / 3 = 14.08.
-      const gap = 2.88;
-      const thickness = 14.08;
+      const thickness = (ARC_THICKNESS - 2 * RING_GAP) / 3;
       const outers = arcs(element).map((arc) => arcRadii(arc).outer);
 
       expect(outers[0]).toBeCloseTo(OUTER_RADIUS, 4);
-      expect(outers[1]).toBeCloseTo(OUTER_RADIUS - (thickness + gap), 4);
-      expect(outers[2]).toBeCloseTo(OUTER_RADIUS - 2 * (thickness + gap), 4);
+      expect(outers[1]).toBeCloseTo(OUTER_RADIUS - (thickness + RING_GAP), 4);
+      expect(outers[2]).toBeCloseTo(OUTER_RADIUS - 2 * (thickness + RING_GAP), 4);
     });
 
     it("never lets the innermost ring cross the clock face", () => {
@@ -141,7 +158,51 @@ describe("analogClock", () => {
       const inners = arcs(element).map((arc) => arcRadii(arc).inner);
 
       for (const inner of inners) {
-        expect(inner).toBeGreaterThanOrEqual(CLOCK_RADIUS);
+        expect(inner).toBeGreaterThanOrEqual(CLOCK_RADIUS - 1e-6);
+      }
+    });
+
+    it("does not charge an isolated event for a crowd elsewhere on the dial", () => {
+      // The headline of #9. Depth used to be dial-wide, so this lunch arc — which overlaps
+      // nothing — was thinned to a third of the band by a cluster three hours earlier, and lost
+      // its emoji and title to it.
+      const { element } = build([
+        input("a", 1, 3),
+        input("b", 1.5, 3.5),
+        input("c", 2, 4),
+        input("lunch", 8, 10),
+      ]);
+      const lunch = element.querySelector('path[data-testid="event-arc-lunch"]');
+
+      expect(arcRadii(lunch!).outer).toBeCloseTo(OUTER_RADIUS, 4);
+      expect(arcRadii(lunch!).inner).toBeCloseTo(CLOCK_RADIUS, 4);
+    });
+
+    it("does not stack events that only overlap once widened to the minimum span", () => {
+      // A five-minute event is drawn 7.5° wide so it stays visible. Assigning rings from the
+      // drawn angles made it appear to clash with a neighbour six minutes later, and the phantom
+      // cost both of them two thirds of the band.
+      const { element } = build([input("brief", 9, 9 + 5 / 60), input("after", 9.1, 10)]);
+      const outers = arcs(element).map((arc) => arcRadii(arc).outer);
+
+      expect(outers).toEqual([OUTER_RADIUS, OUTER_RADIUS]);
+    });
+
+    it("stops opening rings once they would stop reading as arcs", () => {
+      // Nine mutually overlapping events. Unbounded, the band divided nine ways gives slivers,
+      // and past about eighteen the arithmetic went negative and rendered arcs inside out.
+      const events = Array.from({ length: 9 }, (_, index) =>
+        input(`e${index}`, 2 + index * 0.1, 6)
+      );
+      const { element } = build(events);
+      const drawn = arcs(element).map((arc) => arcRadii(arc));
+
+      expect(new Set(drawn.map((radii) => radii.outer.toFixed(4))).size).toBeLessThanOrEqual(
+        MAX_RINGS
+      );
+      for (const { inner, outer } of drawn) {
+        expect(outer).toBeGreaterThan(inner);
+        expect(inner).toBeGreaterThanOrEqual(CLOCK_RADIUS - 1e-6);
       }
     });
   });

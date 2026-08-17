@@ -4,7 +4,7 @@
  */
 import {
   type ClockEventInput,
-  assignRingIndices,
+  assignRings,
   computeArcTitleLayout,
   eventsToClockEvents,
   filterEventsForPeriod,
@@ -17,10 +17,33 @@ import { eventArc } from "./event-arc";
 import { floatingLabel } from "./floating-label";
 
 const DEFAULT_SIZE = 600;
-const DEFAULT_ARC_THICKNESS = 48;
 
 /** Clearance between the outermost arc and the nominal SVG edge. */
 const EDGE_MARGIN = 8;
+
+/**
+ * The radial budget, as fractions of the dial's radius. The face takes whatever is left.
+ *
+ * The band carries the thing this display exists to show — how much of the period is committed —
+ * so it gets a much larger share than the ported design's 16%, which was tuned for a kitchen wall
+ * read from a few feet. The face gives up some radius for it and its numerals shrink accordingly,
+ * which is the right trade for a dial read across a classroom: the arcs are the content, the face
+ * is the reference.
+ */
+const ARC_BAND_RATIO = 0.26;
+const FACE_GAP_RATIO = 0.04;
+
+/**
+ * Floor on one ring's thickness, as a fraction of the band.
+ *
+ * Below this an arc cannot read as anything at all, so the dial stops opening rings rather than
+ * drawing slivers. It is also a correctness floor: past roughly eighteen deep the old arithmetic
+ * produced *negative* thickness and rendered the arcs inside out.
+ *
+ * Events past the cap share the innermost ring and overlap each other. Imperfect, but nothing
+ * vanishes — losing an event outright is worse on a display whose job is showing what is coming.
+ */
+const MIN_RING_THICKNESS_RATIO = 0.16;
 
 /**
  * Span below which an arc renders neither emoji nor title. Overflow routing reuses it: a label
@@ -35,18 +58,10 @@ const RING_GAP_MIN = 2;
 /** Floating labels sit this far beyond the band, as a fraction of it. */
 const LABEL_RADIUS_RATIO = 0.6;
 
-/**
- * Clearance between the face and the inner edge of the arc band, as a fraction of the band.
- *
- * Deliberate and small, so the boundary reads crisply. It replaces the ~49px ring that used to
- * appear because both this function and `clockFace` subtracted the band's width (#19). The final
- * split of the radial budget between face, gap, and band is #20's to settle.
- */
-const FACE_GAP_RATIO = 0.15;
-
 export interface AnalogClockParams {
   events: ClockEventInput[];
   size?: number;
+  /** Band width in viewBox units. Defaults to `ARC_BAND_RATIO` of the dial's radius. */
   arcThickness?: number;
   showSeconds?: boolean;
   /** Fixed time, for tests. Defaults to now. */
@@ -67,19 +82,34 @@ export interface AnalogClockHandle {
 export function analogClock({
   events,
   size = DEFAULT_SIZE,
-  arcThickness = DEFAULT_ARC_THICKNESS,
+  arcThickness: arcThicknessOverride,
   showSeconds = false,
   time = new Date(),
 }: AnalogClockParams): AnalogClockHandle {
   const cx = size / 2;
   const cy = size / 2;
   const outerRadius = size / 2 - EDGE_MARGIN;
+  const arcThickness = arcThicknessOverride ?? outerRadius * ARC_BAND_RATIO;
   /** Inner edge of the arc band — the floor for the innermost ring. */
   const clockRadius = outerRadius - arcThickness;
-  const faceRadius = clockRadius - arcThickness * FACE_GAP_RATIO;
+  const faceRadius = clockRadius - outerRadius * FACE_GAP_RATIO;
+
+  const ringGap = Math.max(RING_GAP_MIN, arcThickness * RING_GAP_RATIO);
+  /** How many rings the band can carry before they stop reading as arcs at all. */
+  const maxRings = Math.max(
+    1,
+    Math.floor((arcThickness + ringGap) / (arcThickness * MIN_RING_THICKNESS_RATIO + ringGap))
+  );
 
   const labelRadius = outerRadius + arcThickness * LABEL_RADIUS_RATIO;
-  const clockBox = { top: cy - outerRadius, bottom: cy + outerRadius, height: outerRadius * 2 };
+  const clockBox = {
+    top: cy - outerRadius,
+    bottom: cy + outerRadius,
+    left: cx - outerRadius,
+    right: cx + outerRadius,
+    height: outerRadius * 2,
+    width: outerRadius * 2,
+  };
 
   const element = svg("svg", {
     "data-testid": "analog-clock",
@@ -125,21 +155,33 @@ export function analogClock({
     );
     renderedCount = resolved.length;
 
-    const ringIndices = assignRingIndices(resolved);
-    const ringCount =
-      resolved.reduce((max, event) => Math.max(max, ringIndices.get(event.id) ?? 0), 0) + 1;
-
-    // With one ring the arc fills the whole band, so emoji and title get maximum radial room.
-    const ringGap = ringCount > 1 ? Math.max(RING_GAP_MIN, arcThickness * RING_GAP_RATIO) : 0;
-    // Nothing caps ringCount, so a deep enough overlap drives this to zero and then negative,
-    // which inverts the arcs. Inherited, and the subject of the density work — see #9.
-    const ringThickness = (arcThickness - (ringCount - 1) * ringGap) / ringCount;
+    // True angles, not drawn ones: a five-minute event widened to the 7.5° minimum must not
+    // appear to clash with a neighbour six minutes later, or every arc on the dial pays for a
+    // phantom that is not there.
+    const rings = assignRings(
+      resolved.map((event) => ({
+        id: event.id,
+        startAngle: event.trueStartAngle,
+        endAngle: event.trueEndAngle,
+      }))
+    );
 
     const overflowing: { startAngle: number; label: SVGGElement }[] = [];
 
     for (const event of resolved) {
-      const ringIndex = ringIndices.get(event.id) ?? 0;
-      const ringOuterRadius = outerRadius - ringIndex * (ringThickness + ringGap);
+      const assigned = rings.get(event.id) ?? { ringIndex: 0, clusterDepth: 1 };
+
+      // Depth is per overlap cluster, so an event with the band to itself keeps all of it however
+      // crowded the rest of the period is. Capped so rings never fall below a readable thickness;
+      // anything past the cap shares the innermost ring rather than disappearing.
+      const depth = Math.min(assigned.clusterDepth, maxRings);
+      const ringIndex = Math.min(assigned.ringIndex, depth - 1);
+
+      // A lone arc fills the band, giving its emoji and title the most radial room available.
+      const gap = depth > 1 ? ringGap : 0;
+      const ringThickness = (arcThickness - (depth - 1) * gap) / depth;
+
+      const ringOuterRadius = outerRadius - ringIndex * (ringThickness + gap);
       const ringInnerRadius = Math.max(ringOuterRadius - ringThickness, clockRadius);
       const arcSpan = event.endAngle - event.startAngle;
 

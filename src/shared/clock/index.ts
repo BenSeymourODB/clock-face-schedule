@@ -1,5 +1,4 @@
 export {
-  TITLE_FONT_SIZE_MAX,
   TITLE_FONT_SIZE_RATIO,
   TITLE_RADIUS_RATIO,
   TWO_LINE_MIN_SPAN_DEGREES,
@@ -21,6 +20,6 @@ export {
 export { readableTextColor, relativeLuminance } from './contrast';
 export { fitTitleToArc, type FitTitleResult } from './fit-title';
 export { rectEdgeIntersection } from './rect-edge';
-export { assignRingIndices } from './ring-layout';
+export { assignRings, type RingAssignment, type RingCandidate } from './ring-layout';
 export { describeTextArc } from './text-arc';
 export type { ArcAngles, ClockEvent, ClockEventInput, ParsedEventTitle } from './types';

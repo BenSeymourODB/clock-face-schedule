@@ -26,10 +26,20 @@ const EMOJI_MIN_SPAN_DEGREES = 10;
 /** Below this span there is not enough arc for a title. */
 const TITLE_MIN_SPAN_DEGREES = 20;
 
-/** Emoji sits this far across the band from its inner edge, so it stacks under the title. */
-const EMOJI_RADIUS_RATIO = 0.28;
-const EMOJI_FONT_SIZE_RATIO = 0.4;
-const EMOJI_FONT_SIZE_MAX = 26;
+/**
+ * Where the emoji sits across the ring, and how big it is, as fractions of the ring's height.
+ *
+ * The emoji and the title stack radially, and a two-line title is tall: at the inherited ratios
+ * they needed 1.03 of the ring between them and overlapped by a measured 8.7 units on a
+ * full-width band. Both were reduced to fit, the emoji more than the title — the title is the
+ * specific information and the emoji the category cue, so the title wins the argument.
+ *
+ * Uncapped, for the same reason the title's ceiling went: a cap in viewBox units means "never
+ * larger than this fraction of the dial", which fights every attempt to make the dial readable
+ * from further away.
+ */
+const EMOJI_RADIUS_RATIO = 0.17;
+const EMOJI_FONT_SIZE_RATIO = 0.3;
 
 /**
  * Half the gap between two curved title baselines, as a fraction of font size. `central`
@@ -39,7 +49,16 @@ const EMOJI_FONT_SIZE_MAX = 26;
 const TITLE_LINE_OFFSET_RATIO = 0.55;
 
 const ARC_FILL_OPACITY = 0.85;
-const ARC_SEPARATOR_WIDTH = 1.5;
+
+/**
+ * Separator between adjacent arcs, as a fraction of the ring's height, with an absolute floor.
+ *
+ * A fraction so it thickens with the band rather than thinning as the dial grows; a floor because
+ * on a deeply stacked ring the fraction alone would vanish and adjacent arcs would merge into one
+ * indistinguishable block.
+ */
+const ARC_SEPARATOR_RATIO = 0.03;
+const ARC_SEPARATOR_MIN = 1;
 
 export interface EventArcParams {
   event: ClockEvent;
@@ -88,7 +107,9 @@ export function eventArc({
       // A token, not a literal: this is the separator between adjacent arcs and between the
       // arcs and the face, so it has to track whichever background sits behind them.
       stroke: "var(--card)",
-      "stroke-width": ARC_SEPARATOR_WIDTH,
+      "stroke-width": roundCoord(
+        Math.max(ARC_SEPARATOR_MIN, arcHeight * ARC_SEPARATOR_RATIO)
+      ),
     })
   );
 
@@ -111,9 +132,7 @@ export function eventArc({
           y: position.y,
           "text-anchor": "middle",
           "dominant-baseline": "central",
-          "font-size": roundCoord(
-            Math.min(arcHeight * EMOJI_FONT_SIZE_RATIO, EMOJI_FONT_SIZE_MAX)
-          ),
+          "font-size": roundCoord(arcHeight * EMOJI_FONT_SIZE_RATIO),
           transform: `rotate(${roundCoord(rotation)}, ${position.x}, ${position.y})`,
         },
         [eventEmoji]
@@ -128,9 +147,16 @@ export function eventArc({
   if (showTitle && resolved.fit.lines.length > 0) {
     const { titleRadius, titleFontSize, fit } = resolved;
     const lineOffset = titleFontSize * TITLE_LINE_OFFSET_RATIO;
+
+    // The first line has to appear *above* the second on screen, and which radius that is flips
+    // with the half of the dial: further out is higher at the top and lower at the bottom. Always
+    // putting line one on the outer radius made lower-half titles read bottom-up.
+    const isBottomHalf = midAngle > 90 && midAngle < 270;
     const radii =
       fit.lines.length === 2
-        ? [titleRadius + lineOffset, titleRadius - lineOffset]
+        ? isBottomHalf
+          ? [titleRadius - lineOffset, titleRadius + lineOffset]
+          : [titleRadius + lineOffset, titleRadius - lineOffset]
         : [titleRadius];
 
     const defs = svg("defs");

@@ -43,8 +43,30 @@ describe("clockFace", () => {
     });
 
     it("weights the quarter markers more heavily than the rest", () => {
-      expect(find(element, "hour-marker-3")?.getAttribute("stroke-width")).toBe("3");
-      expect(find(element, "hour-marker-4")?.getAttribute("stroke-width")).toBe("1.5");
+      const quarter = Number(find(element, "hour-marker-3")?.getAttribute("stroke-width"));
+      const ordinary = Number(find(element, "hour-marker-4")?.getAttribute("stroke-width"));
+
+      expect(quarter).toBeGreaterThan(ordinary);
+      expect(quarter).toBeCloseTo(FACE_RADIUS * 0.028, 4);
+      expect(ordinary).toBeCloseTo(FACE_RADIUS * 0.015, 4);
+    });
+
+    it("scales stroke widths with the dial instead of fixing them in pixels", () => {
+      // Guards #14. These were absolute pixel widths while everything else scaled with the face,
+      // so enlarging the dial — the entire response to "it cannot be read from there" — made the
+      // linework proportionally thinner.
+      const widthsAt = (faceRadius: number) => {
+        const { element: dial } = clockFace({ faceRadius, cx: CX, cy: CY, time: at(10, 10) });
+        return ["clock-face-bg", "hour-marker-3", "hour-marker-4"].map((id) =>
+          Number(find(dial, id)?.getAttribute("stroke-width"))
+        );
+      };
+
+      const small = widthsAt(100);
+      const large = widthsAt(400);
+
+      expect(small.every((width) => width > 0)).toBe(true);
+      large.forEach((width, index) => expect(width / small[index]).toBeCloseTo(4, 4));
     });
 
     it("draws the face at exactly the radius it is given", () => {

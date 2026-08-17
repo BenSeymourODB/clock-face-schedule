@@ -110,17 +110,19 @@ export function filterEventsForPeriod(
 export function eventsToClockEvents(events: ClockEventInput[], periodStart: Date): ClockEvent[] {
   return events.map((event) => {
     const parsed = parseEventTitle(event.title, event.fallbackColor);
-    const angles = calculateArcAngles(
-      new Date(event.startDate),
-      new Date(event.endDate),
-      periodStart
-    );
+    const start = new Date(event.startDate);
+    const end = new Date(event.endDate);
+    const drawn = calculateArcAngles(start, end, periodStart);
+    const actual = calculateTrueArcAngles(start, end, periodStart);
+
     return {
       id: event.id,
       title: event.title,
       cleanTitle: parsed.cleanTitle,
-      startAngle: angles.startAngle,
-      endAngle: angles.endAngle,
+      startAngle: drawn.startAngle,
+      endAngle: drawn.endAngle,
+      trueStartAngle: actual.startAngle,
+      trueEndAngle: actual.endAngle,
       color: parsed.color,
       eventEmoji: parsed.eventEmoji,
       isAllDay: event.isAllDay
@@ -134,7 +136,18 @@ export function eventsToClockEvents(events: ClockEventInput[], periodStart: Date
  *
  * Events are clamped to the period; a floor of MIN_ARC_DEGREES keeps short events visible.
  */
-export function calculateArcAngles(eventStart: Date, eventEnd: Date, periodStart: Date): ArcAngles {
+/**
+ * The event's actual extent within the period, in degrees — clamped to the period but **not**
+ * widened to the minimum visible width.
+ *
+ * This is what ring stacking should read. Widened angles describe where the arc is *painted*,
+ * which is a drawing concern and not evidence that two events clash.
+ */
+export function calculateTrueArcAngles(
+  eventStart: Date,
+  eventEnd: Date,
+  periodStart: Date
+): ArcAngles {
   const periodEndMs = periodStart.getTime() + PERIOD_MINUTES * 60 * 1000;
 
   const clampedStart = Math.max(eventStart.getTime(), periodStart.getTime());
@@ -143,8 +156,14 @@ export function calculateArcAngles(eventStart: Date, eventEnd: Date, periodStart
   const startMinutes = (clampedStart - periodStart.getTime()) / (60 * 1000);
   const endMinutes = (clampedEnd - periodStart.getTime()) / (60 * 1000);
 
-  let startAngle = (startMinutes / PERIOD_MINUTES) * 360;
-  let endAngle = (endMinutes / PERIOD_MINUTES) * 360;
+  return {
+    startAngle: (startMinutes / PERIOD_MINUTES) * 360,
+    endAngle: (endMinutes / PERIOD_MINUTES) * 360,
+  };
+}
+
+export function calculateArcAngles(eventStart: Date, eventEnd: Date, periodStart: Date): ArcAngles {
+  let { startAngle, endAngle } = calculateTrueArcAngles(eventStart, eventEnd, periodStart);
 
   if (endAngle - startAngle < MIN_ARC_DEGREES) {
     endAngle = startAngle + MIN_ARC_DEGREES;

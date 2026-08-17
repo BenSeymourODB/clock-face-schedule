@@ -23,7 +23,9 @@ const RADIUS = {
   markerOuter: 0.96,
   markerInnerQuarter: 0.84,
   markerInner: 0.9,
-  minuteTickInner: 0.93,
+  // Lengthened from the inherited 0.93. A tick 3% of the radius long is hard to see and harder
+  // to count across a room, and counting them is the point of having them.
+  minuteTickInner: 0.905,
   numeral: 0.72,
   periodIndicator: 0.35,
   hourHand: 0.55,
@@ -43,19 +45,20 @@ const SCALE = {
 } as const;
 
 /**
- * Stroke widths that do **not** scale with the dial.
+ * Stroke widths, as fractions of the face radius.
  *
- * Inherited as absolute pixels from a design read at desk distance. On a projected dial these
- * are the first things to disappear — a 0.75px minute tick is a hairline at any projection size.
- * Left as-is so the port has a known-good baseline; revisit against a real display rather than
- * by guessing here.
+ * These were inherited as absolute pixels from a design read at desk distance, which inverted the
+ * one thing the dial needs: everything else scales with the face, so enlarging the dial made the
+ * linework proportionally *thinner*. Expressed as ratios they grow with it instead. The values are
+ * also roughly double their inherited equivalents — a 0.75px minute tick was a hairline at any
+ * projection size.
  */
 const STROKE = {
-  face: 1.5,
-  minuteTick: 0.75,
-  hourMarker: 1.5,
-  quarterMarker: 3,
-  secondHand: 1.5,
+  face: 0.01,
+  minuteTick: 0.01,
+  hourMarker: 0.015,
+  quarterMarker: 0.028,
+  secondHand: 0.01,
 } as const;
 
 export interface ClockFaceParams {
@@ -98,6 +101,7 @@ export function clockFace({
   showSeconds = false,
 }: ClockFaceParams): ClockFaceHandle {
   const rotateAbout = (angle: number) => `rotate(${roundCoord(angle)}, ${cx}, ${cy})`;
+  const stroke = (ratio: number) => roundCoord(faceRadius * ratio);
 
   const element = svg("g", { "data-testid": "clock-face" });
 
@@ -109,7 +113,7 @@ export function clockFace({
       r: roundCoord(faceRadius),
       fill: "var(--card)",
       stroke: "var(--border)",
-      "stroke-width": STROKE.face,
+      "stroke-width": stroke(STROKE.face),
     })
   );
 
@@ -125,7 +129,7 @@ export function clockFace({
         x2: inner.x,
         y2: inner.y,
         stroke: "var(--border)",
-        "stroke-width": STROKE.minuteTick,
+        "stroke-width": stroke(STROKE.minuteTick),
       })
     );
   }
@@ -150,7 +154,7 @@ export function clockFace({
         x2: inner.x,
         y2: inner.y,
         stroke: "var(--card-foreground)",
-        "stroke-width": isQuarter ? STROKE.quarterMarker : STROKE.hourMarker,
+        "stroke-width": stroke(isQuarter ? STROKE.quarterMarker : STROKE.hourMarker),
         "stroke-linecap": "round",
       }),
       svg(
@@ -222,7 +226,7 @@ export function clockFace({
         x2: cx,
         y2: roundCoord(cy - faceRadius * RADIUS.secondHand),
         stroke: "var(--destructive)",
-        "stroke-width": STROKE.secondHand,
+        "stroke-width": stroke(STROKE.secondHand),
         "stroke-linecap": "round",
         transform: rotateAbout(angles.second),
       })

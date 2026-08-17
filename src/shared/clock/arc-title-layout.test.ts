@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import {
-  TITLE_FONT_SIZE_MAX,
   TITLE_FONT_SIZE_RATIO,
   TITLE_RADIUS_RATIO,
   TWO_LINE_MIN_SPAN_DEGREES,
@@ -53,17 +52,19 @@ describe('computeArcTitleLayout', () => {
       const arcHeight = baseInput.outerRadius - baseInput.innerRadius;
       const { titleFontSize } = computeArcTitleLayout({ ...baseInput, arcSpan: 60 });
       expect(titleFontSize).toBeCloseTo(arcHeight * TITLE_FONT_SIZE_RATIO, 4);
-      expect(titleFontSize).toBeLessThanOrEqual(TITLE_FONT_SIZE_MAX);
     });
 
-    it('caps at TITLE_FONT_SIZE_MAX on a very thick arc', () => {
+    it('keeps scaling on a very thick arc rather than hitting a ceiling', () => {
+      // There used to be a cap of 18 here. It meant widening the band — the entire response to
+      // "it cannot be read from there" — bought a thicker arc carrying the same small text.
       const result = computeArcTitleLayout({
         cleanTitle: 'x',
         innerRadius: 100,
-        outerRadius: 600, // ratio would give 150 uncapped
+        outerRadius: 600,
         arcSpan: 60
       });
-      expect(result.titleFontSize).toBe(TITLE_FONT_SIZE_MAX);
+
+      expect(result.titleFontSize).toBeCloseTo(500 * TITLE_FONT_SIZE_RATIO, 4);
     });
   });
 

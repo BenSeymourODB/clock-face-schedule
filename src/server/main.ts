@@ -10,13 +10,20 @@
 export { getEvents } from "./calendar";
 
 /**
- * `?check=1` adds the bring-up diagnostics — colour emoji, the bridge round trip, and a calendar
- * read. Off by default because the display itself must carry no chrome, but a smart board still
- * has to be checked on the device rather than on a workstation.
+ * Two bring-up switches, both off by default because the display itself must carry no chrome.
+ *
+ * `?check=1` adds the diagnostics — colour emoji, the bridge round trip, and a calendar read.
+ * `?demo=1` draws a fixture schedule instead of the calendar, so arc legibility can be judged at
+ * distance without waiting for the viewer's own day to contain a useful overlap. It labels itself
+ * on screen so a display left in that mode cannot be mistaken for a real one.
+ *
+ * Both need to be checkable on the device rather than on a workstation, which is why they are URL
+ * parameters and not a build flag.
  */
 export function doGet(event?: GoogleAppsScript.Events.DoGet): GoogleAppsScript.HTML.HtmlOutput {
   const template = HtmlService.createTemplateFromFile("Index");
   template["showDiagnostics"] = event?.parameter?.["check"] === "1";
+  template["showDemo"] = event?.parameter?.["demo"] === "1";
 
   return template
     .evaluate()

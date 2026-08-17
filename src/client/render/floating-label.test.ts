@@ -6,8 +6,15 @@ const CY = 300;
 const ANCHOR_RADIUS = 292;
 const LABEL_RADIUS = 320.8;
 
-/** A 600px dial: face plus arc band spans y 8 → 592, so the clamp allowance is 58.4. */
-const CLOCK_BOX = { top: 8, bottom: 592, height: 584 };
+/** A 600px dial: face plus arc band spans 8 → 592 on both axes, so the allowance is 58.4. */
+const CLOCK_BOX = {
+  top: 8,
+  bottom: 592,
+  height: 584,
+  left: 8,
+  right: 592,
+  width: 584,
+};
 const UPPER_LIMIT = 8 - 58.4;
 const LOWER_LIMIT = 592 + 58.4;
 
@@ -128,6 +135,33 @@ describe("floatingLabel", () => {
       const group = render({ anchorAngle: 90 });
 
       expect(numbers(part(group, "text"), "y")[0]).toBeCloseTo(CY, 4);
+    });
+  });
+
+  describe("horizontal clamp", () => {
+    it.each([
+      ["nine o'clock", 270],
+      ["three o'clock", 90],
+    ])("keeps a wide card at %s from running off the side", (_label, anchorAngle) => {
+      // The original clamped only y, on the reasoning that preserving x keeps the label attached
+      // to its arc. But card width grows with the title without bound, so a long one at 9 or 3
+      // o'clock was simply clipped mid-word.
+      const group = render({ anchorAngle, text: "A Rather Long Committee Meeting Title" });
+      const [x, width] = numbers(part(group, "rect"), "x", "width");
+      const allowance = CLOCK_BOX.width * 0.1;
+
+      expect(x).toBeGreaterThanOrEqual(CLOCK_BOX.left - allowance - 1e-6);
+      expect(x + width).toBeLessThanOrEqual(CLOCK_BOX.right + allowance + 1e-6);
+    });
+
+    it("still slides vertically rather than horizontally when it fits", () => {
+      // x is preserved whenever the card has room, so labels stay pointing outward radially.
+      const group = render({ anchorAngle: 45, text: "Short" });
+
+      expect(numbers(part(group, "text"), "x")[0]).toBeCloseTo(
+        CX + LABEL_RADIUS * Math.sin((45 * Math.PI) / 180),
+        3
+      );
     });
   });
 });

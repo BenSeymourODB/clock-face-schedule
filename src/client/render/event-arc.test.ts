@@ -8,12 +8,19 @@ const INNER = 244;
 const OUTER = 292;
 
 function makeEvent(overrides: Partial<ClockEvent> = {}): ClockEvent {
+  const startAngle = overrides.startAngle ?? 0;
+  const endAngle = overrides.endAngle ?? 60;
+
   return {
     id: "e1",
     title: "Team Meeting",
     cleanTitle: "Team Meeting",
-    startAngle: 0,
-    endAngle: 60,
+    startAngle,
+    endAngle,
+    // The arc draws from the widened angles; the true ones only matter to ring stacking, so here
+    // they simply mirror them.
+    trueStartAngle: startAngle,
+    trueEndAngle: endAngle,
     color: "#22c55e",
     isAllDay: false,
     ...overrides,
@@ -198,6 +205,78 @@ describe("eventArc", () => {
       expect(
         group.querySelector('[data-testid="event-title-e1"] text')?.getAttribute("fill")
       ).toBe(expected);
+    });
+
+    it.each([
+      ["top half", 30, 90, "outer"],
+      ["bottom half", 150, 210, "inner"],
+    ])("puts the first line above the second on the %s", (_label, startAngle, endAngle, first) => {
+      // Further from the centre is higher on screen at the top of the dial and lower at the
+      // bottom, so a fixed outer-first order made lower-half titles read bottom-up.
+      const base = computeArcTitleLayout({
+        cleanTitle: "Reading and Snacks",
+        arcSpan: endAngle - startAngle,
+        innerRadius: INNER,
+        outerRadius: OUTER,
+      });
+      const group = eventArc({
+        event: makeEvent({ startAngle, endAngle }),
+        cx: CX,
+        cy: CY,
+        innerRadius: INNER,
+        outerRadius: OUTER,
+        layout: { ...base, fit: { lines: ["Reading and", "Snacks"], didOverflow: false } },
+      });
+
+      const radii = [...group.querySelectorAll("defs path")].map((node) =>
+        arcRadius(node.getAttribute("d") ?? "")
+      );
+
+      expect(radii[0]).toBe(first === "outer" ? Math.max(...radii) : Math.min(...radii));
+    });
+
+    it("keeps the emoji clear of a two-line title", () => {
+      // These stack radially, and at the inherited ratios they needed 1.03 of the ring between
+      // them — a measured 8.7-unit collision on a full-width band, invisible until the dial was
+      // scaled up for distance.
+      const base = computeArcTitleLayout({
+        cleanTitle: "Reading and Snacks",
+        arcSpan: 60,
+        innerRadius: INNER,
+        outerRadius: OUTER,
+      });
+      const twoLines = {
+        ...base,
+        fit: { lines: ["Reading and", "Snacks"], didOverflow: false },
+      };
+
+      const group = eventArc({
+        event: makeEvent({ eventEmoji: "🎂" }),
+        cx: CX,
+        cy: CY,
+        innerRadius: INNER,
+        outerRadius: OUTER,
+        layout: twoLines,
+      });
+
+      const emoji = group.querySelector('[data-testid="event-emoji-e1"]')!;
+      const emojiRadius = Math.hypot(
+        Number(emoji.getAttribute("x")) - CX,
+        Number(emoji.getAttribute("y")) - CY
+      );
+      const emojiTop = emojiRadius + Number(emoji.getAttribute("font-size")) / 2;
+
+      const baselines = [...group.querySelectorAll("defs path")].map((node) =>
+        arcRadius(node.getAttribute("d") ?? "")
+      );
+      const titleBottom = Math.min(...baselines) - twoLines.titleFontSize / 2;
+
+      expect(emojiTop).toBeLessThan(titleBottom);
+      // And both stay inside the ring they belong to.
+      expect(emojiRadius - Number(emoji.getAttribute("font-size")) / 2).toBeGreaterThanOrEqual(
+        INNER
+      );
+      expect(Math.max(...baselines) + twoLines.titleFontSize / 2).toBeLessThanOrEqual(OUTER);
     });
 
     it("uses the layout it is given rather than recomputing one", () => {
