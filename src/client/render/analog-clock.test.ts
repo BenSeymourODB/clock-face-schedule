@@ -78,6 +78,19 @@ describe("analogClock", () => {
       expect(arcs(element)).toHaveLength(0);
       expect(element.querySelector('[data-testid="clock-face"]')).not.toBeNull();
     });
+
+    it("leaves only a hairline between the face and the arc band", () => {
+      // Guards #19. The band's width used to be subtracted twice — once here and again inside
+      // clockFace — leaving an empty ring as wide as the band itself, about 17% of the diameter.
+      const { element } = build([]);
+      const faceRadius = Number(
+        element.querySelector('[data-testid="clock-face-bg"]')?.getAttribute("r")
+      );
+      const gap = CLOCK_RADIUS - faceRadius;
+
+      expect(gap).toBeCloseTo(ARC_THICKNESS * 0.15, 4);
+      expect(gap).toBeLessThan(ARC_THICKNESS / 2);
+    });
   });
 
   describe("period filtering", () => {

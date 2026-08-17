@@ -3,12 +3,10 @@ import { clockFace } from "./clock-face";
 
 const CX = 300;
 const CY = 300;
-const RADIUS = 240;
-/** RADIUS × FACE_RADIUS_RATIO. */
 const FACE_RADIUS = 192;
 
 function build(time: Date, showSeconds = false) {
-  return clockFace({ radius: RADIUS, cx: CX, cy: CY, time, showSeconds });
+  return clockFace({ faceRadius: FACE_RADIUS, cx: CX, cy: CY, time, showSeconds });
 }
 
 function at(hours: number, minutes = 0, seconds = 0): Date {
@@ -49,7 +47,9 @@ describe("clockFace", () => {
       expect(find(element, "hour-marker-4")?.getAttribute("stroke-width")).toBe("1.5");
     });
 
-    it("scales the face with the radius it is given", () => {
+    it("draws the face at exactly the radius it is given", () => {
+      // Guards #19: this used to scale the radius down by 0.8 to "leave room for event arcs",
+      // room the caller had already subtracted, wasting a ring as wide as the arc band.
       expect(find(element, "clock-face-bg")?.getAttribute("r")).toBe(String(FACE_RADIUS));
       // Literal, not `FACE_RADIUS * 0.035` — that evaluates to 6.720000000000001 in raw
       // floating point. roundCoord exists precisely so rendered attributes are exact.

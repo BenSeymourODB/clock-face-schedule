@@ -35,6 +35,15 @@ const RING_GAP_MIN = 2;
 /** Floating labels sit this far beyond the band, as a fraction of it. */
 const LABEL_RADIUS_RATIO = 0.6;
 
+/**
+ * Clearance between the face and the inner edge of the arc band, as a fraction of the band.
+ *
+ * Deliberate and small, so the boundary reads crisply. It replaces the ~49px ring that used to
+ * appear because both this function and `clockFace` subtracted the band's width (#19). The final
+ * split of the radial budget between face, gap, and band is #20's to settle.
+ */
+const FACE_GAP_RATIO = 0.15;
+
 export interface AnalogClockParams {
   events: ClockEventInput[];
   size?: number;
@@ -65,7 +74,9 @@ export function analogClock({
   const cx = size / 2;
   const cy = size / 2;
   const outerRadius = size / 2 - EDGE_MARGIN;
+  /** Inner edge of the arc band — the floor for the innermost ring. */
   const clockRadius = outerRadius - arcThickness;
+  const faceRadius = clockRadius - arcThickness * FACE_GAP_RATIO;
 
   const labelRadius = outerRadius + arcThickness * LABEL_RADIUS_RATIO;
   const clockBox = { top: cy - outerRadius, bottom: cy + outerRadius, height: outerRadius * 2 };
@@ -82,7 +93,7 @@ export function analogClock({
 
   const arcsLayer = svg("g", { "data-testid": "event-arcs-layer" });
   const labelsLayer = svg("g", { "data-testid": "floating-labels-layer" });
-  const face = clockFace({ radius: clockRadius, cx, cy, time, showSeconds });
+  const face = clockFace({ faceRadius, cx, cy, time, showSeconds });
 
   // Face last, so the hands paint over any label bleeding toward the centre.
   element.append(arcsLayer, labelsLayer, face.element);

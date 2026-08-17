@@ -18,9 +18,6 @@ const MINUTE_TICKS = Array.from({ length: 60 }, (_, index) => index).filter(
   (minute) => minute % 5 !== 0
 );
 
-/** The face occupies this fraction of the radius it is given; the rest stays clear. */
-const FACE_RADIUS_RATIO = 0.8;
-
 /** Radii, as fractions of the face radius. */
 const RADIUS = {
   markerOuter: 0.96,
@@ -62,8 +59,14 @@ const STROKE = {
 } as const;
 
 export interface ClockFaceParams {
-  /** Radius available to the face. The event-arc band sits outside it. */
-  radius: number;
+  /**
+   * Radius the face is drawn at — used as given, not scaled down.
+   *
+   * This used to be a `radius` that was silently multiplied by 0.8 to "leave room for event
+   * arcs", room the caller had already subtracted. The result was an empty ring as wide as the
+   * arc band itself (#19). Naming it for what it is removes the invitation to reserve twice.
+   */
+  faceRadius: number;
   cx: number;
   cy: number;
   time: Date;
@@ -88,13 +91,12 @@ function handAngles(time: Date) {
 }
 
 export function clockFace({
-  radius,
+  faceRadius,
   cx,
   cy,
   time,
   showSeconds = false,
 }: ClockFaceParams): ClockFaceHandle {
-  const faceRadius = radius * FACE_RADIUS_RATIO;
   const rotateAbout = (angle: number) => `rotate(${roundCoord(angle)}, ${cx}, ${cy})`;
 
   const element = svg("g", { "data-testid": "clock-face" });
