@@ -1,18 +1,25 @@
 /**
- * Scaffold check page (#1).
+ * The display.
  *
- * Confirms the things everything later depends on: the client bundle reaches the browser, the
- * google.script.run bridge round-trips, server and browser agree on time, and the display has a
- * colour emoji font. Replaced by the real page shell in #8, which swaps the sample events below
- * for a live calendar.
+ * Mounts the dial, ticks it, and polls the accessing user's calendar. The diagnostic panels from
+ * the scaffold survive behind `?check=1` — a smart board still has to be checked for a colour
+ * emoji font and a working bridge, and that check has to happen on the device.
  */
 import { type ClockEventInput, getPeriodBounds, getPeriodStart } from "../shared/clock";
 import { analogClock } from "./render/analog-clock";
+import { type ScheduleStatus, describeStatus, nextStatus } from "./schedule-status";
 
-interface Pong {
-  serverTime: string;
-  timeZone: string;
-}
+const TICK_INTERVAL_MS = 1_000;
+const POLL_INTERVAL_MS = 5 * 60 * 1_000;
+
+/**
+ * Events are fetched for 24 hours from the current period's start, not the 12 the dial shows.
+ *
+ * The dial filters to its own period, so covering the next one too means a rollover at noon or
+ * midnight already has its data and needs no refetch. Without it the dial would sit empty for up
+ * to a poll interval at exactly the moment the day changes over.
+ */
+const WINDOW_HOURS = 24;
 
 /** google.script.run is callback-based; everything downstream wants to await. */
 function callServer<T>(name: string, ...args: unknown[]): Promise<T> {
@@ -32,12 +39,61 @@ function callServer<T>(name: string, ...args: unknown[]): Promise<T> {
   });
 }
 
-function browserTimeZone(): string {
-  try {
-    return Intl.DateTimeFormat().resolvedOptions().timeZone;
-  } catch {
-    return "unknown";
+function fetchWindow(): Promise<ClockEventInput[]> {
+  const periodStart = getPeriodStart(new Date());
+  const timeMax = new Date(periodStart.getTime() + WINDOW_HOURS * 60 * 60 * 1_000);
+
+  return callServer<ClockEventInput[]>(
+    "getEvents",
+    periodStart.toISOString(),
+    timeMax.toISOString()
+  );
+}
+
+function startDisplay(): void {
+  const mount = document.querySelector("#dial");
+  const statusLine = document.querySelector("#status");
+  if (!mount) return;
+
+  const clock = analogClock({ events: [], showSeconds: true, time: new Date() });
+  mount.append(clock.element);
+
+  // Hands before data. A google.script.run round trip runs 0.5–2s and the server cache does not
+  // help a cold start, so the wall shows a working clock rather than an empty panel.
+  window.setInterval(() => clock.setTime(new Date()), TICK_INTERVAL_MS);
+
+  let status: ScheduleStatus = { kind: "loading" };
+
+  function showStatus(): void {
+    if (!statusLine) return;
+    const text = describeStatus(status);
+    statusLine.textContent = text ?? "";
+    statusLine.toggleAttribute("hidden", text === null);
   }
+
+  async function refresh(): Promise<void> {
+    try {
+      clock.setEvents(await fetchWindow());
+      status = nextStatus(status, { ok: true, at: new Date() });
+    } catch (error) {
+      // Deliberately does not touch the dial: whatever it is showing stays up, marked old.
+      status = nextStatus(status, { ok: false, reason: (error as Error).message });
+    }
+    showStatus();
+  }
+
+  showStatus();
+  void refresh();
+  window.setInterval(() => void refresh(), POLL_INTERVAL_MS);
+}
+
+// ---------------------------------------------------------------------------
+// Diagnostics — rendered only when doGet was called with ?check=1.
+// ---------------------------------------------------------------------------
+
+interface Pong {
+  serverTime: string;
+  timeZone: string;
 }
 
 type RowState = "ok" | "note" | "fail";
@@ -53,11 +109,16 @@ function addRow(list: Element, label: string, value: string, state: RowState): v
   list.append(term, description);
 }
 
-async function renderDiagnostics(): Promise<void> {
-  const list = document.getElementById("bridge-results");
-  if (!list) return;
-  list.textContent = "";
+function browserTimeZone(): string {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone;
+  } catch {
+    return "unknown";
+  }
+}
 
+async function renderDiagnostics(list: Element): Promise<void> {
+  list.textContent = "";
   const localZone = browserTimeZone();
 
   try {
@@ -78,17 +139,8 @@ async function renderDiagnostics(): Promise<void> {
   }
 
   addRow(list, "browser time", new Date().toString(), "ok");
-  await reportCalendar(list);
-}
 
-/**
- * Reads the accessing user's calendar for the current period. The dial still draws sample events
- * — wiring it to this, with polling and failure states, is #8 — but this proves the adapter works
- * on the deployed app, which is the one thing about it no spec can cover.
- */
-async function reportCalendar(list: Element): Promise<void> {
   const { periodStart, periodEnd } = getPeriodBounds(new Date());
-
   try {
     const events = await callServer<ClockEventInput[]>(
       "getEvents",
@@ -102,44 +154,7 @@ async function reportCalendar(list: Element): Promise<void> {
   }
 }
 
-const TICK_INTERVAL_MS = 1000;
+startDisplay();
 
-/**
- * Sample events across whichever twelve hours the page is opened in, so the dial has something
- * to draw before #3 supplies a calendar.
- *
- * The first three deliberately overlap, two of them three deep, because concentric ring stacking
- * is the part hardest to judge from a specification.
- */
-function sampleEvents(periodStart: Date): ClockEventInput[] {
-  const at = (hours: number, minutes: number) =>
-    new Date(periodStart.getTime() + (hours * 60 + minutes) * 60_000).toISOString();
-  const fallbackColor = "#3b82f6";
-
-  return [
-    { id: "a", title: "🟢 🎮 Game Time", startDate: at(0, 30), endDate: at(2, 0), isAllDay: false, fallbackColor },
-    { id: "b", title: "🔴 Deadline", startDate: at(1, 0), endDate: at(3, 0), isAllDay: false, fallbackColor },
-    { id: "c", title: "🟣 Study", startDate: at(1, 30), endDate: at(2, 30), isAllDay: false, fallbackColor },
-    { id: "d", title: "🟡 🍽️ Lunch", startDate: at(4, 30), endDate: at(6, 30), isAllDay: false, fallbackColor },
-    { id: "e", title: "📚 Reading", startDate: at(8, 0), endDate: at(8, 10), isAllDay: false, fallbackColor },
-    { id: "f", title: "🔵 Parent Teacher Conference Planning Committee", startDate: at(9, 30), endDate: at(10, 40), isAllDay: false, fallbackColor },
-  ];
-}
-
-function mountDial(): void {
-  const mount = document.querySelector("#clock-mount");
-  if (!mount) return;
-
-  const now = new Date();
-  const clock = analogClock({
-    events: sampleEvents(getPeriodStart(now)),
-    showSeconds: true,
-    time: now,
-  });
-
-  mount.append(clock.element);
-  window.setInterval(() => clock.setTime(new Date()), TICK_INTERVAL_MS);
-}
-
-mountDial();
-void renderDiagnostics();
+const diagnostics = document.querySelector("#bridge-results");
+if (diagnostics) void renderDiagnostics(diagnostics);

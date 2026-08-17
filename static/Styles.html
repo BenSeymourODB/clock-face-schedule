@@ -5,20 +5,17 @@
    * colour reference — see ADR 0007. The vocabulary reads oddly out of that context:
    * `--destructive` is the second hand, not an error state.
    *
-   * Values here are a first pass. #4 tunes them against the real dial, at projector contrast.
-   */
-  /*
-   * Contrast ratios below are against --card, the dial's own background, and are the reason
-   * these particular values were chosen. WCAG asks 4.5:1 for body text and 3:1 for graphical
-   * objects; a display read from the back of a room has no margin to give away, so nothing
-   * here sits near the floor.
+   * Contrast ratios are against --card, the dial's own background, and are why these particular
+   * values were chosen. WCAG asks 4.5:1 for body text and 3:1 for graphical objects; a display
+   * read from the back of a room has no margin to give away, so nothing here sits near the floor.
    */
   :root {
     --card: #16181d;
     --card-foreground: #f2f4f8; /* 17:1 — numerals, hour markers, hands */
     --border: #6b7280; /*  3.7:1 — face outline, minute ticks */
-    --muted-foreground: #9aa3b2; /*  7:1   — AM/PM */
+    --muted-foreground: #9aa3b2; /*  7:1   — AM/PM, status line */
     --destructive: #ef4444; /*  4.7:1 — second hand */
+    --page: #0c0e12;
   }
 
   * {
@@ -27,54 +24,64 @@
 
   body {
     margin: 0;
-    padding: 2rem;
-    background: #0c0e12;
+    background: var(--page);
     color: var(--card-foreground);
     font-family: system-ui, -apple-system, sans-serif;
-    /* Read from across a room, not from a desk. */
-    font-size: 1.25rem;
-    line-height: 1.6;
+    line-height: 1.5;
   }
 
-  main {
-    max-width: 48rem;
-    margin: 0 auto;
+  /* The display carries nothing but the dial and, when something is wrong, one line of text. */
+  #display {
+    min-height: 100vh;
+    display: grid;
+    place-content: center;
+    justify-items: center;
+    gap: 1.5rem;
+    padding: 2vmin;
   }
 
-  h1 {
+  /*
+   * Sized from the smaller viewport axis so the dial fills a display of any shape, with a little
+   * held back for floating labels, which paint outside the SVG box by design.
+   */
+  #dial {
+    width: min(88vmin, 100%);
+  }
+
+  #dial svg {
+    display: block;
+    width: 100%;
+    height: auto;
+    overflow: visible;
+  }
+
+  #status {
     margin: 0;
-    font-size: 2.5rem;
-  }
-
-  h2 {
-    font-size: 1.5rem;
-    margin-bottom: 0.5rem;
-  }
-
-  .lede {
+    text-align: center;
+    /* Read from a distance, but never competing with the dial. */
+    font-size: clamp(1rem, 2.2vmin, 1.5rem);
     color: var(--muted-foreground);
-    margin-top: 0.25rem;
   }
 
-  section {
-    margin-top: 2.5rem;
+  #status[hidden] {
+    display: none;
+  }
+
+  /* ----- Bring-up diagnostics, only present with ?check=1 ----- */
+
+  .panel {
+    max-width: 48rem;
+    margin: 2rem auto;
     padding: 1.5rem;
     background: var(--card);
     border: 1px solid var(--border);
     border-radius: 0.5rem;
+    font-size: 1.25rem;
   }
 
-  #clock-mount {
-    max-width: 34rem;
-    margin: 2rem auto;
-  }
-
-  #clock-mount svg {
-    display: block;
-    width: 100%;
-    height: auto;
-    /* Floating labels sit outside the viewBox by design. */
-    overflow: visible;
+  .panel h2 {
+    font-size: 1.5rem;
+    margin: 0 0 0.5rem;
   }
 
   .emoji {
@@ -92,7 +99,7 @@
     font-family: ui-monospace, monospace;
     font-size: 0.9em;
     padding: 0.1em 0.35em;
-    background: #0c0e12;
+    background: var(--page);
     border: 1px solid var(--border);
     border-radius: 0.25rem;
   }

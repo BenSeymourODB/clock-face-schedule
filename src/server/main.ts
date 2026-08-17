@@ -9,8 +9,16 @@
 
 export { getEvents } from "./calendar";
 
-export function doGet(): GoogleAppsScript.HTML.HtmlOutput {
-  return HtmlService.createTemplateFromFile("Index")
+/**
+ * `?check=1` adds the bring-up diagnostics — colour emoji, the bridge round trip, and a calendar
+ * read. Off by default because the display itself must carry no chrome, but a smart board still
+ * has to be checked on the device rather than on a workstation.
+ */
+export function doGet(event?: GoogleAppsScript.Events.DoGet): GoogleAppsScript.HTML.HtmlOutput {
+  const template = HtmlService.createTemplateFromFile("Index");
+  template["showDiagnostics"] = event?.parameter?.["check"] === "1";
+
+  return template
     .evaluate()
     .setTitle("Clock face schedule")
     .addMetaTag("viewport", "width=device-width, initial-scale=1");

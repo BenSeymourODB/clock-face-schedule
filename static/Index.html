@@ -6,47 +6,38 @@
     <?!= include('Styles'); ?>
   </head>
   <body>
-    <main>
-      <h1>clock-face-schedule</h1>
-      <p class="lede">Scaffold check — issue #1. No dial yet.</p>
-
-      <section>
-        <h2>Clock face</h2>
-        <div id="clock-mount"></div>
-        <p class="note">
-          Sample events, not a real calendar — the hands are live. The first three overlap, two
-          of them three deep, so the concentric ring stacking is visible. Judge legibility from
-          where the display will actually be watched, not from arm's length.
-        </p>
-      </section>
-
-      <section>
-        <h2>Colour emoji</h2>
-        <p class="emoji">🔴 🟠 🟡 🟢 🔵 🟣 ⚫ ⚪ 🟤</p>
-        <p class="emoji">🎮 🏋️ 🍽️ 📚 🎂 ⚽</p>
-        <p class="note">
-          Every glyph above must render in colour. Monochrome outlines or empty boxes mean this
-          device has no colour emoji font — which would silently break the dial's entire colour
-          scheme, with nothing in the code to indicate why. Check this on the display that will
-          actually run the clock, not on a workstation.
-        </p>
-      </section>
-
-      <section>
-        <h2>Server bridge</h2>
-        <dl id="bridge-results">
-          <dt>calling…</dt>
-          <dd>no response yet</dd>
-        </dl>
-        <p class="note">
-          A round trip through <code>google.script.run</code>. The server timestamp is in the
-          offset-bearing ISO-8601 format every event will use, so this also confirms Apps Script's
-          date formatter before the calendar adapter depends on it. Script and browser timezones
-          differing is not a fault — the browser is authoritative — but it means the manifest
-          <code>timeZone</code> is wrong for wherever this display lives.
-        </p>
-      </section>
+    <main id="display">
+      <div id="dial"></div>
+      <p id="status" role="status" hidden></p>
     </main>
+
+    <? if (showDiagnostics) { ?>
+    <section class="panel">
+      <h2>Colour emoji</h2>
+      <p class="emoji">🔴 🟠 🟡 🟢 🔵 🟣 ⚫ ⚪ 🟤</p>
+      <p class="emoji">🎮 🏋️ 🍽️ 📚 🎂 ⚽</p>
+      <p class="note">
+        Every glyph above must render in colour. Monochrome outlines or empty boxes mean this
+        device has no colour emoji font — which would silently break the dial's entire colour
+        scheme, with nothing in the code to indicate why. Check this on the display that will
+        actually run the clock, not on a workstation.
+      </p>
+    </section>
+
+    <section class="panel">
+      <h2>Server bridge</h2>
+      <dl id="bridge-results">
+        <dt>calling…</dt>
+        <dd>no response yet</dd>
+      </dl>
+      <p class="note">
+        A round trip through <code>google.script.run</code>. Script and browser timezones
+        differing is not a fault — the browser is authoritative — but it means the manifest
+        <code>timeZone</code> is wrong for wherever this display lives.
+      </p>
+    </section>
+    <? } ?>
+
     <?!= include('Client'); ?>
   </body>
 </html>

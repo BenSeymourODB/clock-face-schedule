@@ -61,10 +61,23 @@ and a `google.script.run` bridge in place of ordinary HTTP. See [docs/DESIGN.md]
 
 ## Status
 
-Planning. Nothing is implemented yet.
+**MVP complete.** Deployed as an Apps Script web app, it draws the current 12-hour period from the
+viewer's own default calendar: coloured arcs with emoji and curved titles, concentric stacking for
+overlapping events, floating labels for titles too long for their arc, live hands, and a five-minute
+poll that keeps the last good schedule on screen — marked with when it was last fresh — rather than
+blanking when a fetch fails.
+
+Adding `?check=1` to the URL shows bring-up diagnostics: colour emoji rendering, the
+`google.script.run` round trip, and a calendar read. Off by default, because the display itself
+carries no chrome.
+
+What remains is mostly **legibility tuning for the intended viewing distance** — the ported
+proportions were designed for a kitchen wall at a few feet, not a classroom projector. See the open
+issues.
 
 - [docs/DESIGN.md](docs/DESIGN.md) — architecture and ADRs
-- [docs/plans/2026-08-15-mvp-clock-face.md](docs/plans/2026-08-15-mvp-clock-face.md) — MVP work breakdown
+- [docs/plans/2026-08-15-mvp-clock-face.md](docs/plans/2026-08-15-mvp-clock-face.md) — the MVP work
+  breakdown, kept as written for the record
 
 ## Local development
 

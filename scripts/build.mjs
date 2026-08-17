@@ -99,6 +99,12 @@ async function writePreview() {
   for (const [tag, name] of parts) {
     page = page.replace(tag, await readFile(`${OUT}/${name}.html`, "utf8"));
   }
+
+  // Drop the remaining scriptlet tags but keep what they guard, so the preview shows the
+  // diagnostics too. Nothing here evaluates them, and left in place they would render as
+  // literal `<? if (…) { ?>` text on the page.
+  page = page.replace(/<\?[\s\S]*?\?>/g, "");
+
   await writeFile(`${OUT}/preview.html`, page, "utf8");
 }
 
