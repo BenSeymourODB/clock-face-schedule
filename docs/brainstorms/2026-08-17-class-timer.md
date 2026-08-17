@@ -5,7 +5,8 @@
 ## What it is
 
 A control that lets the teacher set a countdown. While it runs, a circular progress pie is drawn
-**on the clock face, under the hands**. Two display modes, chosen when the timer is set:
+**on the clock face, beneath the hands** — see the layering section below, which measures why the
+hands cannot go underneath it. Two display modes, chosen when the timer is set:
 
 - **Loading** — the coloured sector starts empty and grows to full as the timer completes.
 - **Vanishing** — it starts full and shrinks to nothing.
@@ -226,12 +227,68 @@ Consequences worth building around:
   to show where growth ends. One convention, used twice, rather than two similar-but-different marks
   on one screen.
 
+### Layering: keep the hands on top, and outline them
+
+Drawing the timer *over* the hands would stop the rings being chopped, but it costs far more than it
+saves. Against a timer radius of ~130 on a 600-unit dial:
+
+| Hand | Length | Covered | Tip left |
+| --- | --- | --- | --- |
+| Hour | 112.4 | **100%** | **0.0 — entirely hidden** |
+| Minute | 153.3 | 85% | 23.3 |
+| Second | 163.5 | 80% | 33.5 |
+
+**The hour hand disappears completely.** It is shorter than the timer is wide, so there is no
+arrangement in which it survives underneath. That is the answer to "what time is it" gone for the
+duration of every timer, on a display whose entire purpose is time-tracking — the same cost #21
+judged unacceptable when floating labels covered the face.
+
+So: **hands on top, with a contrasting outline** — a `var(--card)` halo so each hand reads against
+whatever band it crosses. That is the same device already proposed for the numerals, which argues
+for adopting it once and using it in both places. The second hand must be on top regardless, since
+it is now the drain edge.
+
+Worth noting the chopping problem may also have been overstated. The hands are 9.2 and 5.7 units
+wide against bands of 13–26; a ring crossed by a 9-unit line is still visibly a ring. **Render it
+before engineering around it.**
+
+### A digital readout, and what it is really for
+
+Showing the remaining time as text over the timer is more accessible, and not only as redundancy. A
+countdown is already the *result* of the arithmetic, so it asks nothing of a reader who finds clock
+arithmetic hard — there is no tension with the README's premise here. It also neutralises the
+equal-area misreading above, since a number cannot be misjudged by area.
+
+**The larger payoff is that it rescues long durations.** The band encoding tops out near ten rings;
+a 45-minute timer cannot be banded legibly at any subdivision. A coarse ring plus a readout can.
+That reframes the readout from an addition to **the mechanism that makes the 1-hour cap viable** —
+and it may be the better answer to the ceiling than scaling the unit per band.
+
+To resolve:
+
+- **It wants a hub.** A small central area carrying no band gives the text one known background;
+  without it the ground under the readout changes when the innermost disc drains, which revives the
+  moving-background contrast problem in the middle of the dial. A hub also gives the hands' inner
+  portions and the centre dot somewhere to live. The sketch's own drawing appears to show a hole in
+  the middle, so this may already be the intent.
+- **The period indicator is in the way.** It sits 71.5 below centre, well inside the timer radius.
+  Move it, suppress it while a timer runs, or size the readout to clear it — but do not discover
+  the collision after building.
+- **Toggleable is reasonable**, with ADR 0008's caveat that a toggle is configuration rather than a
+  live control. It matters less here than for the scale modes: a timer is transient and whoever set
+  it is standing at the board. A cheaper alternative to a toggle is showing the readout **only in
+  the final minute**, when precision matters most and the rings have run out anyway.
+
 ## What would settle it
 
-Two mock-ups, looked at from across a room:
+Mock-ups, looked at from across a room:
 
 1. The sector starting at twelve versus starting at the minute hand — the question above.
 2. A numeral sitting on the sector's edge, at each of the three contrast directions.
+3. Eight concentric bands crossed by the hour and minute hands, with and without hand outlines —
+   the cheapest way to find out whether the chopping is a real problem or an imagined one.
+4. A banded timer with and without the digital readout, to judge the user's own worry that the
+   combination is overwhelming rather than multi-modal.
 
 Neither is answerable from a specification, and both are cheap to render statically against the
 fixture schedule.
