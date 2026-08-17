@@ -1,6 +1,7 @@
 # Brainstorm: an agenda panel beside the dial
 
-**Status:** feature sketch, specified but not costed. Written to be picked up cold.
+**Status:** decomposed into #36 and its sub-issues. This document remains the reasoning; the issues
+carry the work and record which parts are ready to build and which still need decisions.
 
 ## What it is
 

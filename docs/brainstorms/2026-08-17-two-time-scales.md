@@ -1,6 +1,7 @@
 # Brainstorm needed: the dial cannot distinguish minutes from hours
 
-**Status:** open problem, no preferred direction yet. Written to be picked up cold.
+**Status:** decomposed into #32 and its sub-issues. This document remains the reasoning; the issues
+carry the work and record which parts are ready to build and which still need decisions.
 
 ## The observation
 
