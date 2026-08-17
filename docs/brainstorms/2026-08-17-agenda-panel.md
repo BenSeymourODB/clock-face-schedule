@@ -111,6 +111,13 @@ Inherited, not negotiable:
    the arcs did it (#15). The helper exists; the panel must not re-solve it by eye.
 4. **Same parse, same colours.** `parseEventTitle` decides the colour-dot prefix, the event emoji
    and the clean title. The panel and the arc must not disagree about any of the three.
+5. **The same card styling as a floating label.** Both draw an event as a coloured card, and two
+   independent card styles for the same underlying thing would read as two products on one screen.
+   #29 takes Material's surface-tint model — the event's colour composited over the chip at a low
+   opacity — and factors wash, border, radius, padding and text colour into one shared place. The
+   panel should consume that rather than restyling. The two differ in *layout*, not in *style*: a
+   label is positioned on a locus and carries a connector, a card is stacked in a column and carries
+   its start and end times.
 
 ## Things that will come up
 
