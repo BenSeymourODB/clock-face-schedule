@@ -108,7 +108,7 @@ assuming.
 ## Window-edge feathering — worth doing regardless
 
 Part of the proposal above, but **it fixes something that is wrong today** and should be separated
-from the mode work.
+from the mode work. Filed as #22.
 
 Any window frequently begins or ends mid-event. Instead of drawing the arc to the event's true
 extent, terminate it at the window boundary and ramp opacity from 100% to 0% over a few degrees, so
@@ -135,7 +135,7 @@ Unevaluated. Listed to give a fresh session something to push against, not as a 
 set aside as the likely-too-dense option: each ring still needs concentric stacking for its own
 overlaps, so a busy hour would be competing for radial space twice over. Kept because some version
 may work — perhaps the inner ring showing only the *current and next* event rather than everything,
-which would bound its depth at two. Recorded as its own issue.
+which would bound its depth at two. Recorded as #24.
 
 **A second band at minute scale.** Borrow the minute hand's scale: an inner or outer band where one
 revolution is one hour, showing only the current (and perhaps next) hour at 6° per minute — 12× the
@@ -171,7 +171,7 @@ wrong for a classroom rather than the encoding.
 - **Inline emoji would free radial room.** Emoji currently sit on their own radial line beneath the
   title, and the two nearly collide on a two-line title. Rendering the emoji inline with the title
   text as authored (`🍽️ Lunch`) would reclaim roughly a third of the ring's height — which is
-  plausibly the space a second band would need. Filed separately; relevant here.
+  plausibly the space a second band would need. Filed as #23; relevant here.
 - **The minimum-width floor would need revisiting** under any scheme that makes short events
   legible on their own terms.
 
