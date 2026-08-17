@@ -273,6 +273,13 @@ control, which Apps Script cannot provide. Independently, Chrome and Firefox bot
 deliberately excluded from Permissions-Policy delegation — so it cannot be granted via `allow=`
 either, and manual permission does not survive the origin rotation.
 
+**Browser storage is not durable either**, for the same reason. Cookies, `localStorage` and
+`sessionStorage` are keyed to an origin, and this one rotates — so whether or not the APIs happen to
+work inside the sandbox, nothing stored through them survives. Apps Script's own docs neither permit
+nor forbid them, which makes it undocumented behaviour on a disappearing origin. Preferences
+therefore belong in `PropertiesService` (#31), which is server-side and per-user; `doGet` can
+template them into the page so reads cost no round trip.
+
 Neither half can be closed from inside Apps Script, so **anything notification-shaped must be
 in-page**. Post-MVP reminder work is scoped as in-page toasts for exactly this reason: named
 otherwise, it would accrue a service-worker dependency it can never satisfy. Full investigation
