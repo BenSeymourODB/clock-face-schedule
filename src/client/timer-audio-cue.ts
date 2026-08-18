@@ -28,7 +28,9 @@ export function getCompletionAudioContext(): AudioContext {
     sharedContext = new AudioContext();
   }
   if (sharedContext.state === 'suspended') {
-    void sharedContext.resume();
+    // Rejects on some browsers (Safari) if this call isn't itself inside a user-gesture handler —
+    // swallowed rather than left unhandled, since the caller has no action to take here either way.
+    sharedContext.resume().catch(() => {});
   }
   return sharedContext;
 }
