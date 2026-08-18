@@ -79,7 +79,11 @@ export function sampleEvents(windowStart: Date): ClockEventInput[] {
     // only the *leading* emoji is stripped, so 🪀🎈 stay adjacent inside cleanTitle, and a line of
     // pure emoji gets none of the slack that over-charged plain characters usually provide.
     { id: "h", title: "🟣 🧸 🪀🎈 Free Play", startDate: at(8, 20), endDate: at(9, 25), isAllDay: false, fallbackColor },
-    // Runs on past the window's end, so the dial must not claim it finishes there.
+    // Runs on past the window's end, so the dial must not claim it finishes there. Also the
+    // fixture's last event, so under `recurringSampleEvents` it abuts the next copy's "z" exactly,
+    // on the same ring and with no separator between them — the two read as separate arcs only
+    // because 🟢 against ⚪ is a strong colour change. Recolouring either to the other's colour
+    // would merge them into one apparent arc at every seam.
     { id: "y", title: "🟢 Aftercare", startDate: at(10, 50), endDate: at(13, 15), isAllDay: false, fallbackColor },
   ];
 }
@@ -93,14 +97,14 @@ function fixtureBounds(): { firstStartMinutes: number; lastEndMinutes: number } 
 
   return {
     firstStartMinutes: Math.min(...events.map((event) => minutesFromAnchor(event.startDate))),
-    lastEndMinutes: Math.max(...events.map((event) => minutesFromAnchor(event.endDate)))
+    lastEndMinutes: Math.max(...events.map((event) => minutesFromAnchor(event.endDate))),
   };
 }
 
 const { firstStartMinutes, lastEndMinutes } = fixtureBounds();
 
 /**
- * How far apart consecutive copies of the fixture sit — the fixture's own span, 845 minutes.
+ * How far apart consecutive copies of the fixture sit — the fixture's own span, whatever it is.
  *
  * Derived rather than chosen, and that is the whole of why the tiling works. At exactly the span,
  * a copy's first event begins at the instant the previous copy's last event ends: the seam adds no
@@ -116,6 +120,11 @@ export const FIXTURE_PERIOD_MINUTES = lastEndMinutes - firstStartMinutes;
  *
  * Usually one, two across a seam. `main.ts` re-emits only when this changes, so it must be stable
  * between advances rather than recomputed into a new-looking value every poll.
+ *
+ * A copy is bounded by its span, and the fixture is not contiguous — its largest internal gap is 55
+ * minutes. So a window narrower than that gap could be handed a copy with nothing actually in view;
+ * harmless while the caller's window is the rolling 11 hours, and the reason this returns candidate
+ * copies rather than claiming each one is drawn.
  */
 export function fixtureCopyIndices(
   anchor: Date,

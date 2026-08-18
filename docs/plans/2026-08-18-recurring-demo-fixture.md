@@ -16,7 +16,7 @@ Measured against the live fixture (14 events, window 660 minutes wide, `now` at 
 | Hours after load | Events still in the window |
 | --- | --- |
 | 0 | 14 |
-| 4.5 | 9 |
+| 4 | 9 |
 | 8 | 4 |
 | 11 | 1 |
 | 13.5 | **0** |
@@ -54,8 +54,9 @@ choice is what makes the tiling exact:
   copy `−1` ends at `anchor − 50` and copy `+1` starts at `anchor + 795`, so neither reaches it.
   Verified as a set comparison, not by eye: the events visible at load are the same 14, with the
   same ids. Every screenshot this repo has judged the fixture by still shows what it showed.
-- **No phase is ever sparse.** Across a full period, the window holds 10–14 events at every
-  half-hour step, against the 0–14 the current behaviour decays through.
+- **No phase is ever sparse.** Swept minute by minute across a full period, the window holds
+  **10–14** events — floor first reached at phase 270 — against the 14 → 0 the current behaviour
+  decays through. Over a week, at most two copies are ever emitted at once.
 
 ### Ids
 
@@ -77,6 +78,14 @@ to know the recurrence exists.
 - **Making the load-time picture contain an in-progress event** (#76). The tiling puts one in the
   window at most phases as a side effect, but at phase 0 it cannot: the fixture has nothing
   straddling `now`, which is #76's own open decision to settle.
-- **Composing with `?now` / `?freeze`** (#72, PR #75). That PR moves the anchor for a *displaced*
-  pin to midnight; recurrence is a no-op under a frozen clock, since the phase cannot advance.
-  Whichever lands second reconciles the two at the one seam they share.
+- **Composing with `?now` / `?freeze`** (#72, PR #75). Two things for whoever merges second, and
+  neither is automatic:
+  - That PR routes every time read through `now()`, and `refreshFixture` reads `new Date()`. A
+    frozen clock must freeze the copy set too: left reading real time, the copies walk out of the
+    window the dial is still drawing and the demo goes blank after about two hours. The fix is to
+    take the window from the same source the tick does.
+  - That PR also introduces a `fixtureAnchor` helper, and this branch had a local of that name.
+    Renamed to `anchor` here, since the collision would have shadowed the helper with no compile
+    error and no failing test.
+  A displaced pin re-anchors the fixture to midnight, which recurrence leaves alone — the phase is
+  still measured from whatever anchor it is given.

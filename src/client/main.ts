@@ -82,21 +82,27 @@ function startDisplay(): void {
   if (mount instanceof HTMLElement && mount.dataset["demo"] === "1") {
     // Anchored to the rolling window's own start, not periodStart, so the fixture lands inside
     // whatever window is live at load time regardless of the hour — see sample-events.ts.
-    const fixtureAnchor = getRollingWindow(new Date()).windowStart;
-    let emitted = "";
+    const anchor = getRollingWindow(new Date()).windowStart;
+    /** Null rather than "", which is what an empty copy list would join to. */
+    let emitted: string | null = null;
 
     /**
      * The window keeps moving after load, so a single copy of the fixture scrolls out of it and the
      * dial empties (#62). The clock re-filters what it holds against the live window on every
      * render, so the scrolling needs no help — this only hands it copies it has not been given, and
      * only when the set changes, since `setEvents` redraws every arc.
+     *
+     * Reads the clock the same way the tick above does, and must go on doing so: #72's `?now` /
+     * `?freeze` routes every time read through one seam, and a frozen clock has to freeze the copy
+     * set too. If this kept reading real time while the dial drew a pinned window, the copies would
+     * walk out of that window and leave it blank.
      */
     function refreshFixture(): void {
       const view = getRollingWindow(new Date());
-      const copies = fixtureCopyIndices(fixtureAnchor, view).join(",");
+      const copies = fixtureCopyIndices(anchor, view).join(",");
       if (copies === emitted) return;
       emitted = copies;
-      clock.setEvents(recurringSampleEvents(fixtureAnchor, view));
+      clock.setEvents(recurringSampleEvents(anchor, view));
     }
 
     refreshFixture();

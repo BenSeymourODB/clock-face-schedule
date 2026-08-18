@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
 
-import { getRollingWindow } from "../shared/clock";
+import {
+  type ClockEventInput,
+  assignRings,
+  eventsToClockEvents,
+  filterEventsForPeriod,
+  getPeriodStart,
+  getRollingWindow,
+} from "../shared/clock";
 import {
   FIXTURE_PERIOD_MINUTES,
   fixtureCopyIndices,
@@ -19,39 +26,45 @@ function windowAtPhase(phaseMinutes: number): { windowStart: Date; windowEnd: Da
   return getRollingWindow(new Date(ANCHOR.getTime() + (180 + phaseMinutes) * MINUTE_MS));
 }
 
+/**
+ * The real filter, not a local re-implementation of it. `fixtureCopyIndices` claims to match this
+ * predicate's strictness at the seam, so a copy of it here could keep agreeing with the code after
+ * the predicate itself had moved.
+ */
 function inWindow(
-  events: { startDate: string; endDate: string }[],
+  events: ClockEventInput[],
   { windowStart, windowEnd }: { windowStart: Date; windowEnd: Date }
-): { startDate: string; endDate: string }[] {
-  return events.filter(
-    (event) =>
-      new Date(event.startDate).getTime() < windowEnd.getTime() &&
-      new Date(event.endDate).getTime() > windowStart.getTime()
-  );
+): ClockEventInput[] {
+  return filterEventsForPeriod(events, windowStart, windowEnd);
 }
 
 function offsetMinutes(iso: string): number {
   return (new Date(iso).getTime() - ANCHOR.getTime()) / MINUTE_MS;
 }
 
-/** Peak concurrency, measured between consecutive endpoints rather than at them. */
-function peakDepth(events: { startDate: string; endDate: string }[]): number {
-  const bounds = events.flatMap((event) => [
-    new Date(event.startDate).getTime(),
-    new Date(event.endDate).getTime(),
-  ]);
-  const points = Array.from(new Set(bounds)).sort((a, b) => a - b);
-  let peak = 0;
-  for (let index = 0; index < points.length - 1; index += 1) {
-    const midpoint = (points[index]! + points[index + 1]!) / 2;
-    const depth = events.filter(
-      (event) =>
-        new Date(event.startDate).getTime() < midpoint &&
-        new Date(event.endDate).getTime() > midpoint
-    ).length;
-    peak = Math.max(peak, depth);
-  }
-  return peak;
+/**
+ * The deepest cluster the dial would open, measured the way `analog-clock.ts` measures it: through
+ * the window clamp and the true angles, not from raw timestamps. `clusterDepth` is what the band
+ * is divided by, so it is the number that decides whether an arc is too thin to read.
+ */
+function peakClusterDepth(
+  events: ClockEventInput[],
+  view: { windowStart: Date; windowEnd: Date }
+): number {
+  const resolved = eventsToClockEvents(
+    filterEventsForPeriod(events, view.windowStart, view.windowEnd),
+    getPeriodStart(view.windowStart),
+    view.windowStart,
+    view.windowEnd
+  );
+  const rings = assignRings(
+    resolved.map((event) => ({
+      id: event.id,
+      startAngle: event.trueStartAngle,
+      endAngle: event.trueEndAngle,
+    }))
+  );
+  return Math.max(0, ...[...rings.values()].map((assignment) => assignment.clusterDepth));
 }
 
 describe("FIXTURE_PERIOD_MINUTES", () => {
@@ -61,10 +74,30 @@ describe("FIXTURE_PERIOD_MINUTES", () => {
     const lastEnd = Math.max(...base.map((event) => offsetMinutes(event.endDate)));
 
     expect(FIXTURE_PERIOD_MINUTES).toBe(lastEnd - firstStart);
+    // A period of zero would make the copy-index loop run from -Infinity, hanging the browser.
+    expect(FIXTURE_PERIOD_MINUTES).toBeGreaterThan(0);
   });
 });
 
 describe("recurringSampleEvents", () => {
+  it("abuts consecutive copies exactly — no gap, and no overlap", () => {
+    // The load-bearing property, and the one the period is chosen for. Asserted on generated copies
+    // rather than on the period's formula, which would only restate the implementation: at P = 800
+    // every other test in this file still passes while each seam overlaps by 45 minutes.
+    // Mid-seam, where both copies are emitted — a phase where one has already left says nothing
+    // about how the two meet.
+    const view = windowAtPhase(400);
+    const events = recurringSampleEvents(ANCHOR, view);
+    const copy = (suffix: string) =>
+      events.filter((event) => (suffix === "" ? !event.id.includes("@") : event.id.endsWith(suffix)));
+
+    const lastEndOfFirst = Math.max(...copy("").map((event) => offsetMinutes(event.endDate)));
+    const firstStartOfNext = Math.min(...copy("@1").map((event) => offsetMinutes(event.startDate)));
+
+    expect(copy("").length).toBeGreaterThan(0);
+    expect(firstStartOfNext).toBe(lastEndOfFirst);
+  });
+
   it("draws exactly what a single copy drew at load, with the same ids", () => {
     // The whole point: every screenshot this repo has judged the fixture by is still valid. A
     // period other than the fixture's own span would pull a neighbouring copy into this window.
@@ -83,16 +116,18 @@ describe("recurringSampleEvents", () => {
     expect(inWindow(recurringSampleEvents(ANCHOR, view), view).length).toBeGreaterThan(5);
   });
 
-  it.each([0, 150, 330, 500, 660, 845, 1000, 1690, 4225])(
+  // Nine distinct pictures: no two of these phases are equal modulo the period, so none of them
+  // repeats another's dial. 135 and 794 are the first and last minute of the two-copy regime.
+  it.each([0, 135, 270, 330, 500, 660, 794, 1000, 1500])(
     "fills the window at phase %i, and never past the depth the fixture was designed for",
     (phase) => {
       const view = windowAtPhase(phase);
-      const visible = inWindow(recurringSampleEvents(ANCHOR, view), view);
+      const events = recurringSampleEvents(ANCHOR, view);
 
-      expect(visible.length).toBeGreaterThanOrEqual(10);
-      // Three-deep is the authored cluster. A seam that overlapped would manufacture a fourth
-      // ring, thinning every arc in it — the defect #70 is about, arrived at by accident.
-      expect(peakDepth(visible)).toBeLessThanOrEqual(3);
+      expect(inWindow(events, view).length).toBeGreaterThanOrEqual(10);
+      // Three-deep is the authored cluster. A seam that overlapped would open a fourth ring,
+      // thinning every arc in it — the defect #70 is about, arrived at by accident.
+      expect(peakClusterDepth(events, view)).toBeLessThanOrEqual(3);
     }
   );
 
@@ -133,17 +168,24 @@ describe("fixtureCopyIndices", () => {
     expect(fixtureCopyIndices(ANCHOR, windowAtPhase(0))).toEqual([0]);
   });
 
-  it("advances as the window walks forward, and is stable between advances", () => {
-    // main.ts re-emits only when this changes, so a value that churned would re-render the dial
-    // on every poll for nothing.
-    expect(fixtureCopyIndices(ANCHOR, windowAtPhase(60))).toEqual(
-      fixtureCopyIndices(ANCHOR, windowAtPhase(120))
+  it("holds one copy, then two across a seam, and never more", () => {
+    expect(fixtureCopyIndices(ANCHOR, windowAtPhase(120))).toEqual([0]);
+    expect(fixtureCopyIndices(ANCHOR, windowAtPhase(400))).toEqual([0, 1]);
+    expect(fixtureCopyIndices(ANCHOR, windowAtPhase(900))).toEqual([1]);
+  });
+
+  it("is stable inside the two-copy regime, where the poll gate depends on it", () => {
+    // main.ts re-emits only when this changes, so churn here would redraw every arc every five
+    // minutes. The single-copy regime is the easy case; this is the one worth sampling.
+    expect(fixtureCopyIndices(ANCHOR, windowAtPhase(200))).toEqual(
+      fixtureCopyIndices(ANCHOR, windowAtPhase(600))
     );
-    expect(fixtureCopyIndices(ANCHOR, windowAtPhase(FIXTURE_PERIOD_MINUTES))).toContain(1);
   });
 
   it("looks back as well as forward, for a window opened before the anchor", () => {
-    expect(fixtureCopyIndices(ANCHOR, windowAtPhase(-FIXTURE_PERIOD_MINUTES))).toContain(-1);
+    // Unreachable from main.ts, whose anchor is the load-time window start, but the function is
+    // pure and its bounds are symmetric — a one-sided implementation would be wrong here.
+    expect(fixtureCopyIndices(ANCHOR, windowAtPhase(-FIXTURE_PERIOD_MINUTES))).toEqual([-1]);
   });
 
   it("never returns a copy that misses the window entirely", () => {
