@@ -22,11 +22,13 @@ export {
   getFetchWindow,
   getPeriodBounds,
   getPeriodStart,
+  hasEventInProgress,
   parseEventTitle,
   polarToCartesian,
   roundCoord
 } from './clock-utils';
 export { readableTextColor, relativeLuminance } from './contrast';
+export { computeDrainFraction, computeDrainMasks, type DrainMasks } from './drain';
 export {
   FEATHER_DEGREES,
   FEATHER_MAX_SPAN_RATIO,
