@@ -16,10 +16,10 @@ export const TWO_LINE_MIN_SPAN_DEGREES = 30;
 /**
  * Title baseline sits this far across the arc band, measured from the inner radius.
  *
- * Moved out from the inherited 0.68 to clear the emoji, which stacks radially beneath it. Two
- * lines plus an emoji did not fit inside one ring at the original ratios.
+ * Centred: an arc renders a title or a standalone glyph, never both (#23 inlined the emoji into
+ * the title), so nothing is left to share the radial space that used to justify offsetting it.
  */
-export const TITLE_RADIUS_RATIO = 0.65;
+export const TITLE_RADIUS_RATIO = 0.5;
 
 /**
  * Title font size = arc band height × this ratio.

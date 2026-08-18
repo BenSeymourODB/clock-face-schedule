@@ -334,6 +334,71 @@ describe("eventArc", () => {
         .toBe("9");
     });
   });
+
+  describe("radial centring (#56)", () => {
+    // Containment alone (baseline ± half stays within INNER/OUTER) is satisfied by a lopsided
+    // placement too — the 1.25-unit stacked-ring margin that motivated this fix passed exactly
+    // that check. What distinguishes centred from merely-contained is that the two clearances,
+    // inner-edge-to-INNER and OUTER-to-outer-edge, come out equal.
+    function twoLineClearances(cleanTitle: string, innerRadius: number, outerRadius: number, arcSpan: number) {
+      const layout = computeArcTitleLayout({ title: cleanTitle, arcSpan, innerRadius, outerRadius });
+      expect(layout.fit.lines).toHaveLength(2);
+
+      const group = eventArc({
+        event: makeEvent({ cleanTitle, startAngle: 0, endAngle: arcSpan }),
+        cx: CX,
+        cy: CY,
+        innerRadius,
+        outerRadius,
+      });
+      const radii = [...group.querySelectorAll("defs path")].map((node) =>
+        arcRadius(node.getAttribute("d") ?? "")
+      );
+      const half = layout.titleFontSize / 2;
+
+      return {
+        innerClearance: Math.min(...radii) - half - innerRadius,
+        outerClearance: outerRadius - (Math.max(...radii) + half),
+      };
+    }
+
+    it("splits clearance evenly for a two-line title on a full band", () => {
+      const { innerClearance, outerClearance } = twoLineClearances(
+        "Parent Teacher Conference Planning Session Extra Words Here To Wrap",
+        INNER,
+        OUTER,
+        60
+      );
+
+      expect(innerClearance).toBeCloseTo(outerClearance, 3);
+    });
+
+    it("splits clearance evenly for a two-line title on a thin, stacked ring", () => {
+      // Inner/outer radii of a 22.27-unit ring against a 292-unit outer edge — the exact
+      // three-deep-stack proportions whose lopsided 1.25-unit margin motivated this fix. A thin
+      // ring's smaller font actually buys *more* characters per line (the arc's chord budget
+      // barely shrinks while the font does), so it takes a longer title than the full-band case
+      // to force a wrap here at all.
+      const { innerClearance, outerClearance } = twoLineClearances(
+        "Parent Teacher Conference Planning Session Extra Words Here To Wrap And Then Quite A Bit More",
+        269.74,
+        292,
+        60
+      );
+
+      expect(innerClearance).toBeCloseTo(outerClearance, 3);
+    });
+
+    it("centres a standalone emoji across the ring", () => {
+      const group = spanning(15, { eventEmoji: "🎮" });
+      const emoji = group.querySelector('[data-testid="event-emoji-e1"]');
+      const x = Number(emoji?.getAttribute("x"));
+      const y = Number(emoji?.getAttribute("y"));
+      const radiusFromCentre = Math.hypot(x - CX, y - CY);
+
+      expect(radiusFromCentre).toBeCloseTo(INNER + (OUTER - INNER) / 2, 3);
+    });
+  });
 });
 
 describe("eventArc at a period boundary", () => {
