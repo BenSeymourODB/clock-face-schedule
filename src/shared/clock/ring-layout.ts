@@ -35,11 +35,14 @@ export interface RingAssignment {
  * did not need. Keeping earlier events further out is also the reading order a viewer expects.
  *
  * `windowStartAngle` rebases every angle onto how far past it they fall, in `[0, 360)`, before
- * sorting. A window that does not begin at 0° — a rolling look-ahead, a 1-hour scale — can hand
- * this function angles that are not otherwise in start order (an event just past the window's own
- * start can be numerically smaller than one from hours before it, if the two were computed against
- * different multiples of 360°); rebasing onto the window's own start restores the ordering the
- * interval-partitioning below depends on. Defaults to 0, a no-op against angles already in
+ * sorting. `calculateTrueArcAngles` never reduces an angle modulo 360 (clock-utils.ts), so its
+ * output is already in chronological order for any window and needs no rebasing — this parameter
+ * is a backstop for a caller that instead hands in angles independently normalised per event (e.g.
+ * a raw hand-position value), where two events on opposite sides of a period boundary can sort in
+ * the wrong order without it. Assumes `windowStartAngle` does not fall strictly inside any single
+ * candidate's own span; a candidate already straddling the rebase origin sorts incorrectly
+ * regardless; upstream code deriving `windowStartAngle` from the window's own edge, rather than
+ * from a point nothing spans, avoids this. Defaults to 0, a no-op against angles already in
  * `[0, 360)` from a period-aligned window — today's only caller.
  *
  * Optimal in ring *count* says nothing about ring *thickness*. Callers divide a fixed band by

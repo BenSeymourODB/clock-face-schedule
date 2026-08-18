@@ -66,3 +66,11 @@ hazard for whichever convention #25 ends up using.
   time for any window, wrapping or not (verified with `node`, not just argued — see the PR
   description for the computed cases). The parameter exists so `assignRings` is also correct if a
   future caller instead hands it independently mod-360-normalised angles.
+- **Caught in first-pass review:** the initial test set for `assignRings`'s rotation used only
+  realistic (already window-clamped, unnormalised) inputs — which, per the point above, sort
+  correctly with or without the rotation, so those tests could not tell the rebase apart from a
+  no-op. Fixed by adding a test using the adversarial (independently mod-360-normalised per event)
+  input the rotation actually exists for, verified to fail against a stub that ignores
+  `windowStartAngle` and pass with the real implementation. `assignRings`'s docstring also gained a
+  caveat: the rebase is only valid when `windowStartAngle` doesn't fall strictly inside a single
+  candidate's own (already-wrapped) span.
