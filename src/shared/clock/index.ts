@@ -53,6 +53,20 @@ export {
 export { rectEdgeIntersection } from './rect-edge';
 export { assignRings, type RingAssignment, type RingCandidate } from './ring-layout';
 export { describeTextArc } from './text-arc';
+export {
+  drainEdgeDegrees,
+  effectiveShowSeconds,
+  elapsedSeconds,
+  pauseTimer,
+  remainingBandCount,
+  remainingSeconds,
+  resumeTimer,
+  startTimer,
+  stopTimer,
+  tick,
+  type TimerState,
+  type TimerStatus
+} from './timer';
 export type {
   ArcAngles,
   ClampedArcAngles,
