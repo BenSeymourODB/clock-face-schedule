@@ -1,6 +1,6 @@
 # Timer state, tick integration, and pause/resume re-seaming
 
-**Status:** in progress
+**Status:** done
 **Issue:** #43
 **Docs:** [../brainstorms/2026-08-17-class-timer.md](../brainstorms/2026-08-17-class-timer.md), epic #42
 

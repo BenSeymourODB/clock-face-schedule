@@ -1,4 +1,4 @@
-**Status:** in review
+**Status:** done
 **Issue:** #28
 **Docs:** #26 (binary elapsed outline), #22 (feather mask, retargeted here), #27 (event-colour
 contrast, not addressed here)
