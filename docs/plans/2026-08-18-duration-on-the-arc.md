@@ -53,10 +53,10 @@ line: it has spent its text budget.
 ### 2. Which arcs get it
 
 Not a new span gate. The duration line renders when **the title renders on the arc and fits on one
-line**, **both strings fit the character budget at the radius this line displaces the title onto**,
-and **both lines clear whatever is stroked on the ring's edges** (the last two forced by the render
-and the self-review; see below). All three are derived from geometry the dial already computes, so no
-threshold has to be guessed.
+line**, **the arc has the whole band to itself**, **both strings fit the character budget at the
+radius this line displaces the title onto**, and **both lines clear whatever is stroked on the ring's
+edges**. Only the first was in this plan before it was rendered and reviewed; the others are all
+derived from geometry the dial already computes, so none is a threshold anybody guessed.
 
 The awkwardness #35 flagged is real and is answered on the other surface: the arcs whose duration is
 least legible are the slivers, and a sliver's title has already overflowed onto a floating label,
@@ -64,16 +64,17 @@ which has room to spare. So **the label card carries the duration too**, as a tr
 where the `MIN_ARC_DEGREES` information loss actually gets repaired — the fixture's 10-minute
 "Reading" and 30-minute "Staff Debrief" are drawn at angles that cannot tell them apart.
 
-Measured on the rendered fixture at 04:15, this covers 7 of its 14 events:
+Measured on the rendered fixture at 10:15, this draws it for 4 of its 14 events:
 
 | Surface | Fixture events |
 | --- | --- |
-| Arc second line | 🍽️ Lunch (`2 hr`), 🟢 Aftercare (`2 hr 25`) |
-| Label card trailing line | ⚪ Breakfast Club (`1 hr 10`), ⚫ Assembly (`45 min`), ⚫ Staff Debrief and Planning (`30 min`), 👩‍🏫 Parent Teacher… (`1 hr 10`), 🔵 Yoga (`20 min`) |
-| Neither | 🎮 Game Time, 🔴 Deadline, 🟣 Study (three-deep ring), 🎂 Reading and Snacks, 🧸 Free Play (two-line titles), 📚 Reading (7.5°, no text at all), ⚽ (emoji-only) |
+| Arc second line | 🍽️ Lunch (`50 min`) |
+| Label card trailing line | ⚪ Breakfast Club (`1 hr 10`), 👩‍🏫 Parent Teacher… (`1 hr 10`), 🔵 Yoga (`22 min`) |
+| Declined, card too crowded | ⚫ Assembly, ⚫ Staff Debrief and Planning — see the opt-out below |
+| Neither | 🎮 Game Time, 🔴 Deadline, 🟣 Study (three-deep ring), 🎂 Reading and Snacks, 🧸 Free Play (two-line titles), 📚 Reading (7.5°, no text at all), ⚽ (emoji-only), 🟢 Aftercare (one full line, no room) |
 
-The last row is deferred, not forgotten — see *Deferred* below. Every one of the 14 states its
-duration to a screen reader regardless, via the arc's accessible name.
+Thin, and honestly so: this fixture is deliberately the worst schedule the project could think of.
+Every one of the 14 states its duration to a screen reader regardless, via the arc's accessible name.
 
 ### 3. Do not snap arcs to ticks
 
@@ -120,9 +121,9 @@ geometry structurally cannot, and the window-edge feather (#22) already says "co
 ## What the fixture does not currently stress
 
 Every existing label card has a title wider than its duration, so nothing exercises a card that has
-to widen for the trailing line. Added: a 20-minute `🔵 Yoga` at 10:40 — 10° of arc, a 4-unit title
-that overflows a 3-unit budget, and a 6-unit `20 min` line under it. Sited in the gap between the
-conference and Aftercare so it deepens no cluster.
+to widen for the trailing line. Added: a 22-minute `🔵 Yoga` at 6:15 — 11° of arc, a 4-unit title that
+overflows a 3-unit budget, and a 6-unit `22 min` line under it. Both the odd duration and the site are
+findings rather than choices; see the sections below.
 
 ## What changed from the plan while building
 
@@ -168,9 +169,54 @@ agree, rather than the same event carrying a duration in the morning and losing 
 no angular extent to read duration off at all, so unlike the drawn line this is announced whatever
 the radial and angular budgets allow.
 
-**A measured cost to disclose.** A label card is one line taller now, and cards have no collision
-avoidance (#30). On the fixture the conference and Yoga cards went from 28.7 units apart to 4.36.
-Nothing overlaps, but the change makes #30 materially more likely and is noted on that issue.
+## What #25 and #27 landing mid-flight changed
+
+Both merged while this was in review, and both moved something it depended on.
+
+**#27 retired the neutral halo, and with it the radial gate's teeth.** The widest stroke on an arc's
+outline went from 0.12 of the band to 0.07, so the three-deep clearance went from 0.03 units to 1.93 —
+enough to pass, which would have put the duration line back on the cluster the render had already
+shown it did not belong on. That forced the gate that was always the real reason: **the arc must have
+the band to itself.** Title text is 0.28 of the *ring*, so any division of the band takes it from
+21.26 units to 9.99 or 6.24, against the 17.52 the dial deliberately chooses for a floating label —
+text a room is meant to read. A name is worth drawing small; a redundant channel is not. The radial
+gate stays because it is about a different thing (not drawing text on a stroke) and the two move
+independently, as #27 just demonstrated.
+
+**#25's 11-hour window moved Aftercare to 10:50**, which collided with the fixture's new 🔵 Yoga at
+10:40. Re-sited to 6:15 — see below, because the first attempt to re-site it found something.
+
+## The card's extra line overlapped its neighbour, and the fix is an opt-out
+
+Rendering the merged fixture at 10:15 found **two real card overlaps** where `main` has none:
+
+| Pair | `main` | With duration lines |
+| --- | --- | --- |
+| ⚫ Staff Debrief ↔ ⚫ Assembly | 9.52 units apart | **15.01 units of overlap** |
+| 👩‍🏫 Parent Teacher ↔ 🔵 Yoga | (no Yoga) | **54 × 30 units of overlap** |
+
+The first is the change's own doing: a card grows about its centre, so two cards 45 minutes apart each
+reached ~12 units into the 9.5 between them. An overlapping card can hide a title that is on a card
+*because* it did not fit its arc, so this is not a cost to disclose and ship — it is a defect.
+
+**The duration line is optional, so it yields.** `analog-clock` now lays each card out twice and keeps
+the duration only where the taller box overlaps no other card, comparing against every *other* card
+rather than only the ones already decided — because it was the earlier card growing *upward* that
+still overlapped when only the later one gave way. Undecided neighbours are compared at their
+title-only size, which is their worst case, so accepting a duration can never force one on anyone
+else. Nothing moves, nothing is dropped, and two cards that overlap without any duration still
+overlap: this declines to make #30 worse rather than pretending to fix it.
+
+The second overlap was the fixture's fault, not the feature's: beside the conference, Yoga's card
+landed *inside* it — that card is wide enough at six o'clock to swallow a short one whole. Moved into
+the empty in-window stretch after Lunch, where it stresses the card-sizing case without conflating it
+with #30's crowding.
+
+**And re-siting it found a pre-existing bug.** At exactly twenty minutes the arc span computes to
+`9.999999999999943°` and loses the 10° overflow floor to floating-point error — so a 20-minute event
+renders no title (below the 20° floor), no label, and no standalone glyph, and is completely anonymous
+on the dial. Real, plausible, and not this change's to fix; noted on #69, and the fixture event is 22
+minutes so it exercises what it is there for.
 
 ## Deferred
 
@@ -189,6 +235,7 @@ Nothing overlaps, but the change makes #30 materially more likely and is noted o
 - **The same collision under a two-line title** (#67), which has no gate available: at three and four
   deep it sits on the elapsed outline exactly as the duration line would have. The fix is to the
   band-versus-ring sizing rather than to anything here.
-- **Card collisions (#30).** A card is a line taller now, and the fixture's two closest cards went
-  from 28.7 units apart to 4.36. Cards still have no collision avoidance; this makes the existing
-  failure more likely rather than introducing a new one.
+- **Card collisions (#30).** A card is a line taller when it carries a duration, so on a crowded
+  stretch the duration is declined rather than drawn — ⚫ Staff Debrief and ⚫ Assembly both lose
+  theirs on the fixture. Cards still have no collision avoidance and two that overlap without any
+  duration still overlap; the displacement pass is #30's.

@@ -11,6 +11,7 @@
  */
 import {
   type ClockBox,
+  type Rect,
   clampLabelPosition,
   faceClearanceLimit,
   fitLabelToWidth,
@@ -70,21 +71,29 @@ export interface FloatingLabelParams {
   duration?: string;
 }
 
-export function floatingLabel({
-  id,
+/** Everything about where a card lands, without building any of it. */
+export interface FloatingLabelGeometry {
+  /** The card's own box, for a caller comparing it with another card's (#35, via `rectsOverlap`). */
+  rect: Rect;
+  /** Wrapped text plus any trailing duration line, outermost first. */
+  lines: string[];
+}
+
+/**
+ * Lay a card out without rendering it, so the dial can compare two candidate cards before choosing
+ * one. `floatingLabel` is this plus the drawing.
+ */
+export function floatingLabelGeometry({
   text,
   anchorAngle,
-  anchorRadius,
   labelRadius,
-  color,
   cx,
   cy,
   clockBox,
   faceRadius,
   fontSize = DEFAULT_FONT_SIZE,
   duration,
-}: FloatingLabelParams): SVGGElement {
-  const anchor = polarToCartesian(cx, cy, anchorRadius, anchorAngle);
+}: FloatingLabelParams): FloatingLabelGeometry {
   // A duration line is one more line the card may grow by, and the clearance below is sized from
   // the tallest the card may become — so it has to be counted there, not just where it is drawn.
   const maxCardLines = duration === undefined ? MAX_LINES : MAX_LINES + 1;
@@ -115,12 +124,33 @@ export function floatingLabel({
 
   const centre = clampLabelPosition(natural, clockBox, width / 2);
 
+  return {
+    rect: { x: centre.x - width / 2, y: centre.y - height / 2, width, height },
+    lines,
+  };
+}
+
+export function floatingLabel(params: FloatingLabelParams): SVGGElement {
+  const {
+    id,
+    anchorAngle,
+    anchorRadius,
+    color,
+    cx,
+    cy,
+    fontSize = DEFAULT_FONT_SIZE,
+  } = params;
+  const anchor = polarToCartesian(cx, cy, anchorRadius, anchorAngle);
+  const {
+    rect: { x: left, y: top, width, height },
+    lines,
+  } = floatingLabelGeometry(params);
+  const centre = { x: left + width / 2, y: top + height / 2 };
+
   // Stop the connector at the card's edge rather than letting it run underneath the fill.
   const connectorEnd = rectEdgeIntersection(centre, width, height, anchor);
 
   const group = svg("g", { "data-testid": `floating-label-${id}` });
-  const left = centre.x - width / 2;
-  const top = centre.y - height / 2;
 
   group.append(
     svg("line", {

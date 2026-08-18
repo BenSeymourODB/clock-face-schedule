@@ -4,6 +4,7 @@
  */
 import {
   type ClockEventInput,
+  type Rect,
   angleForTime,
   assignRings,
   calculateTrueArcAngles,
@@ -16,12 +17,17 @@ import {
   getPeriodStart,
   getRollingWindow,
   hasEventInProgress,
+  rectsOverlap,
   roundCoord,
 } from "../../shared/clock";
 import { svg } from "../svg";
 import { clockFace } from "./clock-face";
 import { eventArc } from "./event-arc";
-import { floatingLabel } from "./floating-label";
+import {
+  type FloatingLabelParams,
+  floatingLabel,
+  floatingLabelGeometry,
+} from "./floating-label";
 import { windowTrack } from "./window-track";
 
 const DEFAULT_SIZE = 600;
@@ -221,7 +227,7 @@ export function analogClock({
       }))
     );
 
-    const overflowing: { startAngle: number; label: SVGGElement }[] = [];
+    const overflowing: { startAngle: number; params: FloatingLabelParams }[] = [];
 
     for (const event of resolved) {
       const assigned = rings.get(event.id) ?? { ringIndex: 0, clusterDepth: 1 };
@@ -270,7 +276,7 @@ export function analogClock({
       if (isOverflow) {
         overflowing.push({
           startAngle: event.startAngle,
-          label: floatingLabel({
+          params: {
             id: event.id,
             text: displayTitle,
             anchorAngle: (event.startAngle + event.endAngle) / 2,
@@ -285,14 +291,45 @@ export function analogClock({
             // Empty for anything under a minute, which `fitLabelToWidth` then treats as a line
             // whose width is zero — so pass undefined instead and leave the card at its title.
             duration: formatEventDuration(event.durationMinutes) || undefined,
-          }),
+          },
         });
       }
     }
 
     // Clockwise, so labels stack down the page in the order a reader scans the dial.
     overflowing.sort((a, b) => a.startAngle - b.startAngle);
-    labelsLayer.append(...overflowing.map(({ label }) => label));
+
+    // #35's duration line makes a card 40% taller, and cards have no collision avoidance (#30):
+    // measured on the fixture, two cards 9.5 units apart became a 15-unit overlap, which hides a
+    // title that is on a card *because* it did not fit its arc. So the duration is treated as what
+    // it is — optional — and dropped wherever keeping it would put one card over another.
+    //
+    // Each card is compared against every *other* card, not only the ones already decided. A card
+    // grows about its own centre, so it reaches into the gap above it as well as below: it was the
+    // *earlier* card growing upward that still overlapped its neighbour when only the later one
+    // yielded. Undecided neighbours are compared at their title-only size, which is what they will
+    // be at worst, so accepting a duration here can never force one on anybody else.
+    //
+    // This is not #30's fix and deliberately not a step toward one: nothing is moved, no card is
+    // dropped, and two cards that overlap without any duration line still overlap. It only declines
+    // to make the existing crowding worse.
+    const titleOnly: FloatingLabelParams[] = overflowing.map(({ params }) => ({
+      ...params,
+      duration: undefined,
+    }));
+    const chosen = [...titleOnly];
+    const rects: Rect[] = titleOnly.map((params) => floatingLabelGeometry(params).rect);
+
+    overflowing.forEach(({ params }, index) => {
+      if (params.duration === undefined) return;
+      const grown = floatingLabelGeometry(params).rect;
+      if (rects.some((rect, other) => other !== index && rectsOverlap(rect, grown))) return;
+
+      chosen[index] = params;
+      rects[index] = grown;
+    });
+
+    labelsLayer.append(...chosen.map((params) => floatingLabel(params)));
 
     renderedMinute = minuteKey(currentTime);
   }

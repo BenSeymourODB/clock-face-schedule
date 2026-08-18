@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { floatingLabel } from "./floating-label";
+import { roundCoord } from "../../shared/clock";
+import { floatingLabel, floatingLabelGeometry } from "./floating-label";
 
 const CX = 300;
 const CY = 300;
@@ -330,6 +331,40 @@ describe("floatingLabel against the dial's real geometry", () => {
 
       expect(lineTexts(withDuration.group)).toEqual(["Yoga", "20 min"]);
       expect(withDuration.width).toBeGreaterThan(plain.width);
+    });
+
+    // The dial chooses whether a card can afford this line by laying it out twice and comparing the
+    // boxes, so the geometry it measures has to be the geometry that gets drawn. If the two drifted
+    // it would decline durations that fit and keep ones that overlap.
+    it.each([
+      ["with a duration", "1 hr 10"],
+      ["without one", undefined],
+    ])("reports the same box it draws, %s", (_label, duration) => {
+      const params = {
+        id: "e1",
+        text: LONG,
+        anchorAngle: 302.5,
+        anchorRadius: OUTER,
+        labelRadius: LABEL_RADIUS_REAL,
+        color: "#22c55e",
+        cx: CX,
+        cy: CY,
+        clockBox: CLOCK_BOX,
+        faceRadius: FACE,
+        fontSize: FONT,
+        duration,
+      };
+      const { rect, lines } = floatingLabelGeometry(params);
+      const group = floatingLabel(params);
+      const [x, y, width, height] = numbers(part(group, "rect"), "x", "y", "width", "height");
+
+      expect([x, y, width, height]).toEqual([
+        roundCoord(rect.x),
+        roundCoord(rect.y),
+        roundCoord(rect.width),
+        roundCoord(rect.height),
+      ]);
+      expect(lineTexts(group)).toEqual(lines);
     });
 
     it("grows the card downward by exactly one line", () => {

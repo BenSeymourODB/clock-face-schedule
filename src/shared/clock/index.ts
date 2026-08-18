@@ -70,7 +70,7 @@ export {
   textWidth,
   type FitTextResult
 } from './pack-lines';
-export { rectEdgeIntersection } from './rect-edge';
+export { rectEdgeIntersection, rectsOverlap, type Rect } from './rect-edge';
 export { assignRings, type RingAssignment, type RingCandidate } from './ring-layout';
 export { describeTextArc } from './text-arc';
 export {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { rectEdgeIntersection } from './rect-edge';
+import { rectEdgeIntersection, rectsOverlap } from './rect-edge';
 
 // 100 × 40 rect centred at (100, 100) → edges at x = 50/150, y = 80/120.
 const CENTER = { x: 100, y: 100 };
@@ -39,5 +39,29 @@ describe('rectEdgeIntersection', () => {
     const left = edgeToward(-300, 70);
     expect(right.x - CENTER.x).toBeCloseTo(CENTER.x - left.x);
     expect(right.y - CENTER.y).toBeCloseTo(CENTER.y - left.y);
+  });
+});
+
+describe('rectsOverlap', () => {
+  const card = { x: 100, y: 100, width: 100, height: 40 };
+
+  it.each([
+    ['itself', { ...card }, true],
+    ['a card fully inside it', { x: 120, y: 110, width: 20, height: 10 }, true],
+    ['a card overlapping one corner', { x: 190, y: 130, width: 50, height: 50 }, true],
+    ['a card clear to the right', { x: 210, y: 100, width: 50, height: 40 }, false],
+    ['a card clear below', { x: 100, y: 150, width: 100, height: 40 }, false],
+    // The real case: same angle, stacked vertically, which is how cards crowd on this dial.
+    ['a card 9.5 units below', { x: 100, y: 149.5, width: 100, height: 40 }, false],
+    ['the same card grown by a line into it', { x: 100, y: 137.2, width: 100, height: 64.5 }, true]
+  ])('against %s → %s', (_label, other, expected) => {
+    expect(rectsOverlap(card, other)).toBe(expected);
+    // Order must not matter: the dial compares each new card against every placed one.
+    expect(rectsOverlap(other, card)).toBe(expected);
+  });
+
+  it('does not count a shared edge, since cards abut all over this dial', () => {
+    expect(rectsOverlap(card, { x: 200, y: 100, width: 50, height: 40 })).toBe(false);
+    expect(rectsOverlap(card, { x: 100, y: 140, width: 100, height: 40 })).toBe(false);
   });
 });
