@@ -26,7 +26,7 @@ export {
   polarToCartesian,
   roundCoord
 } from './clock-utils';
-export { readableTextColor, relativeLuminance } from './contrast';
+export { compositeOver, readableTextColor, relativeLuminance } from './contrast';
 export {
   FEATHER_DEGREES,
   FEATHER_MAX_SPAN_RATIO,
