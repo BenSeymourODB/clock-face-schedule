@@ -18,6 +18,8 @@ export {
   elapsedEventIds,
   eventsToClockEvents,
   filterEventsForPeriod,
+  getDayStart,
+  getFetchWindow,
   getPeriodBounds,
   getPeriodStart,
   parseEventTitle,
