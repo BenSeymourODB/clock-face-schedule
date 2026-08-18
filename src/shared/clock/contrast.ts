@@ -80,6 +80,25 @@ export function contrastRatio(a: string, b: string): number | null {
 }
 
 /**
+ * The colour a viewer sees where `tint` is painted over `background` at `alpha` (0–1), using
+ * simple per-channel alpha compositing — the same math an SVG renderer does for `fill-opacity`.
+ * Returns `null` if either colour is unparseable.
+ *
+ * Exists so a claim like "a wash this light cannot move the text below AA" is something a test
+ * computes rather than something asserted by eye.
+ */
+export function compositeOver(background: string, tint: string, alpha: number): string | null {
+  const bg = parseHex(background);
+  const fg = parseHex(tint);
+  if (!bg || !fg) return null;
+
+  const channel = (i: number) => Math.round(bg[i] * (1 - alpha) + fg[i] * alpha);
+  return `#${[channel(0), channel(1), channel(2)]
+    .map((value) => value.toString(16).padStart(2, "0"))
+    .join("")}`;
+}
+
+/**
  * Black or white, whichever contrasts better against `background`.
  *
  * Chooses by comparing both candidate ratios rather than by thresholding luminance, because the

@@ -7,8 +7,9 @@
  * is not a plan.
  *
  * Chosen to exercise what is hardest to judge from a specification — three-deep overlap, a title
- * too long for its arc, an event short enough to need the minimum-width floor, and an event
- * crossing each end of the period.
+ * too long for its arc, an event short enough to need the minimum-width floor, an event crossing
+ * each end of the period, and a floating label washed with a colour the palette itself fails
+ * contrast for once filled (⚫, #26/#27).
  */
 import type { ClockEventInput } from "../shared/clock";
 
@@ -29,6 +30,10 @@ export function sampleEvents(periodStart: Date): ClockEventInput[] {
     // ⚫ measures 1.21:1 on the dial background, so once elapsed its outline is invisible without
     // the neutral band beneath it. Placed clear of the cluster so the two stresses stay separable.
     { id: "x", title: "⚫ Assembly", startDate: at(3, 15), endDate: at(4, 0), isAllDay: false, fallbackColor },
+    // Short and ⚫-coloured, so it overflows into a floating label (#29): the one colour whose
+    // wash and border are both load-bearing, since it is one of the two the palette itself fails
+    // contrast for once drawn as a filled arc (#26/#27).
+    { id: "w", title: "⚫ Staff Debrief and Planning", startDate: at(4, 0), endDate: at(4, 30), isAllDay: false, fallbackColor },
     // Ten minutes, held open by the minimum-span floor.
     { id: "e", title: "📚 Reading", startDate: at(8, 0), endDate: at(8, 10), isAllDay: false, fallbackColor },
     // Long enough to be promoted to a floating label.
