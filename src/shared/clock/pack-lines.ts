@@ -7,8 +7,10 @@
  * arrives at the budget differs — so it lives here and both callers supply their own budget.
  *
  * No DOM measurement anywhere: every budget reduces to a count of characters at
- * `fontSize × CHAR_WIDTH_RATIO` each. Crude, but it runs at build time and in a plain node test.
+ * `fontSize × CHAR_WIDTH_RATIO` each, with an emoji counting double. Crude, but it runs at build
+ * time and in a plain node test.
  */
+import { emojiRunLength, sliceToWidth, visualWidth } from './emoji';
 
 /** Rough advance width per character, as a fraction of font size. */
 export const CHAR_WIDTH_RATIO = 0.6;
@@ -27,6 +29,15 @@ export interface FitTextResult {
 }
 
 /**
+ * Emoji that stay on one line together.
+ *
+ * A short run is a single visual token — "🧸 🪀 Free Play" should not put the ball on the line
+ * below the bear. A longer run is just a strip of pictures, and unlike a word it has no syllable
+ * to protect, so it may break anywhere.
+ */
+const MAX_UNBROKEN_EMOJI = 3;
+
+/**
  * Whole characters that fit in `width`. Floors to a whole character so ascenders and descenders
  * don't bleed past the edges at sub-character precision.
  */
@@ -37,18 +48,18 @@ export function charBudget(width: number, fontSize: number): number {
 
 /** Width `text` will occupy at `fontSize`, by the same heuristic `charBudget` inverts. */
 export function textWidth(text: string, fontSize: number): number {
-  return text.length * fontSize * CHAR_WIDTH_RATIO;
+  return visualWidth(text) * fontSize * CHAR_WIDTH_RATIO;
 }
 
-/** Truncate to `budget` characters, appending an ellipsis. Returns `text` unchanged if it fits. */
+/** Truncate to `budget`, appending an ellipsis. Returns `text` unchanged if it fits. */
 function truncateWithEllipsis(text: string, budget: number): string {
   if (budget <= 0) return '';
-  if (text.length <= budget) return text;
+  if (visualWidth(text) <= budget) return text;
   if (budget <= 3) {
     if (budget === 1) return ELLIPSIS_CHAR;
-    return `${text.slice(0, budget - 1)}${ELLIPSIS_CHAR}`;
+    return `${sliceToWidth(text, budget - 1)}${ELLIPSIS_CHAR}`;
   }
-  return `${text.slice(0, budget - ELLIPSIS_ASCII.length)}${ELLIPSIS_ASCII}`;
+  return `${sliceToWidth(text, budget - ELLIPSIS_ASCII.length)}${ELLIPSIS_ASCII}`;
 }
 
 /**
@@ -60,9 +71,9 @@ function appendOverflowMarker(line: string, budget: number): string {
   if (budget <= 0) return '';
   if (budget === 1) return ELLIPSIS_CHAR;
   if (budget <= 3) {
-    return `${line.slice(0, budget - 1)}${ELLIPSIS_CHAR}`;
+    return `${sliceToWidth(line, budget - 1)}${ELLIPSIS_CHAR}`;
   }
-  return `${line.slice(0, budget - ELLIPSIS_ASCII.length)}${ELLIPSIS_ASCII}`;
+  return `${sliceToWidth(line, budget - ELLIPSIS_ASCII.length)}${ELLIPSIS_ASCII}`;
 }
 
 /**
@@ -79,7 +90,7 @@ function packLine(
   while (i < words.length) {
     const word = words[i];
     const candidate = line.length === 0 ? word : `${line} ${word}`;
-    if (candidate.length > budget) break;
+    if (visualWidth(candidate) > budget) break;
     line = candidate;
     i += 1;
   }
@@ -92,6 +103,53 @@ export function normaliseText(text: string): string {
 }
 
 /**
+ * Glue a short neighbouring run of all-emoji words into one unbreakable token.
+ *
+ * A run of `MAX_UNBROKEN_EMOJI` or fewer becomes a single token. A longer run is left as separate
+ * words, so the packer may break it wherever the line runs out — it is a strip of pictures with no
+ * syllable to protect.
+ *
+ * Chunking a long run into fixed groups of three instead, as this first did, is not the same thing
+ * and packs worse: it left "🧸 🪀 ⚽ 🎲 🚀 Free Play" as ["🧸 🪀 ⚽", "🎲 🚀 Free…"], overflowing
+ * with five of line one's fourteen units unused, where free breaking fits it in two.
+ *
+ * The boundary to the text that follows is deliberately left alone: after an emoji is an ordinary
+ * place to wrap, so a title too tight for "🍽️ Lunch" on one line may still put the glyph above
+ * the word rather than overflowing.
+ */
+function mergeEmojiRuns(words: string[]): string[] {
+  const merged: string[] = [];
+  let index = 0;
+
+  while (index < words.length) {
+    if (emojiRunLength(words[index]) === 0) {
+      merged.push(words[index]);
+      index += 1;
+      continue;
+    }
+
+    // Measure the whole run in emoji, not in words: one word may already hold several.
+    let end = index;
+    let emoji = 0;
+    while (end < words.length) {
+      const run = emojiRunLength(words[end]);
+      if (run === 0) break;
+      emoji += run;
+      end += 1;
+    }
+
+    if (emoji <= MAX_UNBROKEN_EMOJI) {
+      merged.push(words.slice(index, end).join(' '));
+    } else {
+      for (let i = index; i < end; i += 1) merged.push(words[i]);
+    }
+    index = end;
+  }
+
+  return merged;
+}
+
+/**
  * Pack `normalised` into at most `maxLines` lines of at most `budget` characters each.
  *
  * Does NOT split mid-word except as a last resort: a single word longer than the budget is
@@ -100,9 +158,9 @@ export function normaliseText(text: string): string {
 export function packLines(normalised: string, budget: number, maxLines: number): FitTextResult {
   if (normalised.length === 0) return { lines: [], didOverflow: false };
   if (budget <= 0 || maxLines <= 0) return { lines: [], didOverflow: true };
-  if (normalised.length <= budget) return { lines: [normalised], didOverflow: false };
+  if (visualWidth(normalised) <= budget) return { lines: [normalised], didOverflow: false };
 
-  const words = normalised.split(' ');
+  const words = mergeEmojiRuns(normalised.split(' '));
 
   // With one line there is no wrapping to do, so fill it to the character rather than stopping
   // at the last whole word — the extra few glyphs are worth more than the clean break.

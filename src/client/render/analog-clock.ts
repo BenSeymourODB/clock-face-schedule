@@ -6,6 +6,7 @@ import {
   type ClockEventInput,
   assignRings,
   calculateTrueArcAngles,
+  combineTitleWithEmoji,
   computeArcTitleLayout,
   elapsedEventIds,
   eventsToClockEvents,
@@ -216,10 +217,12 @@ export function analogClock({
       const ringInnerRadius = Math.max(ringOuterRadius - ringThickness, clockRadius);
       const arcSpan = event.endAngle - event.startAngle;
 
+      const displayTitle = combineTitleWithEmoji(event.cleanTitle, event.eventEmoji);
+
       // Computed once and shared with the label below: two independent derivations of
       // didOverflow could disagree and render a title twice, or not at all.
       const layout = computeArcTitleLayout({
-        cleanTitle: event.cleanTitle,
+        title: displayTitle,
         arcSpan,
         innerRadius: ringInnerRadius,
         outerRadius: ringOuterRadius,
@@ -246,7 +249,7 @@ export function analogClock({
           startAngle: event.startAngle,
           label: floatingLabel({
             id: event.id,
-            text: event.cleanTitle,
+            text: displayTitle,
             anchorAngle: (event.startAngle + event.endAngle) / 2,
             anchorRadius: ringOuterRadius,
             labelRadius,

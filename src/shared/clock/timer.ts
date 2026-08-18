@@ -8,8 +8,17 @@
 
 export type TimerStatus = 'running' | 'paused' | 'finished';
 
+/**
+ * Why a `finished` timer got there — `tick` and `stopTimer` both land on the same `status`, but a
+ * completion cue must fire for one and not the other (see issue #45): stopping a timer early is a
+ * cancellation, not an arrival.
+ */
+export type TimerCompletionReason = 'expired' | 'stopped' | null;
+
 export interface TimerState {
   status: TimerStatus;
+  /** Set only once `status` is `finished`; `null` otherwise. See `TimerCompletionReason`. */
+  completionReason: TimerCompletionReason;
   /** Total duration requested, in seconds. */
   durationSeconds: number;
   /**
@@ -39,6 +48,7 @@ function secondsOfMinute(date: Date): number {
 export function startTimer(durationSeconds: number, now: Date): TimerState {
   return {
     status: 'running',
+    completionReason: null,
     durationSeconds,
     bankedSeconds: 0,
     segmentStartedAt: now,
@@ -84,6 +94,7 @@ export function tick(state: TimerState, now: Date): TimerState {
   return {
     ...state,
     status: 'finished',
+    completionReason: 'expired',
     bankedSeconds: state.durationSeconds,
     segmentStartedAt: null
   };
@@ -123,12 +134,29 @@ export function resumeTimer(state: TimerState, now: Date): TimerState {
 }
 
 export function stopTimer(state: TimerState, now: Date): TimerState {
+  // Idempotent past `finished` so stopping an already-naturally-expired timer can't overwrite
+  // `completionReason: 'expired'` with `'stopped'`.
+  if (state.status === 'finished') return state;
+
   return {
     ...state,
     status: 'finished',
+    completionReason: 'stopped',
     bankedSeconds: elapsedSeconds(state, now),
     segmentStartedAt: null
   };
+}
+
+/**
+ * Whether a completion cue should play, given the previous and next state — true exactly on the
+ * edge into a naturally-expired `finished`, not on every subsequent tick while already finished,
+ * and not for a timer that was stopped rather than run out. `previous` is `undefined` for a fresh
+ * mount; an already-expired state at mount does not fire retroactively, since there is no live
+ * transition to react to (and per the brainstorm, a timer never survives a reload anyway).
+ */
+export function shouldPlayCompletionCue(previous: TimerState | undefined, next: TimerState): boolean {
+  if (next.status !== 'finished' || next.completionReason !== 'expired') return false;
+  return previous !== undefined && !(previous.status === 'finished' && previous.completionReason === 'expired');
 }
 
 /**
