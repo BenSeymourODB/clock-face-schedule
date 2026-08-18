@@ -140,6 +140,9 @@ export function floatingLabel({
   const strokeWidth = roundCoord(Math.max(STROKE_MIN, fontSize * STROKE_RATIO));
 
   const group = svg("g", { "data-testid": `floating-label-${id}` });
+  const left = centre.x - width / 2;
+  const top = centre.y - height / 2;
+  const geometry = cardRect(left, top, width, height);
 
   group.append(
     svg("line", {
@@ -159,20 +162,22 @@ export function floatingLabel({
     // Three stacked rects, not one: a wash tinting the field needs a plain surface under it to
     // blend against, and the border wants to sit above the wash so it reads at full strength
     // rather than through it. Splitting fill from stroke is what makes that order possible.
+    // Sharing one `geometry` object, rather than recomputing it per rect, is what makes it
+    // structurally impossible for the three to drift apart.
     svg("rect", {
       "data-testid": `floating-label-rect-${id}`,
-      ...cardRect(centre.x - width / 2, centre.y - height / 2, width, height),
+      ...geometry,
       fill: "var(--card-foreground)",
     }),
     svg("rect", {
       "data-testid": `floating-label-wash-${id}`,
-      ...cardRect(centre.x - width / 2, centre.y - height / 2, width, height),
+      ...geometry,
       fill: color,
       "fill-opacity": WASH_OPACITY,
     }),
     svg("rect", {
       "data-testid": `floating-label-border-${id}`,
-      ...cardRect(centre.x - width / 2, centre.y - height / 2, width, height),
+      ...geometry,
       fill: "none",
       stroke: color,
       "stroke-opacity": RECT_BORDER_OPACITY,
