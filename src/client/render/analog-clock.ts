@@ -11,6 +11,7 @@ import {
   elapsedEventIds,
   eventsToClockEvents,
   filterEventsForPeriod,
+  formatEventDuration,
   getPeriodBounds,
   getPeriodStart,
   hasEventInProgress,
@@ -259,6 +260,9 @@ export function analogClock({
             clockBox,
             faceRadius,
             fontSize: labelFontSize,
+            // Empty for anything under a minute, which `fitLabelToWidth` then treats as a line
+            // whose width is zero — so pass undefined instead and leave the card at its title.
+            duration: formatEventDuration(event.durationMinutes) || undefined,
           }),
         });
       }

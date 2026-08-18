@@ -244,6 +244,45 @@ describe("analogClock", () => {
   });
 
   /**
+   * #35: the dial hands each surface the event's own duration as text, since angular extent is the
+   * only channel carrying it and `MIN_ARC_DEGREES` flattens everything under fifteen minutes into
+   * the same 7.5°.
+   */
+  describe("duration", () => {
+    function labelLines(element: SVGSVGElement, id: string): string[] {
+      return [...element.querySelectorAll(`[data-testid^="floating-label-text-${id}-"]`)].map(
+        (node) => node.textContent ?? ""
+      );
+    }
+
+    it("states an arc's duration on the line its title left free", () => {
+      const { element } = build([input("a", 2, 5)]);
+
+      expect(
+        element.querySelector('[data-testid="event-duration-a"] textPath')?.textContent
+      ).toBe("3 hr");
+    });
+
+    it("states it on the card instead when the title overflowed", () => {
+      const { element } = build([input("a", 2, 2.5, { title: LONG_TITLE })]);
+
+      expect(element.querySelector('[data-testid="event-duration-a"]')).toBeNull();
+      expect(labelLines(element, "a").slice(-1)).toEqual(["30 min"]);
+    });
+
+    // The arc runs 10:00 to noon and stops at the period's edge; the event runs to 13:00. Deriving
+    // the text from the drawn angles would make it agree with the drawing and say "2 hr", which is
+    // the one thing this channel exists not to do.
+    it("states the event's own length where the period cut the arc short", () => {
+      const { element } = build([input("a", 10, 13)]);
+
+      expect(
+        element.querySelector('[data-testid="event-duration-a"] textPath')?.textContent
+      ).toBe("3 hr");
+    });
+  });
+
+  /**
    * #23: the emoji renders inline with the title, so it has to travel with the title onto a
    * floating label rather than being left behind on the arc.
    */

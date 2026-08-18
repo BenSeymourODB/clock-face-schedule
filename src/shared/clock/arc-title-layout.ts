@@ -33,6 +33,21 @@ export const TITLE_RADIUS_RATIO = 0.5;
  */
 export const TITLE_FONT_SIZE_RATIO = 0.28;
 
+/**
+ * Half the gap between two curved baselines, as a fraction of font size. `central`
+ * dominant-baseline puts each glyph band at ±fontSize/2 around its centre, so 2 × 0.55 clears
+ * them with a hair to spare.
+ */
+export const TITLE_LINE_OFFSET_RATIO = 0.55;
+
+/**
+ * Clearance a stacked line must keep from whatever is drawn on the ring's edges.
+ *
+ * One unit, matching the separator's own floor: below that the two are not distinguishable as
+ * separate marks anyway, so there is nothing left to protect.
+ */
+const EDGE_CLEARANCE = 1;
+
 export interface ArcTitleLayout {
   /** Curved-text baseline radius. */
   titleRadius: number;
@@ -61,12 +76,27 @@ export function computeArcTitleLayout(params: {
 }
 
 /**
- * The duration text for an arc's second line, or `undefined` when it will not fit there (#35).
+ * The duration text for an arc's second line, or `undefined` when the line will not fit there (#35).
  *
- * `radius` is the radius the line is actually drawn at, not the title's — the two straddle the band's
- * centre, and a curved line's budget is a function of the radius it curves along.
+ * Two gates, both derived rather than chosen:
  *
- * There is deliberately no span threshold and no compact fallback. The budget is derived from arc
+ * **Radial.** Adding the line moves the title outward onto the two-line radii, so both lines and
+ * whatever is stroked on the ring's edges have to fit inside the ring. They do not always: an
+ * elapsed arc's outline is sized from the whole *band* (#26, deliberately, so its weight does not
+ * thin with overlap depth) while the text is sized from this arc's *ring*. On the 600-unit dial that
+ * leaves 11.08 units of clearance on a lone arc, 2.80 on a two-deep ring, **0.03** on a three-deep
+ * one and **−1.35** on a four-deep one — so on a crowded cluster the outward line lands on the
+ * outline. `edgeStrokeWidth` is what the caller draws there, since the elapsed treatment is the
+ * renderer's business, not this layout's.
+ *
+ * The gate is checked against that stroke whether or not the event has elapsed yet: a duration that
+ * appeared and vanished as an event crossed into elapsed would flicker on the wall.
+ *
+ * **Angular.** The formatted string has to fit the character budget at the radius the line is
+ * actually drawn at — not the title's, since the two straddle the band's centre and a curved line's
+ * budget is a function of the radius it curves along.
+ *
+ * Deliberately no span threshold and no compact fallback. The angular gate is derived from arc
  * length, so it gates itself; and a dial mixing "2 hr 25" on one arc with "2h25" on the next is the
  * second-glance failure the whole premise rules out. An arc too narrow for the one format shows
  * nothing, and its floating label carries the duration instead.
@@ -74,11 +104,34 @@ export function computeArcTitleLayout(params: {
 export function fitDurationLine(params: {
   durationMinutes: number;
   arcSpan: number;
-  radius: number;
+  /** Centre of the two-line stack — the radius a single line would have taken. */
+  titleRadius: number;
   fontSize: number;
+  /** This arc's own ring, which both lines have to sit inside. */
+  innerRadius: number;
+  outerRadius: number;
+  /** Width of the widest stroke the caller draws on the ring's own outline. */
+  edgeStrokeWidth: number;
 }): string | undefined {
-  const { durationMinutes, arcSpan, radius, fontSize } = params;
+  const {
+    durationMinutes,
+    arcSpan,
+    titleRadius,
+    fontSize,
+    innerRadius,
+    outerRadius,
+    edgeStrokeWidth
+  } = params;
+
   const text = formatEventDuration(durationMinutes);
   if (text.length === 0) return undefined;
-  return visualWidth(text) <= arcCharBudget(arcSpan, radius, fontSize) ? text : undefined;
+
+  // A stroke straddles its path, so it reaches half its width into the ring from either edge.
+  const reach = edgeStrokeWidth / 2 + EDGE_CLEARANCE;
+  const lineHalfHeight = fontSize * TITLE_LINE_OFFSET_RATIO + fontSize / 2;
+  if (titleRadius + lineHalfHeight > outerRadius - reach) return undefined;
+  if (titleRadius - lineHalfHeight < innerRadius + reach) return undefined;
+
+  const lineRadius = titleRadius - fontSize * TITLE_LINE_OFFSET_RATIO;
+  return visualWidth(text) <= arcCharBudget(arcSpan, lineRadius, fontSize) ? text : undefined;
 }

@@ -11,6 +11,7 @@ import {
   type ArcTitleLayout,
   type ClockEvent,
   type FeatherSpan,
+  TITLE_LINE_OFFSET_RATIO,
   combineTitleWithEmoji,
   computeArcFeathers,
   computeArcTitleLayout,
@@ -18,6 +19,8 @@ import {
   computeDrainMasks,
   describeArc,
   describeTextArc,
+  fitDurationLine,
+  formatEventDuration,
   polarToCartesian,
   readableTextColor,
   roundCoord,
@@ -44,13 +47,6 @@ const TITLE_MIN_SPAN_DEGREES = 20;
  */
 const EMOJI_RADIUS_RATIO = 0.5;
 const EMOJI_FONT_SIZE_RATIO = 0.3;
-
-/**
- * Half the gap between two curved title baselines, as a fraction of font size. `central`
- * dominant-baseline puts each glyph band at ±fontSize/2 around its centre, so 2 × 0.55 clears
- * them with a hair to spare.
- */
-const TITLE_LINE_OFFSET_RATIO = 0.55;
 
 const ARC_FILL_OPACITY = 0.85;
 
@@ -258,10 +254,16 @@ export function eventArc({
   const midAngle = (startAngle + endAngle) / 2;
   const arcHeight = outerRadius - innerRadius;
 
+  // Announced whatever the radial budget allows, unlike the drawn line below: a listener has no
+  // angular extent to read duration off in the first place, so this is the only channel they have.
+  const spokenDuration = formatEventDuration(event.durationMinutes);
+
   const group = svg("g", {
     "data-testid": `event-arc-group-${id}`,
     role: "img",
-    "aria-label": `Event: ${displayTitle}`,
+    "aria-label": spokenDuration
+      ? `Event: ${displayTitle}, ${spokenDuration}`
+      : `Event: ${displayTitle}`,
   });
 
   const defs = svg("defs");
@@ -429,8 +431,32 @@ export function eventArc({
     // with the half of the dial: further out is higher at the top and lower at the bottom. Always
     // putting line one on the outer radius made lower-half titles read bottom-up.
     const isBottomHalf = midAngle > 90 && midAngle < 270;
+
+    // #35's second duration channel takes the line a one-line title left free, at the radius a
+    // two-line title's second line already occupies — so it adds no new radial arithmetic. A title
+    // already on two lines has spent the arc's text budget: a three-line stack measures 34.01 of a
+    // lone arc's 37.96 half-band, and overruns every stacked ring.
+    //
+    // `fitDurationLine` owns both gates. The stroke width it is handed is the halo's, the widest
+    // thing drawn on this arc's outline — and it is passed whether or not this arc has elapsed,
+    // because a duration line appearing at the moment an event finished would flicker on the wall.
+    const durationLine =
+      fit.lines.length === 1
+        ? fitDurationLine({
+            durationMinutes: event.durationMinutes,
+            arcSpan,
+            titleRadius,
+            fontSize: titleFontSize,
+            innerRadius,
+            outerRadius,
+            edgeStrokeWidth: stroke(ELAPSED_HALO_RATIO),
+          })
+        : undefined;
+
+    const lines = durationLine === undefined ? fit.lines : [fit.lines[0], durationLine];
+
     const radii =
-      fit.lines.length === 2
+      lines.length === 2
         ? isBottomHalf
           ? [titleRadius - lineOffset, titleRadius + lineOffset]
           : [titleRadius + lineOffset, titleRadius - lineOffset]
@@ -439,6 +465,7 @@ export function eventArc({
     const titleGroup = svg("g", { "data-testid": `event-title-${id}` });
 
     radii.forEach((radius, index) => {
+      const isDurationLine = durationLine !== undefined && index === 1;
       const pathId = `text-path-${id}-${index}`;
 
       defs.append(
@@ -455,8 +482,14 @@ export function eventArc({
         svg(
           "text",
           {
+            "data-testid": isDurationLine ? `event-duration-${id}` : undefined,
             "font-size": titleFontSize,
-            "font-weight": 500,
+            // The duration sits a weight below the name rather than a size below it. The brainstorm
+            // is explicit that duration "is the content" here, not a caption — and shrinking the
+            // text is the one de-emphasis that costs legibility, which on a stacked ring is already
+            // the scarce thing. Opacity was the other option and was rejected: it trades contrast
+            // away, and #15/#27 are both about not doing that.
+            "font-weight": isDurationLine ? 400 : 500,
             // Chosen per arc: the title sits on the event's own colour, which no token
             // describes and which the calendar may supply. NDWC used a fixed white, which
             // measures 1.9:1 on the palette's yellow (#15).
@@ -477,7 +510,7 @@ export function eventArc({
                 "text-anchor": "middle",
                 "dominant-baseline": "central",
               },
-              [fit.lines[index]]
+              [lines[index]]
             ),
           ]
         )

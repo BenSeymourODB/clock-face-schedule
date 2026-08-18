@@ -60,6 +60,14 @@ export interface FloatingLabelParams {
   /** Radius of the clock face, which the card must not reach. */
   faceRadius: number;
   fontSize?: number;
+  /**
+   * The event's duration as text (#35), placed on a line of its own below the title.
+   *
+   * This card is where the redundant channel earns most: a label exists because the arc was too
+   * narrow for its title, and a narrow arc is exactly where `MIN_ARC_DEGREES` has already flattened
+   * ten minutes and fifteen into the same 7.5°.
+   */
+  duration?: string;
 }
 
 export function floatingLabel({
@@ -74,8 +82,12 @@ export function floatingLabel({
   clockBox,
   faceRadius,
   fontSize = DEFAULT_FONT_SIZE,
+  duration,
 }: FloatingLabelParams): SVGGElement {
   const anchor = polarToCartesian(cx, cy, anchorRadius, anchorAngle);
+  // A duration line is one more line the card may grow by, and the clearance below is sized from
+  // the tallest the card may become — so it has to be counted there, not just where it is drawn.
+  const maxCardLines = duration === undefined ? MAX_LINES : MAX_LINES + 1;
 
   // Where the label wants to be, before any clamping — and therefore how much width is available
   // there. Sizing the card to that room is what keeps the clamp from having to pull a too-wide
@@ -89,13 +101,17 @@ export function floatingLabel({
       cx,
       cy,
       faceRadius,
-      labelCardHeight(MAX_LINES, fontSize, RECT_PADDING_Y)
+      labelCardHeight(maxCardLines, fontSize, RECT_PADDING_Y)
     )
   );
-  const { lines, width, height } = fitLabelToWidth(text, maxWidth, fontSize, MAX_LINES, {
-    x: RECT_PADDING_X,
-    y: RECT_PADDING_Y,
-  });
+  const { lines, width, height } = fitLabelToWidth(
+    text,
+    maxWidth,
+    fontSize,
+    MAX_LINES,
+    { x: RECT_PADDING_X, y: RECT_PADDING_Y },
+    duration
+  );
 
   const centre = clampLabelPosition(natural, clockBox, width / 2);
 

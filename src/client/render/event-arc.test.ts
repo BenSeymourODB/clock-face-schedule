@@ -89,13 +89,34 @@ describe("eventArc", () => {
   });
 
   describe("accessible name", () => {
-    it("names the event", () => {
-      expect(render().getAttribute("aria-label")).toBe("Event: Team Meeting");
+    it("names the event and how long it lasts", () => {
+      expect(render().getAttribute("aria-label")).toBe("Event: Team Meeting, 2 hr");
     });
 
     it("puts the emoji inline, ahead of the title", () => {
       expect(render({ eventEmoji: "🎮" }).getAttribute("aria-label")).toBe(
-        "Event: 🎮 Team Meeting"
+        "Event: 🎮 Team Meeting, 2 hr"
+      );
+    });
+
+    // A listener has no angular extent to read duration off, so the spoken name is the only channel
+    // they have — it is not subject to the radial and angular gates the drawn line is.
+    it("speaks the duration even where the arc has no room to draw it", () => {
+      const group = eventArc({
+        event: makeEvent({ startAngle: 0, endAngle: 7.5, durationMinutes: 10 }),
+        cx: CX,
+        cy: CY,
+        innerRadius: INNER,
+        outerRadius: OUTER,
+      });
+
+      expect(group.querySelector('[data-testid="event-title-e1"]')).toBeNull();
+      expect(group.getAttribute("aria-label")).toBe("Event: Team Meeting, 10 min");
+    });
+
+    it("names an event too short to state a duration for without a stray comma", () => {
+      expect(render({ durationMinutes: 0 }).getAttribute("aria-label")).toBe(
+        "Event: Team Meeting"
       );
     });
 
@@ -198,13 +219,19 @@ describe("eventArc", () => {
       });
       const group = render();
 
+      // The default event is 60° and 120 minutes, so #35's duration line takes the second line the
+      // one-line title left free. Spelled out rather than sliced off, because the arc renders one
+      // list of lines and a test that only counted the title's would not notice the other going
+      // missing.
+      const expected = [...layout.fit.lines, "2 hr"];
+
       expect(group.querySelectorAll('[data-testid="event-title-e1"] text')).toHaveLength(
-        layout.fit.lines.length
+        expected.length
       );
-      expect(group.querySelectorAll("defs path")).toHaveLength(layout.fit.lines.length);
+      expect(group.querySelectorAll("defs path")).toHaveLength(expected.length);
       expect(
         [...group.querySelectorAll("textPath")].map((node) => node.textContent)
-      ).toEqual(layout.fit.lines);
+      ).toEqual(expected);
     });
 
     it("gives every line its own baseline path, wired by id", () => {
@@ -233,6 +260,162 @@ describe("eventArc", () => {
 
       const offset = layout.titleFontSize * 0.55;
       expect(radii).toEqual([layout.titleRadius + offset, layout.titleRadius - offset]);
+    });
+
+    /**
+     * #35 gives duration a second channel, because angular extent is the only one carrying it and
+     * `MIN_ARC_DEGREES` flattens everything under fifteen minutes into the same 7.5°.
+     */
+    describe("duration line", () => {
+      const durationOf = (group: SVGGElement) =>
+        group.querySelector('[data-testid="event-duration-e1"]');
+
+      it("takes the second line a one-line title left free", () => {
+        const group = render({ startAngle: 0, endAngle: 60, durationMinutes: 145 });
+
+        expect(durationOf(group)?.querySelector("textPath")?.textContent).toBe("2 hr 25");
+      });
+
+      it("sits at the radius a two-line title's second line uses", () => {
+        const layout = computeArcTitleLayout({
+          title: "Team Meeting",
+          arcSpan: 60,
+          innerRadius: INNER,
+          outerRadius: OUTER,
+        });
+        const offset = layout.titleFontSize * 0.55;
+        const radii = [...render().querySelectorAll("defs path")].map((node) =>
+          arcRadius(node.getAttribute("d") ?? "")
+        );
+
+        // Exactly the pair asserted for a two-line title above — no new radial arithmetic, so no
+        // new collision surface. Two elements have overlapped on this band before (#23's emoji at
+        // 8.7 units into a two-line title), and reusing verified geometry is what rules it out.
+        expect(radii).toEqual([layout.titleRadius + offset, layout.titleRadius - offset]);
+      });
+
+      it("reads below the title on both halves of the dial", () => {
+        // Further from the centre is higher at the top of the dial and lower at the bottom, so a
+        // fixed order would put the duration above the name on one half — the bottom-up defect the
+        // title's own flip exists to prevent.
+        for (const [startAngle, endAngle, deeper] of [
+          [30, 90, "min"],
+          [150, 210, "max"],
+        ] as const) {
+          const group = render({ startAngle, endAngle });
+          const radii = [...group.querySelectorAll("defs path")].map((node) =>
+            arcRadius(node.getAttribute("d") ?? "")
+          );
+
+          expect(radii[1]).toBe(deeper === "min" ? Math.min(...radii) : Math.max(...radii));
+        }
+      });
+
+      it("sits a weight below the title rather than a size below it", () => {
+        // Shrinking it is the one de-emphasis that costs legibility, and opacity trades away
+        // contrast — which #15 and #27 are both about not doing.
+        const group = render();
+        const [title, duration] = [
+          ...group.querySelectorAll('[data-testid="event-title-e1"] text'),
+        ];
+
+        expect(duration.getAttribute("font-size")).toBe(title.getAttribute("font-size"));
+        expect(title.getAttribute("font-weight")).toBe("500");
+        expect(duration.getAttribute("font-weight")).toBe("400");
+      });
+
+      it("states the event's own length, not the extent the arc was drawn at", () => {
+        // A ten-minute event is drawn at MIN_ARC_DEGREES' 7.5°, identically to a fifteen-minute
+        // one. The text is the only thing that can tell them apart, so it must not be re-derived
+        // from the angles.
+        const group = render({ startAngle: 0, endAngle: 60, durationMinutes: 10 });
+
+        expect(durationOf(group)?.querySelector("textPath")?.textContent).toBe("10 min");
+      });
+
+      it("is absent when the title already takes two lines", () => {
+        // A three-line stack measures 34.01 units of a lone arc's 37.96 half-band and overruns
+        // every stacked ring, so a wrapped title has spent the arc's text budget.
+        const base = computeArcTitleLayout({
+          title: "Parent Teacher Conference Planning Session Extra Words Here",
+          arcSpan: 60,
+          innerRadius: INNER,
+          outerRadius: OUTER,
+        });
+        const group = eventArc({
+          event: makeEvent({ startAngle: 0, endAngle: 60 }),
+          cx: CX,
+          cy: CY,
+          innerRadius: INNER,
+          outerRadius: OUTER,
+          layout: { ...base, fit: { lines: ["Parent Teacher", "Conference"], didOverflow: false } },
+        });
+
+        expect(durationOf(group)).toBeNull();
+        expect(group.querySelectorAll("defs path")).toHaveLength(2);
+      });
+
+      // The gate is the character budget at the line's own radius and nothing else — no span
+      // threshold to guess. On the full 76-unit band a 20° arc's second line carries 6 units, so
+      // "45 min" lands and "2 hr 25" does not, and there is deliberately no compact fallback: one
+      // format across the whole dial, or nothing on this arc.
+      it.each([
+        [45, "45 min"],
+        [145, undefined],
+      ])("fits %i minutes onto a 20° arc as %s", (durationMinutes, expected) => {
+        const group = eventArc({
+          event: makeEvent({
+            cleanTitle: "PE",
+            startAngle: 0,
+            endAngle: 20,
+            durationMinutes,
+          }),
+          cx: CX,
+          cy: CY,
+          innerRadius: 216,
+          outerRadius: 292,
+        });
+
+        expect(group.querySelector('[data-testid="event-title-e1"]')).not.toBeNull();
+        expect(durationOf(group)?.querySelector("textPath")?.textContent).toBe(expected);
+      });
+
+      // Found by rendering the fixture at 04:15: "🎮 Game Time / 1 hr 30" sat on the elapsed
+      // outline of its own arc. The outline is sized from the whole band so its weight does not
+      // thin with overlap depth (#26); the text is sized from this arc's ring. Pushing a one-line
+      // title onto the two-line radii closed the 3.46 units between them to 0.03.
+      it("is absent on a ring too thin to clear its own outline", () => {
+        const BAND = 75.92;
+        const RING = 22.27;
+        const group = eventArc({
+          event: makeEvent({ startAngle: 0, endAngle: 45, durationMinutes: 90 }),
+          cx: CX,
+          cy: CY,
+          innerRadius: 292 - RING,
+          outerRadius: 292,
+          bandThickness: BAND,
+          isElapsed: true,
+        });
+
+        expect(durationOf(group)).toBeNull();
+        // …and the title goes back to the centre it had before, rather than staying pushed out.
+        const [radius] = [...group.querySelectorAll("defs path")].map((node) =>
+          arcRadius(node.getAttribute("d") ?? "")
+        );
+        expect(radius).toBeCloseTo(292 - RING + RING * 0.5, 4);
+      });
+
+      it("is absent when the title is rendering as a floating label instead", () => {
+        // The card carries the duration in that case; drawing it on the arc as well says the same
+        // thing twice.
+        const group = render({ startAngle: 0, endAngle: 60 }, true);
+
+        expect(durationOf(group)).toBeNull();
+      });
+
+      it.each([[0], [0.2]])('is absent for a %s-minute event', (durationMinutes) => {
+        expect(durationOf(render({ startAngle: 0, endAngle: 60, durationMinutes }))).toBeNull();
+      });
     });
 
     it.each([
@@ -501,9 +684,13 @@ describe("eventArc at a period boundary", () => {
     // Both live in the same <defs> now; only the fade wedges belong inside the <mask>.
     const { titlePaths, wedges } = fade({ continuesBefore: true });
 
-    expect(titlePaths).toHaveLength(1);
+    // Two baselines: the title's, and the duration line's beneath it.
+    expect(titlePaths).toHaveLength(2);
     expect(wedges).toHaveLength(1);
-    expect(titlePaths[0].getAttribute("id")).toBe("text-path-e1-0");
+    expect(titlePaths.map((node) => node.getAttribute("id"))).toEqual([
+      "text-path-e1-0",
+      "text-path-e1-1",
+    ]);
   });
 });
 

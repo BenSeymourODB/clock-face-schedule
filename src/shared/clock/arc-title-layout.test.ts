@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   TITLE_FONT_SIZE_RATIO,
+  TITLE_LINE_OFFSET_RATIO,
   TITLE_RADIUS_RATIO,
   TWO_LINE_MIN_SPAN_DEGREES,
   computeArcTitleLayout,
@@ -114,8 +115,28 @@ describe('computeArcTitleLayout', () => {
 });
 
 describe('fitDurationLine', () => {
-  // A lone arc on the 600-unit dial: band 75.92, title font 21.26, second line at 254.04 ± 11.69.
-  const loneArc = { radius: 242.35, fontSize: 21.26 };
+  const OUTER = 292;
+  const BAND = OUTER * 0.26;
+  const RING_GAP = Math.max(2, BAND * 0.06);
+  /** The halo, the widest stroke the renderer draws on an arc's outline — sized from the band. */
+  const HALO = BAND * 0.12;
+
+  /** One ring of a `depth`-deep cluster on the 600-unit dial, outermost first. */
+  function ring(depth: number) {
+    const gap = depth > 1 ? RING_GAP : 0;
+    const thickness = (BAND - (depth - 1) * gap) / depth;
+    const innerRadius = OUTER - thickness;
+
+    return {
+      innerRadius,
+      outerRadius: OUTER,
+      titleRadius: innerRadius + thickness * TITLE_RADIUS_RATIO,
+      fontSize: thickness * TITLE_FONT_SIZE_RATIO,
+      edgeStrokeWidth: HALO
+    };
+  }
+
+  const loneArc = ring(1);
 
   it('returns the formatted duration when the arc can carry it', () => {
     expect(fitDurationLine({ ...loneArc, durationMinutes: 120, arcSpan: 60 })).toBe('2 hr');
@@ -123,21 +144,19 @@ describe('fitDurationLine', () => {
   });
 
   it('returns nothing when the string exceeds the budget at its own radius', () => {
-    // 7 units of "2 hr 25" against a 10° arc, whose budget at this radius is 3.
-    expect(arcCharBudget(10, loneArc.radius, loneArc.fontSize)).toBeLessThan(7);
+    // 7 units of "2 hr 25" against a 10° arc, whose budget at the second line's radius is 3.
+    const lineRadius = loneArc.titleRadius - loneArc.fontSize * TITLE_LINE_OFFSET_RATIO;
+    expect(arcCharBudget(10, lineRadius, loneArc.fontSize)).toBeLessThan(7);
     expect(fitDurationLine({ ...loneArc, durationMinutes: 145, arcSpan: 10 })).toBeUndefined();
   });
 
-  // The two title radii straddle the band's centre, so the *same* string on the same arc can fit
-  // one line and not the other. Budgeting at the title's radius rather than the line's would
-  // silently overrun the inner one.
-  it('budgets against the radius the line is drawn at, not the title\'s', () => {
-    const arcSpan = 21;
-    const fontSize = 21.26;
-    const inner = fitDurationLine({ durationMinutes: 145, arcSpan, radius: 200, fontSize });
-    const outer = fitDurationLine({ durationMinutes: 145, arcSpan, radius: 265.73, fontSize });
-    expect(inner).toBeUndefined();
-    expect(outer).toBe('2 hr 25');
+  // The two lines straddle the band's centre, so the *same* string on the same arc can fit one and
+  // not the other. Budgeting at the title's own radius would silently overrun the inner line.
+  it("budgets against the radius the line is drawn at, not the title's", () => {
+    const wide = { ...loneArc, durationMinutes: 145, arcSpan: 21 };
+
+    expect(arcCharBudget(21, wide.titleRadius, wide.fontSize)).toBeGreaterThanOrEqual(7);
+    expect(fitDurationLine(wide)).toBeUndefined();
   });
 
   it.each([[0], [0.2], [-30]])('returns nothing for a %s-minute event', (durationMinutes) => {
@@ -146,7 +165,44 @@ describe('fitDurationLine', () => {
 
   // No compact fallback by design: one format across the whole dial, or nothing on this arc.
   it('never abbreviates to fit', () => {
-    const tight = fitDurationLine({ ...loneArc, durationMinutes: 145, arcSpan: 12 });
-    expect(tight).toBeUndefined();
+    expect(fitDurationLine({ ...loneArc, durationMinutes: 145, arcSpan: 12 })).toBeUndefined();
+  });
+
+  /**
+   * The radial gate, and the reason it exists. An elapsed arc's outline is sized from the whole
+   * *band* so its weight does not thin with overlap depth (#26); the text is sized from this arc's
+   * own *ring*. Pushing a one-line title onto the two-line radii closes the gap between them, and
+   * on a crowded cluster it closes it completely — 0.03 units at three deep, and −1.35 at four.
+   * Rendering the fixture at 04:15 is what found this: "🎮 Game Time / 1 hr 30" sat on the elapsed
+   * outline of its own arc.
+   */
+  describe('clearing what is stroked on the ring edges', () => {
+    it.each([
+      [1, '2 hr'],
+      [2, '2 hr'],
+      [3, undefined],
+      [4, undefined]
+    ])('at %i deep → %s', (depth, expected) => {
+      expect(fitDurationLine({ ...ring(depth), durationMinutes: 120, arcSpan: 60 })).toBe(expected);
+    });
+
+    it('admits a three-deep ring once nothing is stroked on its edges', () => {
+      // Proves the gate is about the stroke and not about the ring being thin: the same ring with
+      // no outline on it has room for both lines.
+      expect(
+        fitDurationLine({ ...ring(3), edgeStrokeWidth: 0, durationMinutes: 120, arcSpan: 60 })
+      ).toBe('2 hr');
+    });
+
+    it('checks both edges, not just the outward one', () => {
+      // The stack is symmetric about titleRadius, so a title pushed off-centre fails on whichever
+      // side it was pushed toward. Neither is more forgiving than the other.
+      const centred = ring(1);
+      const shiftedIn = { ...centred, titleRadius: centred.innerRadius + centred.fontSize * 0.4 };
+      const shiftedOut = { ...centred, titleRadius: centred.outerRadius - centred.fontSize * 0.4 };
+
+      expect(fitDurationLine({ ...shiftedIn, durationMinutes: 120, arcSpan: 60 })).toBeUndefined();
+      expect(fitDurationLine({ ...shiftedOut, durationMinutes: 120, arcSpan: 60 })).toBeUndefined();
+    });
   });
 });

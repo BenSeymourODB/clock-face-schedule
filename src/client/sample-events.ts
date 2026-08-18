@@ -8,8 +8,8 @@
  *
  * Chosen to exercise what is hardest to judge from a specification — three-deep overlap, a title
  * too long for its arc, an event short enough to need the minimum-width floor, an event crossing
- * each end of the period, and a floating label washed with a colour the palette itself fails
- * contrast for once filled (⚫, #26/#27).
+ * each end of the period, a floating label washed with a colour the palette itself fails contrast
+ * for once filled (⚫, #26/#27), and a card whose duration line is wider than its title (#35).
  */
 import type { ClockEventInput } from "../shared/clock";
 
@@ -53,6 +53,15 @@ export function sampleEvents(periodStart: Date): ClockEventInput[] {
     // only the *leading* emoji is stripped, so 🪀🎈 stay adjacent inside cleanTitle, and a line of
     // pure emoji gets none of the slack that over-charged plain characters usually provide.
     { id: "h", title: "🟣 🧸 🪀🎈 Free Play", startDate: at(8, 20), endDate: at(9, 25), isAllDay: false, fallbackColor },
+    // Twenty minutes with a four-character title: 10° of arc against a three-character budget, so
+    // it overflows onto a label whose duration line ("20 min", 6 units) is *wider* than its title
+    // (4). Every other card here has a title wider than its duration, so nothing else exercises a
+    // card that has to size itself to the trailing line rather than the text (#35).
+    //
+    // Sited immediately after the conference, so it also stresses #30: the two cards sit 4.36 units
+    // apart vertically, down from 28.7 before both grew a duration line. Nothing overlaps, but the
+    // margin is now thin enough to see, which is the point of having it on screen.
+    { id: "j", title: "🔵 Yoga", startDate: at(10, 40), endDate: at(11, 0), isAllDay: false, fallbackColor },
     // Runs on past the period's end, so the dial must not claim it finishes there.
     { id: "y", title: "🟢 Aftercare", startDate: at(11, 5), endDate: at(13, 30), isAllDay: false, fallbackColor },
   ];
