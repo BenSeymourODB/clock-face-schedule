@@ -12,6 +12,9 @@ export {
   type ClockBox
 } from './clamp-label';
 export {
+  ROLLING_WINDOW_LOOKAHEAD_HOURS,
+  ROLLING_WINDOW_LOOKBEHIND_HOURS,
+  angleForTime,
   calculateArcAngles,
   calculateTrueArcAngles,
   combineTitleWithEmoji,
@@ -23,6 +26,7 @@ export {
   getFetchWindow,
   getPeriodBounds,
   getPeriodStart,
+  getRollingWindow,
   hasEventInProgress,
   parseEventTitle,
   polarToCartesian,

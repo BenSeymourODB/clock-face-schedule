@@ -5,7 +5,12 @@
  * the scaffold survive behind `?check=1` — a smart board still has to be checked for a colour
  * emoji font and a working bridge, and that check has to happen on the device.
  */
-import { type ClockEventInput, getFetchWindow, getPeriodBounds, getPeriodStart } from "../shared/clock";
+import {
+  type ClockEventInput,
+  getFetchWindow,
+  getPeriodBounds,
+  getRollingWindow,
+} from "../shared/clock";
 import { analogClock } from "./render/analog-clock";
 import { sampleEvents } from "./sample-events";
 import { type ScheduleStatus, describeStatus, nextStatus } from "./schedule-status";
@@ -14,13 +19,12 @@ const TICK_INTERVAL_MS = 1_000;
 const POLL_INTERVAL_MS = 5 * 60 * 1_000;
 
 /**
- * Events are fetched for the whole calendar day, not the 12 hours the dial shows — plus enough
- * beyond the current period's own start that a rollover at noon or midnight already has its next
- * period's data cached and needs no refetch. Without that margin the dial would sit empty for up
- * to a poll interval at exactly the moment the day changes over. See `getFetchWindow` (#37): an
- * anchor on the period alone used to miss the whole morning once the period reached noon.
+ * Events are fetched for the dial's rolling window (#25) and the whole calendar day (#37, for
+ * #36's benefit), each widened by this many hours. The margin covers the time between polls: the
+ * rolling window moves continuously, so without it the leading edge would outrun the last fetch
+ * by however long it has been since. See `getFetchWindow`.
  */
-const WINDOW_HOURS = 24;
+const FETCH_MARGIN_HOURS = 1;
 
 /** google.script.run is callback-based; everything downstream wants to await. */
 function callServer<T>(name: string, ...args: unknown[]): Promise<T> {
@@ -41,7 +45,7 @@ function callServer<T>(name: string, ...args: unknown[]): Promise<T> {
 }
 
 function fetchWindow(): Promise<ClockEventInput[]> {
-  const { windowStart, windowEnd } = getFetchWindow(new Date(), WINDOW_HOURS);
+  const { windowStart, windowEnd } = getFetchWindow(new Date(), FETCH_MARGIN_HOURS);
 
   return callServer<ClockEventInput[]>(
     "getEvents",
@@ -76,7 +80,9 @@ function startDisplay(): void {
    * real schedule, and the whole point of the mode is that someone is standing in front of it.
    */
   if (mount instanceof HTMLElement && mount.dataset["demo"] === "1") {
-    clock.setEvents(sampleEvents(getPeriodStart(new Date())));
+    // Anchored to the rolling window's own start, not periodStart, so the fixture lands inside
+    // whatever window is live at load time regardless of the hour — see sample-events.ts.
+    clock.setEvents(sampleEvents(getRollingWindow(new Date()).windowStart));
     setStatusText("Sample events — not a real calendar");
     return;
   }

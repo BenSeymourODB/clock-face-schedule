@@ -3,6 +3,8 @@ import type { ClockEventInput } from "../../shared/clock";
 import { type AnalogClockParams, analogClock } from "./analog-clock";
 
 const SIZE = 600;
+const CX = SIZE / 2;
+const CY = SIZE / 2;
 const OUTER_RADIUS = SIZE / 2 - 8;
 /** Mirrors the radial budget: band 26% of the radius, face gap 4%. */
 const ARC_THICKNESS = OUTER_RADIUS * 0.26;
@@ -14,8 +16,13 @@ const MAX_RINGS = Math.floor(
   (ARC_THICKNESS + RING_GAP) / (ARC_THICKNESS * 0.16 + RING_GAP)
 );
 
-/** Nine in the morning, so the period runs midnight → noon. */
-const MORNING = new Date(2026, 7, 15, 9, 0, 0);
+/**
+ * Four in the morning. The rolling window (#25) is `[time − 3h, time + 8h)`, so this puts the
+ * window at [1:00, 12:00) — chosen so the existing fixture hours below (1 through 10-ish) fall
+ * inside it unchanged, the same way they used to fall inside the old fixed midnight-to-noon
+ * period.
+ */
+const MORNING = new Date(2026, 7, 15, 4, 0, 0);
 const AFTERNOON = new Date(2026, 7, 15, 13, 0, 0);
 
 const LONG_TITLE = "Parent Teacher Conference Planning Committee Meeting Notes";
@@ -26,8 +33,14 @@ function input(
   endHour: number,
   overrides: Partial<ClockEventInput> = {}
 ): ClockEventInput {
-  const stamp = (hour: number) =>
-    new Date(2026, 7, 15, Math.floor(hour), Math.round((hour % 1) * 60)).toISOString();
+  // Via total minutes, not `Math.floor(hour)` + `(hour % 1) * 60` separately — those don't
+  // compose for a negative non-integer hour (both round toward more-negative independently,
+  // silently swapping start and end for something like stamp(-0.5)).
+  const stamp = (hour: number) => {
+    const totalMinutes = Math.round(hour * 60);
+    const wholeHours = Math.floor(totalMinutes / 60);
+    return new Date(2026, 7, 15, wholeHours, totalMinutes - wholeHours * 60).toISOString();
+  };
 
   return {
     id,
@@ -58,6 +71,13 @@ function arcRadii(arc: Element): { outer: number; inner: number } {
 
   return { outer: found[0], inner: found[1] };
 }
+
+describe("input (test helper)", () => {
+  it("orders start before end for a negative non-integer hour", () => {
+    const event = input("x", -1, -0.5);
+    expect(new Date(event.startDate).getTime()).toBeLessThan(new Date(event.endDate).getTime());
+  });
+});
 
 function testIds(nodes: Iterable<Element>): (string | null)[] {
   return [...nodes].map((node) => node.getAttribute("data-testid"));
@@ -113,11 +133,50 @@ describe("analogClock", () => {
     });
   });
 
-  describe("period filtering", () => {
-    it("keeps only events overlapping the current twelve hours", () => {
-      const { element } = build([input("morning", 2, 4), input("afternoon", 14, 16)]);
+  describe("the window track", () => {
+    it("draws it first in the arcs layer, so events paint over it", () => {
+      const { element } = build([input("a", 2, 4)]);
+      const arcsLayer = element.querySelector('[data-testid="event-arcs-layer"]');
 
-      expect(testIds(arcs(element))).toEqual(["event-arc-morning"]);
+      expect(arcsLayer?.firstElementChild?.getAttribute("data-testid")).toBe("window-track");
+    });
+
+    it("spans exactly the current rolling window, in the same angle space as the arcs", () => {
+      // MORNING is 4:00, periodStart is midnight, and the window is [1:00, 12:00) — angles 30°
+      // (1:00 is 60min past midnight) to 360° (12:00 is 720min past midnight) against the
+      // 720-minute period, i.e. angleForTime(1:00, periodStart) and angleForTime(12:00, periodStart).
+      const { element } = build([]);
+      const track = element.querySelector('[data-testid="window-track"]');
+      const d = track?.getAttribute("d") ?? "";
+      const [, startX, startY] = d.match(/^M ([\d.-]+) ([\d.-]+)/) ?? [];
+
+      // The outer path starts 30° clockwise of 12 o'clock and ends back at 12 o'clock (360°).
+      expect(Number(startX)).toBeGreaterThan(CX); // clockwise of 12 o'clock, right of centre
+      expect(Number(startY)).toBeLessThan(CY); // still in the upper half at only 30°
+    });
+
+    it("rebuilds with the window as the clock ticks into a new minute", () => {
+      const clock = build([]);
+      const before = clock.element.querySelector('[data-testid="window-track"]')?.getAttribute("d");
+
+      clock.setTime(new Date(MORNING.getTime() + 70_000));
+      const after = clock.element.querySelector('[data-testid="window-track"]')?.getAttribute("d");
+
+      expect(after).not.toBe(before);
+    });
+  });
+
+  describe("window filtering", () => {
+    it("keeps only events overlapping the rolling window", () => {
+      // MORNING's window is [1:00, 12:00) — "before" ends before it starts, "during" sits
+      // inside, "after" starts once it has ended.
+      const { element } = build([
+        input("before", -1, -0.5),
+        input("during", 2, 4),
+        input("after", 14, 16),
+      ]);
+
+      expect(testIds(arcs(element))).toEqual(["event-arc-during"]);
     });
 
     it("drops all-day events, which have no angles to draw", () => {
@@ -316,28 +375,60 @@ describe("analogClock", () => {
   });
 
   describe("ticking", () => {
-    it("re-points the hands without rebuilding the arcs when nothing is in progress", () => {
+    it("re-points the hands on every tick", () => {
+      const clock = build([], { showSeconds: true });
+      const hand = clock.element.querySelector('[data-testid="second-hand"]');
+      const before = hand?.getAttribute("transform");
+
+      clock.setTime(new Date(MORNING.getTime() + 30_000));
+
+      expect(hand?.getAttribute("transform")).not.toBe(before);
+    });
+
+    it("does not rebuild the arcs for a tick within the same calendar minute", () => {
       // The tick runs every second; rebuilding the tree that often would be 86,400 needless
       // reconstructions a day on a device meant to run untouched for weeks. Both ticks here land
       // after the event's own end, so nothing is draining and nothing should rebuild.
       const clock = build([input("a", 2, 4)]);
       const arc = clock.element.querySelector('path[data-testid="event-arc-a"]');
-      const hand = clock.element.querySelector('[data-testid="minute-hand"]');
-      const before = hand?.getAttribute("transform");
 
-      clock.setTime(new Date(2026, 7, 15, 10, 30, 0));
+      clock.setTime(new Date(MORNING.getTime() + 30_000));
 
       expect(clock.element.querySelector('path[data-testid="event-arc-a"]')).toBe(arc);
-      expect(hand?.getAttribute("transform")).not.toBe(before);
     });
 
-    it("rebuilds the arcs when the period rolls over", () => {
-      const clock = build([input("morning", 2, 4), input("afternoon", 14, 16)]);
-      expect(testIds(arcs(clock.element))).toEqual(["event-arc-morning"]);
+    it("rebuilds the arcs once the rolling window has moved into a new minute", () => {
+      // Unlike the old fixed 12-hour period, which rebuilt only on rollover, the rolling window
+      // (#25) moves continuously — so every calendar minute is a rebuild, whether or not any
+      // event's own state changed.
+      const clock = build([input("a", 2, 4)]);
+      const arc = clock.element.querySelector('path[data-testid="event-arc-a"]');
 
-      clock.setTime(AFTERNOON);
+      clock.setTime(new Date(MORNING.getTime() + 70_000));
 
-      expect(testIds(arcs(clock.element))).toEqual(["event-arc-afternoon"]);
+      expect(clock.element.querySelector('path[data-testid="event-arc-a"]')).not.toBe(arc);
+    });
+
+    it("drops an event once the rolling window has moved past it", () => {
+      // The payoff #25 exists for: an event ages off the band as the window slides forward,
+      // rather than staying drawn until the next twice-daily rollover.
+      const clock = build([input("a", 2, 4)]);
+      expect(testIds(arcs(clock.element))).toEqual(["event-arc-a"]);
+
+      clock.setTime(new Date(2026, 7, 15, 10, 30, 0)); // window becomes [7:30, 18:30)
+
+      expect(testIds(arcs(clock.element))).toEqual([]);
+    });
+
+    it("brings a future event onto the band as the window advances", () => {
+      // The symmetric half of the same payoff: look-ahead is never exhausted the way the fixed
+      // period's was near its own end (the issue's own "15 minutes of future left at 11:45").
+      const clock = build([input("a", 20, 21)]); // outside the initial [1:00, 12:00) window
+      expect(testIds(arcs(clock.element))).toEqual([]);
+
+      clock.setTime(new Date(2026, 7, 15, 13, 30, 0)); // window becomes [10:30, 21:30)
+
+      expect(testIds(arcs(clock.element))).toEqual(["event-arc-a"]);
     });
 
     it("rebuilds every tick while an event drains, then again once it fully elapses", () => {
@@ -358,6 +449,32 @@ describe("analogClock", () => {
       expect(clock.element.querySelector('path[data-arc-part="fill"]')).not.toBe(draining);
 
       clock.setTime(new Date(2026, 7, 15, 10, 15, 0));
+      const after = clock.element.querySelector('path[data-arc-part="fill"]');
+
+      expect(after?.getAttribute("fill-opacity")).toBe("0");
+      expect(clock.element.querySelector('[data-arc-part="separator"]')).toBeNull();
+      expect(clock.element.querySelector('[data-arc-part="outline"]')).not.toBeNull();
+    });
+
+    it("rebuilds the arcs the moment an event finishes, even within the same minute", () => {
+      // Elapsed arcs are drawn hollow (#26), so a tick can no longer assume nothing about an arc
+      // changes between minute-boundary rebuilds — the elapsed check is a backstop alongside the
+      // minute check for exactly this case. Timed to start and end entirely within one calendar
+      // minute, and not yet started at build time, so neither the minute check nor drain's
+      // in-progress check (#28) is what triggers the rebuild — isolating the elapsed check alone.
+      const brief = {
+        startDate: new Date(2026, 7, 15, 10, 0, 10).toISOString(),
+        endDate: new Date(2026, 7, 15, 10, 0, 40).toISOString(),
+      };
+      const clock = build(
+        [input("brief", 9.5, 10, brief)],
+        { time: new Date(2026, 7, 15, 10, 0, 0) }
+      );
+      const before = clock.element.querySelector('path[data-arc-part="fill"]');
+      expect(before?.getAttribute("fill-opacity")).toBe("0.85");
+      expect(clock.element.querySelector('[data-arc-part="halo"]')).toBeNull();
+
+      clock.setTime(new Date(2026, 7, 15, 10, 0, 50)); // same minute, event now elapsed
       const after = clock.element.querySelector('path[data-arc-part="fill"]');
 
       expect(after?.getAttribute("fill-opacity")).toBe("0");

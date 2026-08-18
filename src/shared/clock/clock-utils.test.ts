@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  angleForTime,
   calculateArcAngles,
   calculateTrueArcAngles,
   combineTitleWithEmoji,
@@ -11,6 +12,7 @@ import {
   getFetchWindow,
   getPeriodBounds,
   getPeriodStart,
+  getRollingWindow,
   hasEventInProgress,
   parseEventTitle,
   polarToCartesian,
@@ -179,6 +181,103 @@ describe('getPeriodBounds', () => {
   });
 });
 
+describe('getRollingWindow', () => {
+  it('looks 3 hours behind and 8 ahead by default', () => {
+    const now = new Date(2026, 3, 12, 9, 0, 0);
+    const { windowStart, windowEnd } = getRollingWindow(now);
+    expect(windowStart.getTime()).toBe(now.getTime() - 3 * 60 * 60 * 1000);
+    expect(windowEnd.getTime()).toBe(now.getTime() + 8 * 60 * 60 * 1000);
+  });
+
+  it('accepts explicit look-behind/look-ahead hours', () => {
+    const now = new Date(2026, 3, 12, 9, 0, 0);
+    const { windowStart, windowEnd } = getRollingWindow(now, 1, 2);
+    expect(windowStart.getTime()).toBe(now.getTime() - 1 * 60 * 60 * 1000);
+    expect(windowEnd.getTime()).toBe(now.getTime() + 2 * 60 * 60 * 1000);
+  });
+
+  // The whole point of #25: near the end of the old fixed period there was almost no look-ahead
+  // left on the band. A rolling window keeps a full 8 hours regardless of where "now" falls.
+  it('keeps the full look-ahead right at the old period boundary', () => {
+    const justBeforeMidnight = new Date(2026, 3, 12, 23, 45, 0);
+    const { windowEnd } = getRollingWindow(justBeforeMidnight);
+    expect(windowEnd.getTime() - justBeforeMidnight.getTime()).toBe(8 * 60 * 60 * 1000);
+  });
+
+  it('can look behind into the previous day', () => {
+    const justAfterMidnight = new Date(2026, 3, 12, 0, 30, 0);
+    const { windowStart } = getRollingWindow(justAfterMidnight);
+    expect(windowStart.getDate()).toBe(11);
+    expect(windowStart.getHours()).toBe(21);
+    expect(windowStart.getMinutes()).toBe(30);
+  });
+});
+
+describe('getFetchWindow', () => {
+  // #37: the agenda panel epic (#36) needs the whole calendar day, not just what the dial
+  // renders — so the fetch must cover today's midnight regardless of the rolling window's own
+  // (much shorter) lookbehind.
+  it('covers the whole day even when the rolling lookbehind alone would not reach midnight', () => {
+    const afternoon = new Date(2026, 3, 12, 14, 30, 0);
+    const { windowStart } = getFetchWindow(afternoon, 1);
+    expect(windowStart.getDate()).toBe(12);
+    expect(windowStart.getHours()).toBeLessThanOrEqual(0);
+  });
+
+  // The regression #36 sub-issues would otherwise reintroduce: early enough in the day, the
+  // rolling window's 3-hour lookbehind reaches *before* today's midnight, which a naive
+  // day-start-only anchor would still clip.
+  it('extends earlier than today\'s midnight when the rolling lookbehind reaches into yesterday', () => {
+    const justAfterMidnight = new Date(2026, 3, 12, 0, 30, 0);
+    const { windowStart } = getFetchWindow(justAfterMidnight, 0);
+    const rolling = getRollingWindow(justAfterMidnight);
+    expect(windowStart.getTime()).toBe(rolling.windowStart.getTime());
+    expect(windowStart.getDate()).toBe(11);
+  });
+
+  // The symmetric case at the other end: in the morning, the rolling look-ahead (8h + margin)
+  // falls well short of tonight's midnight, which a rolling-only end would still clip — the same
+  // class of regression #37 fixed for the start, mirrored at the end.
+  it('covers the whole day even when the rolling look-ahead alone would not reach midnight', () => {
+    const morning = new Date(2026, 3, 12, 9, 0, 0);
+    const { windowEnd } = getFetchWindow(morning, 1);
+    const rolling = getRollingWindow(morning);
+    expect(windowEnd.getTime()).toBeGreaterThan(rolling.windowEnd.getTime() + 60 * 60 * 1000);
+    expect(windowEnd.getDate()).toBe(13);
+    expect(windowEnd.getHours()).toBe(0);
+  });
+
+  // Late enough in the evening, the rolling look-ahead reaches *past* tomorrow's midnight, at
+  // which point the margin — not the day boundary — is the binding constraint.
+  it('extends past today\'s midnight when the rolling look-ahead reaches into tomorrow', () => {
+    const evening = new Date(2026, 3, 12, 20, 0, 0);
+    const { windowEnd } = getFetchWindow(evening, 1);
+    const rolling = getRollingWindow(evening);
+    expect(windowEnd.getTime()).toBe(rolling.windowEnd.getTime() + 60 * 60 * 1000);
+    expect(windowEnd.getDate()).toBe(13);
+    expect(windowEnd.getHours()).toBe(5);
+  });
+
+  // Regression guard for #37's original failure, restated for the rolling window: whatever the
+  // margin, the fetched range must still fully contain both what the dial draws and today.
+  it('always contains the rolling window and the whole day', () => {
+    const now = new Date(2026, 3, 12, 14, 30, 0);
+    const { windowStart, windowEnd } = getFetchWindow(now, 1);
+    const rolling = getRollingWindow(now);
+    const dayEnd = new Date(getDayStart(now).getTime() + 24 * 60 * 60 * 1000);
+    expect(windowStart.getTime()).toBeLessThanOrEqual(rolling.windowStart.getTime());
+    expect(windowStart.getTime()).toBeLessThanOrEqual(getDayStart(now).getTime());
+    expect(windowEnd.getTime()).toBeGreaterThanOrEqual(rolling.windowEnd.getTime());
+    expect(windowEnd.getTime()).toBeGreaterThanOrEqual(dayEnd.getTime());
+  });
+
+  it('never starts the window after the fetch time', () => {
+    const time = new Date(2026, 3, 12, 0, 0, 0);
+    const { windowStart } = getFetchWindow(time, 0);
+    expect(windowStart.getTime()).toBeLessThanOrEqual(time.getTime());
+  });
+});
+
 describe('getDayStart', () => {
   it.each([
     [0, 0],
@@ -199,42 +298,25 @@ describe('getDayStart', () => {
   });
 });
 
-describe('getFetchWindow', () => {
-  // Regression case for #37: a naive `[periodStart, periodStart + windowHours)` window anchors
-  // its start to the *period*, not the day, so an afternoon fetch used to omit the whole morning.
-  it('covers the whole morning when fetched from the afternoon', () => {
-    const afternoon = new Date(2026, 3, 12, 14, 30, 0);
-    const { windowStart } = getFetchWindow(afternoon, 24);
-    expect(windowStart.getDate()).toBe(12);
-    expect(windowStart.getHours()).toBe(0);
-    expect(windowStart.getTime()).toBeLessThanOrEqual(afternoon.getTime());
+describe('angleForTime', () => {
+  it('is 0° at periodStart and increases 0.5°/minute', () => {
+    const periodStart = new Date(2026, 3, 12, 0, 0, 0);
+    expect(angleForTime(periodStart, periodStart)).toBe(0);
+    expect(angleForTime(new Date(2026, 3, 12, 1, 0, 0), periodStart)).toBe(30);
+    expect(angleForTime(new Date(2026, 3, 12, 6, 0, 0), periodStart)).toBe(180);
   });
 
-  it('matches the old periodStart-anchored window when fetched from the morning', () => {
-    const morning = new Date(2026, 3, 12, 9, 30, 0);
-    const { windowStart, windowEnd } = getFetchWindow(morning, 24);
-    expect(windowStart.getTime()).toBe(getPeriodStart(morning).getTime());
-    expect(windowEnd.getTime()).toBe(getPeriodStart(morning).getTime() + 24 * 60 * 60 * 1000);
+  it('does not wrap past 360° or below 0°', () => {
+    const periodStart = new Date(2026, 3, 12, 0, 0, 0);
+    expect(angleForTime(new Date(2026, 3, 12, 17, 0, 0), periodStart)).toBe(510);
+    expect(angleForTime(new Date(2026, 3, 11, 21, 0, 0), periodStart)).toBe(-90);
   });
 
-  it('keeps the same forward look-ahead past the period start regardless of the day-start widening', () => {
-    const morning = new Date(2026, 3, 12, 9, 30, 0);
-    const afternoon = new Date(2026, 3, 12, 14, 30, 0);
-    const morningWindow = getFetchWindow(morning, 24);
-    const afternoonWindow = getFetchWindow(afternoon, 24);
-
-    expect(morningWindow.windowEnd.getTime() - getPeriodStart(morning).getTime()).toBe(
-      24 * 60 * 60 * 1000
-    );
-    expect(afternoonWindow.windowEnd.getTime() - getPeriodStart(afternoon).getTime()).toBe(
-      24 * 60 * 60 * 1000
-    );
-  });
-
-  it('never starts the window after the fetch time', () => {
-    const time = new Date(2026, 3, 12, 0, 0, 0);
-    const { windowStart } = getFetchWindow(time, 24);
-    expect(windowStart.getTime()).toBeLessThanOrEqual(time.getTime());
+  it('agrees with the mod-360 hand position for any choice of periodStart', () => {
+    const time = new Date(2026, 3, 12, 17, 0, 0);
+    const fromMidnight = angleForTime(time, new Date(2026, 3, 12, 0, 0, 0));
+    const fromNoon = angleForTime(time, new Date(2026, 3, 12, 12, 0, 0));
+    expect(((fromMidnight % 360) + 360) % 360).toBeCloseTo(((fromNoon % 360) + 360) % 360, 10);
   });
 });
 
