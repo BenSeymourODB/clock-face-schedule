@@ -6,7 +6,14 @@
  * title needed 561 of the viewBox's 600 units, and the only position satisfying that lay across
  * the numerals and the hands.
  */
-import { type FitTextResult, charBudget, normaliseText, packLines, textWidth } from './pack-lines';
+import {
+  type FitTextResult,
+  charBudget,
+  normaliseText,
+  packLines,
+  textWidth,
+  visualWidth
+} from './pack-lines';
 
 /** Line spacing, as a multiple of font size. */
 export const LINE_HEIGHT_RATIO = 1.4;
@@ -39,7 +46,7 @@ export function fitLabelToWidth(
   const budget = charBudget(maxWidth - padding.x * 2, fontSize);
   const fit = packLines(normaliseText(text), budget, maxLines);
 
-  const widest = fit.lines.reduce((longest, line) => Math.max(longest, line.length), 0);
+  const widest = fit.lines.reduce((longest, line) => Math.max(longest, visualWidth(line)), 0);
 
   return {
     ...fit,

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   calculateArcAngles,
   calculateTrueArcAngles,
+  combineTitleWithEmoji,
   describeArc,
   elapsedEventIds,
   eventsToClockEvents,
@@ -95,6 +96,24 @@ describe('parseEventTitle', () => {
   it('strips only the single delimiter space after the emoji', () => {
     const result = parseEventTitle('🔴  Multiple  Spaces', FALLBACK);
     expect(result.cleanTitle).toBe(' Multiple  Spaces');
+  });
+});
+
+describe('combineTitleWithEmoji', () => {
+  it.each([
+    ['puts the emoji ahead of the title', 'Lunch', '🍽️', '🍽️ Lunch'],
+    ['leaves a title with no emoji alone', 'Team Meeting', undefined, 'Team Meeting'],
+    // No trailing separator, which would otherwise reach the arc's aria-label.
+    ['keeps an emoji-only title to just the emoji', '', '🎮', '🎮']
+  ])('%s', (_label, cleanTitle, eventEmoji, expected) => {
+    expect(combineTitleWithEmoji(cleanTitle, eventEmoji)).toBe(expected);
+  });
+
+  it('round-trips what parseEventTitle split, minus the colour dot', () => {
+    // The colour prefix selects the arc colour and must never render; the event's own emoji must.
+    const parsed = parseEventTitle('🟡 🍽️ Lunch', FALLBACK);
+
+    expect(combineTitleWithEmoji(parsed.cleanTitle, parsed.eventEmoji)).toBe('🍽️ Lunch');
   });
 });
 

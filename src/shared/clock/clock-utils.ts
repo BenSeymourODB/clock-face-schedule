@@ -68,6 +68,15 @@ export function parseEventTitle(title: string, fallbackColor: string): ParsedEve
 }
 
 /**
+ * The title exactly as it renders: the event's own emoji inline with the text, matching how it
+ * was authored, rather than stacked separately as a category glyph beside it.
+ */
+export function combineTitleWithEmoji(cleanTitle: string, eventEmoji: string | undefined): string {
+  if (!eventEmoji) return cleanTitle;
+  return cleanTitle ? `${eventEmoji} ${cleanTitle}` : eventEmoji;
+}
+
+/**
  * Start of the 12-hour period containing `time`: midnight for 00:00–11:59,
  * noon for 12:00–23:59.
  */

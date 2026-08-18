@@ -243,6 +243,59 @@ describe("analogClock", () => {
     });
   });
 
+  /**
+   * #23: the emoji renders inline with the title, so it has to travel with the title onto a
+   * floating label rather than being left behind on the arc.
+   */
+  describe("the event emoji follows the title", () => {
+    function labelText(element: SVGSVGElement, id: string): string {
+      return [...element.querySelectorAll(`[data-testid^="floating-label-text-${id}-"]`)]
+        .map((node) => node.textContent ?? "")
+        .join(" ");
+    }
+
+    it("renders the emoji inline on the arc, with no separate glyph", () => {
+      const { element } = build([input("a", 2, 5, { title: "🟢 🎮 Game Time" })]);
+
+      expect(
+        [...element.querySelectorAll('[data-testid="event-title-a"] textPath')]
+          .map((node) => node.textContent)
+          .join(" ")
+      ).toContain("🎮");
+      expect(element.querySelector('[data-testid="event-emoji-a"]')).toBeNull();
+    });
+
+    it("carries the emoji onto the label, and keeps the glyph on the now-empty arc", () => {
+      // The emoji appears twice here on purpose. #23 inlines it to stop it contesting radial room
+      // with a two-line title — but once the title has moved off the dial there is no contest, and
+      // the band would otherwise be an anonymous stripe whose category needs the connector traced
+      // to recover (#29).
+      const { element } = build([input("a", 2, 3, { title: `🔵 📚 ${LONG_TITLE}` })]);
+
+      expect(element.querySelector('[data-testid="floating-label-a"]')).not.toBeNull();
+      expect(labelText(element, "a")).toContain("📚");
+      expect(element.querySelector('[data-testid="event-emoji-a"]')).not.toBeNull();
+    });
+
+    it("never renders the colour-dot prefix, on the arc or the label", () => {
+      const { element } = build([
+        input("fits", 2, 5, { title: "🟢 🎮 Game Time" }),
+        input("overflows", 6, 7, { title: `🔵 📚 ${LONG_TITLE}` }),
+      ]);
+
+      expect(element.textContent).not.toContain("🟢");
+      expect(element.textContent).not.toContain("🔵");
+    });
+
+    it("keeps the standalone glyph on an arc too narrow for any title", () => {
+      // Nothing else on the band names this event, so the glyph is the only category cue left.
+      const { element } = build([input("a", 2, 2.4, { title: "🟠 🍽️ Lunch" })]);
+
+      expect(element.querySelector('[data-testid="event-title-a"]')).toBeNull();
+      expect(element.querySelector('[data-testid="event-emoji-a"]')).not.toBeNull();
+    });
+  });
+
   describe("ticking", () => {
     it("re-points the hands without rebuilding the arcs", () => {
       // The tick runs every second; rebuilding the tree that often would be 86,400 needless

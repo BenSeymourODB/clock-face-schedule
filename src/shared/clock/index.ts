@@ -14,6 +14,7 @@ export {
 export {
   calculateArcAngles,
   calculateTrueArcAngles,
+  combineTitleWithEmoji,
   describeArc,
   elapsedEventIds,
   eventsToClockEvents,
@@ -46,6 +47,7 @@ export {
   normaliseText,
   packLines,
   textWidth,
+  visualWidth,
   type FitTextResult
 } from './pack-lines';
 export { rectEdgeIntersection } from './rect-edge';

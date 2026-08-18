@@ -11,6 +11,7 @@ import {
   type ArcTitleLayout,
   type ClockEvent,
   type FeatherSpan,
+  combineTitleWithEmoji,
   computeArcFeathers,
   computeArcTitleLayout,
   describeArc,
@@ -240,6 +241,7 @@ export function eventArc({
   bandThickness,
 }: EventArcParams): SVGGElement {
   const { id, cleanTitle, color, eventEmoji, startAngle, endAngle } = event;
+  const displayTitle = combineTitleWithEmoji(cleanTitle, eventEmoji);
 
   const arcSpan = endAngle - startAngle;
   const midAngle = (startAngle + endAngle) / 2;
@@ -248,8 +250,7 @@ export function eventArc({
   const group = svg("g", {
     "data-testid": `event-arc-group-${id}`,
     role: "img",
-    // No trailing comma when there is no emoji — a screen reader vocalises it.
-    "aria-label": eventEmoji ? `Event: ${cleanTitle}, ${eventEmoji}` : `Event: ${cleanTitle}`,
+    "aria-label": `Event: ${displayTitle}`,
   });
 
   const defs = svg("defs");
@@ -325,7 +326,15 @@ export function eventArc({
     );
   }
 
-  if (eventEmoji && arcSpan >= EMOJI_MIN_SPAN_DEGREES) {
+  const resolved =
+    layout ?? computeArcTitleLayout({ title: displayTitle, arcSpan, innerRadius, outerRadius });
+  const showTitle = !forceHideTitle && arcSpan >= TITLE_MIN_SPAN_DEGREES;
+  const titleRendersOnArc = showTitle && resolved.fit.lines.length > 0;
+
+  // The emoji is inline with the title wherever the title itself renders. This glyph is only the
+  // fallback cue for when it doesn't — too narrow for any title, or handed off to a floating
+  // label — so nothing else on the arc is announcing the event's category.
+  if (eventEmoji && !titleRendersOnArc && arcSpan >= EMOJI_MIN_SPAN_DEGREES) {
     const position = polarToCartesian(
       cx,
       cy,
@@ -352,11 +361,7 @@ export function eventArc({
     );
   }
 
-  const resolved =
-    layout ?? computeArcTitleLayout({ cleanTitle, arcSpan, innerRadius, outerRadius });
-  const showTitle = !forceHideTitle && arcSpan >= TITLE_MIN_SPAN_DEGREES;
-
-  if (showTitle && resolved.fit.lines.length > 0) {
+  if (titleRendersOnArc) {
     const { titleRadius, titleFontSize, fit } = resolved;
     const lineOffset = titleFontSize * TITLE_LINE_OFFSET_RATIO;
 
