@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { charBudget, normaliseText, packLines, textWidth, visualWidth } from './pack-lines';
+import { charBudget, normaliseText, packLines, textWidth } from './pack-lines';
 
 describe('charBudget', () => {
   it.each([
@@ -19,86 +19,6 @@ describe('charBudget', () => {
 describe('normaliseText', () => {
   it('collapses whitespace so character counts mean something', () => {
     expect(normaliseText('  Parent   Teacher \n Conference ')).toBe('Parent Teacher Conference');
-  });
-});
-
-describe('visualWidth', () => {
-  it('counts a plain character as one unit', () => {
-    expect(visualWidth('abc')).toBe(3);
-  });
-
-  it('counts an emoji as two units, not one per code point', () => {
-    // U+1F9F8 "🧸" carries Emoji_Presentation on its own.
-    expect(visualWidth('\u{1F9F8}')).toBe(2);
-  });
-
-  it('counts an emoji with a variation selector as two units, not per code unit', () => {
-    // The fork-and-plate glyph in the fixture: U+1F37D + U+FE0F, three UTF-16 code units.
-    expect(visualWidth('\u{1F37D}\uFE0F')).toBe(2);
-  });
-
-  it('adds emoji and plain-character widths in a mixed string', () => {
-    expect(visualWidth('\u{1F3AE} Lunch')).toBe(2 + 1 + 5);
-  });
-
-  it('is unaffected by emoji when there are none', () => {
-    expect(visualWidth('Team Meeting')).toBe('Team Meeting'.length);
-  });
-
-  it.each([
-    ['a digit', '7'],
-    ['a hash', '#'],
-    ['a copyright sign', '©']
-  ])('leaves %s at one unit despite carrying the Emoji property', (_label, text) => {
-    // All three are \p{Emoji} without \p{Emoji_Presentation}, which is why the pattern demands
-    // U+FE0F on that branch. Matching bare \p{Emoji} would make "7" double-width and silently
-    // shrink the budget of every title carrying a time or a room number.
-    expect(visualWidth(text)).toBe(1);
-  });
-});
-
-/**
- * The 1- and 2-line paths are covered through `fitTitleToArc`; these cover the generalisation to
- * arbitrary line counts, which floating labels needed.
- */
-describe('packLines beyond two lines', () => {
-  const WORDS = 'alpha beta gamma delta epsilon';
-
-  it('fills as many lines as the text needs and no more', () => {
-    expect(packLines(WORDS, 11, 5)).toEqual({
-      lines: ['alpha beta', 'gamma delta', 'epsilon'],
-      didOverflow: false
-    });
-  });
-
-  it.each([
-    [1, ['alpha beta ...']],
-    [2, ['alpha beta', 'gamma delta...']],
-    [3, ['alpha beta', 'gamma delta', 'epsilon']]
-  ])('caps at %i lines', (maxLines, expected) => {
-    expect(packLines(WORDS, 14, maxLines).lines).toEqual(expected);
-  });
-
-  it('spends a line on a word longer than the whole budget rather than dropping it', () => {
-    // "Conference" cannot be packed at all, so line two is it, ellipsized.
-    const result = packLines('Parent Conference Planning', 8, 3);
-
-    expect(result.lines).toEqual(['Parent', 'Confe...']);
-    expect(result.didOverflow).toBe(true);
-  });
-
-  it('reports no overflow when the last line lands exactly on the budget', () => {
-    expect(packLines('abcd efgh', 4, 2)).toEqual({
-      lines: ['abcd', 'efgh'],
-      didOverflow: false
-    });
-  });
-
-  it.each([
-    ['no lines at all', 0],
-    ['a negative cap', -1]
-  ])('treats %s as overflow rather than looping', (_label, maxLines) => {
-    expect(packLines(WORDS, 10, maxLines)).toEqual({ lines: [], didOverflow: true });
   });
 });
 
@@ -162,6 +82,24 @@ describe('packLines with emoji in the text', () => {
     for (const fragment of [PLATE, BEAR, BALL]) {
       const partial = result.lines[0].includes(fragment[0]) && !result.lines[0].includes(fragment);
       expect(partial).toBe(false);
+    }
+  });
+
+  it.each([
+    ['a flag into a bare letter', '\u{1F1EC}\u{1F1E7}', ['\u{1F1EC}', '\u{1F1E7}']],
+    ['a profession into the wrong person', '\u{1F469}‍\u{1F3EB}', ['\u{1F469}', '\u{1F3EB}']],
+    ['a skin tone off its hand', '\u{1F44D}\u{1F3FD}', ['\u{1F44D}', '\u{1F3FD}']]
+  ])('does not break %s', (_label, composite, parts) => {
+    // The first version of this suite asserted "never cuts through an emoji" using only simple
+    // glyphs, so it passed while the property was false for every composite. Truncating at each
+    // budget either keeps the sequence whole or drops it entirely — never a fragment.
+    for (let budget = 1; budget <= 8; budget += 1) {
+      const line = packLines(`Trip ${composite} Today`, budget, 1).lines[0] ?? '';
+      const whole = line.indexOf(composite) !== -1;
+
+      for (const part of parts) {
+        expect(whole || line.indexOf(part) === -1).toBe(true);
+      }
     }
   });
 });

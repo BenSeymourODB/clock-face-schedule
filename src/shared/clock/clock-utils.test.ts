@@ -115,6 +115,20 @@ describe('combineTitleWithEmoji', () => {
 
     expect(combineTitleWithEmoji(parsed.cleanTitle, parsed.eventEmoji)).toBe('🍽️ Lunch');
   });
+
+  it('round-trips a ZWJ emoji without splitting the sequence', () => {
+    // Found by rendering, not by testing. The splitter took only "👩" and left "‍🏫 Parent…" as the
+    // title, so recombining inserted a space *inside* the sequence and the label drew "👩 ‍🏫" — a
+    // woman, a space, then a stray school. Both ends use one shared pattern now.
+    const teacher = '\u{1F469}‍\u{1F3EB}';
+    const parsed = parseEventTitle(`🔵 ${teacher} Parent Evening`, FALLBACK);
+
+    expect(parsed.eventEmoji).toBe(teacher);
+    expect(parsed.cleanTitle).toBe('Parent Evening');
+    expect(combineTitleWithEmoji(parsed.cleanTitle, parsed.eventEmoji)).toBe(
+      `${teacher} Parent Evening`
+    );
+  });
 });
 
 describe('getPeriodStart', () => {

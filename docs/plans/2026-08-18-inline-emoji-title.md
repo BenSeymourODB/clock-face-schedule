@@ -1,6 +1,6 @@
 # Render the event emoji inline with the title
 
-**Status:** in progress
+**Status:** done
 **Issue:** [#23](https://github.com/BenSeymourODB/clock-face-schedule/issues/23)
 **Docs:** [docs/DESIGN.md](../DESIGN.md); the
 [two-time-scales brainstorm](../brainstorms/2026-08-17-two-time-scales.md) motivates reclaiming
@@ -33,20 +33,54 @@ for the same reason.
 
 ## Where the standalone glyph still earns its place
 
-The separately-drawn radial emoji (`event-emoji-<id>`) isn't retired outright — only for the case
-it was colliding in: a title rendered on the arc. When the title does *not* render on the arc
-(too narrow for one at all, or handed off to a floating label), nothing else occupies that radial
-line, so the standalone glyph stays as the only cue that the arc has a category at all.
+The separately-drawn radial emoji (`event-emoji-<id>`) survives in exactly one case: an arc past
+the 10° emoji floor but short of the 20° title floor, whose title still fits its budget — in
+practice an emoji-only title. There, no title renders on the arc and no label is created either,
+so the glyph is the only thing naming the event.
+
+**Revised during the visual pass.** The first attempt also kept the glyph when a floating label had
+taken the title over, reasoning that the band would otherwise be an anonymous stripe. Rendering
+showed that is a collision: on the fixture's conference event the glyph landed at x∈[91,122]
+y∈[166,188] against a card whose last line spanned x∈[-1,99] y∈[156,173]. The label already
+carries the emoji inline, so the arc copy bought an overlap for no new information. Exactly one
+surface carries the emoji now, and a test asserts that.
+
+## Emoji are grapheme clusters, not code points
+
+Also found by rendering. `parseEventTitle` matched only the first code point of `👩‍🏫`, left
+`‍🏫 Parent…` as the title, and recombining inserted a space *inside* the sequence — the label drew
+`👩 ‍🏫`. The width pattern in `pack-lines.ts` and the prefix pattern in `clock-utils.ts` had drifted,
+so both now come from one definition in `src/shared/clock/emoji.ts`, which consumes whole ZWJ
+sequences, skin-tone modifiers, regional-indicator flags and keycaps.
+
+Measured on the rendered dial: an emoji occupies ~1.30× font size against the 1.20× this models,
+while plain characters occupy ~0.48× against a modelled 0.60×. The text over-estimate dominates, so
+nothing overflows — the widest emoji-bearing line uses 77.1% of its arc, against 88.2% for
+text-only "Assembly".
+
+## Wrapping rules
+
+- An emoji costs **2** width units; a plain character 1.
+- A run of **up to 3** emoji packs as one unbreakable token, so `🧸 🪀 Free Play` keeps the bear and
+  the yo-yo on one line. Past 3 a run may break anywhere — it is a strip of pictures with no
+  syllable to protect.
+- The boundary between an emoji and the following word is an ordinary break opportunity, so a
+  narrow arc may put `🍽️` above `Lunch` rather than overflowing.
+- A truncation never cuts through a sequence: it keeps the whole emoji or drops it.
 
 ## Phases
 
-1. **Text layer** — `pack-lines.ts` (emoji-aware width/truncation), `fit-label.ts` (weighted
-   width), `clock-utils.ts` (`combineTitleWithEmoji`). Unit tests in `pack-lines.test.ts`,
-   `fit-title.test.ts`, `clock-utils.test.ts`.
-2. **Renderer** — `event-arc.ts` (inline title text, standalone glyph gated on whether the title
-   rendered, single aria-label format), `analog-clock.ts` (pass the combined string to the
-   floating label). Update `event-arc.test.ts` for the new visibility rule; delete the
-   collision test for a layout this change removes (arc title + standalone glyph can no longer
-   coexist). Add an integration case in `analog-clock.test.ts` for the floating-label path.
-3. **Visual pass** — build, serve `preview.html`, screenshot the existing two-line-title-with-emoji
-   fixture case (`g`) and a new emoji-carrying overflow case, look for collisions.
+1. **Text layer** — `emoji.ts` (new: the shared sequence pattern, `visualWidth`, `sliceToWidth`,
+   `emojiRunLength`), `pack-lines.ts` (emoji-weighted packing and run merging), `fit-label.ts`
+   (weighted card width), `clock-utils.ts` (`combineTitleWithEmoji`, shared prefix pattern).
+2. **Renderer** — `event-arc.ts` (inline title, glyph gated to the narrow-arc case, single
+   aria-label), `analog-clock.ts` (combined string to the floating label).
+3. **Visual pass** — build, serve `preview.html`, screenshot and measure. This is the phase that
+   found both real defects; neither was visible to a green suite.
+
+## Fixture additions
+
+- `h` "🟣 🧸 🪀 Free Play" at 08:20–09:25 — an emoji run that must wrap as one token. Sited in the
+  clear gap so it does not deepen the existing three-deep cluster.
+- `i` "🟤 ⚽" at 04:02–04:26 — 12°, the only shape that still draws a standalone radial glyph.
+- `f` gains a `👩‍🏫`, making it the overflow-to-label case *and* the ZWJ-sequence case.

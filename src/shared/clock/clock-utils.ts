@@ -2,6 +2,7 @@
  * Geometry and time-window helpers for the analog clock face.
  * Ported from next-digital-wall-calendar's `analog-clock/clock-utils.ts`.
  */
+import { LEADING_EMOJI } from './emoji';
 import type {
   ArcAngles,
   ClampedArcAngles,
@@ -22,9 +23,6 @@ const COLOR_EMOJI_MAP: Record<string, string> = {
   '\u26AA': '#F3F4F6', // ⚪ gray-100
   '\u{1F7E4}': '#92400E' // 🟤 amber-800
 };
-
-const EMOJI_REGEX =
-  /^(\p{Emoji_Presentation}|\p{Emoji}\uFE0F|\p{Emoji_Modifier_Base}\p{Emoji_Modifier}?)/u;
 
 /** Floor on arc width, in degrees — ~15 minutes on a 12-hour dial. */
 const MIN_ARC_DEGREES = 7.5;
@@ -47,7 +45,7 @@ export function parseEventTitle(title: string, fallbackColor: string): ParsedEve
   let eventEmoji: string | undefined;
   let color = fallbackColor;
 
-  const colorMatch = remaining.match(EMOJI_REGEX);
+  const colorMatch = remaining.match(LEADING_EMOJI);
   if (colorMatch) {
     const candidate = colorMatch[0];
     if (COLOR_EMOJI_MAP[candidate]) {
@@ -58,7 +56,7 @@ export function parseEventTitle(title: string, fallbackColor: string): ParsedEve
   }
 
   // A second emoji (or the first, when no colour dot matched) is the event's own.
-  const eventMatch = remaining.match(EMOJI_REGEX);
+  const eventMatch = remaining.match(LEADING_EMOJI);
   if (eventMatch) {
     eventEmoji = eventMatch[0];
     remaining = remaining.slice(eventEmoji.length).replace(/^ /, '');

@@ -31,8 +31,14 @@ export function sampleEvents(periodStart: Date): ClockEventInput[] {
     { id: "x", title: "⚫ Assembly", startDate: at(3, 15), endDate: at(4, 0), isAllDay: false, fallbackColor },
     // Ten minutes, held open by the minimum-span floor.
     { id: "e", title: "📚 Reading", startDate: at(8, 0), endDate: at(8, 10), isAllDay: false, fallbackColor },
-    // Long enough to be promoted to a floating label.
-    { id: "f", title: "🔵 Parent Teacher Conference Planning Committee", startDate: at(9, 30), endDate: at(10, 40), isAllDay: false, fallbackColor },
+    // 24 minutes is 12°: past the emoji floor, short of the title floor, and its title is the emoji
+    // alone — the one shape that still draws a standalone radial glyph rather than inlining it.
+    { id: "i", title: "🟤 ⚽", startDate: at(4, 2), endDate: at(4, 26), isAllDay: false, fallbackColor },
+    // Long enough to be promoted to a floating label, and carrying an emoji while it goes — the
+    // arc keeps a standalone glyph, so this is where to judge whether that reads as a useful cue
+    // or as the same emoji twice. Its 👩‍🏫 is also a ZWJ sequence: one glyph, several code points,
+    // which the width heuristic must not count as two.
+    { id: "f", title: "🔵 👩‍🏫 Parent Teacher Conference Planning Committee", startDate: at(9, 30), endDate: at(10, 40), isAllDay: false, fallbackColor },
     // Title wraps to two lines *and* carries an emoji — inline, so the wrap has to place the
     // glyph as part of the text rather than on its own radial line.
     { id: "g", title: "🟠 🎂 Reading and Snacks", startDate: at(6, 40), endDate: at(7, 55), isAllDay: false, fallbackColor },

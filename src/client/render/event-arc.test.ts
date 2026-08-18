@@ -126,7 +126,10 @@ describe("eventArc", () => {
       expect(group.querySelector('[data-testid="event-title-e1"]') !== null).toBe(expected);
     });
 
-    it("suppresses only the title when the label has taken it over", () => {
+    it("takes the emoji with the title when the label has taken it over", () => {
+      // The glyph used to stay behind here. It now goes with the text, because the label renders
+      // the emoji inline and a glyph left on the arc collides with the card — measured on the
+      // fixture's conference event as an overlap with the card's last line of text.
       const group = eventArc({
         event: makeEvent({ eventEmoji: "🎮" }),
         cx: CX,
@@ -137,25 +140,40 @@ describe("eventArc", () => {
       });
 
       expect(group.querySelector('[data-testid="event-title-e1"]')).toBeNull();
+      expect(group.querySelector('[data-testid="event-emoji-e1"]')).toBeNull();
+    });
+
+    it("keeps the glyph on an arc too narrow for a title, where nothing else names the event", () => {
+      // Between the emoji floor and the title floor there is no title to carry the emoji inline,
+      // and no label either, so the standalone glyph is the only cue the arc has a category.
+      const group = spanning(15, { eventEmoji: "🎮" });
+
+      expect(group.querySelector('[data-testid="event-title-e1"]')).toBeNull();
       expect(group.querySelector('[data-testid="event-emoji-e1"]')).not.toBeNull();
     });
   });
 
   describe("emoji placement", () => {
+    // 15° spans, so each arc is under the title floor and the glyph renders standalone. A wider
+    // arc would carry the emoji inline in its title instead, and there would be no glyph to place.
+    const NARROW = 7.5;
+
     it.each([
       // Above the horizontal, the glyph already reads upright and is left alone.
-      ["one-thirty", 30, 60, 45],
-      ["eleven o'clock", 300, 360, 330],
+      ["one-thirty", 45, 45],
+      ["eleven o'clock", 330, 330],
       // Below it, an un-rotated glyph would be upside down, so it is turned a half-turn.
-      ["four-thirty", 120, 150, 315],
+      ["four-thirty", 135, 315],
       // Angles are never normalised, so the lower half can exceed a full turn. Harmless —
       // SVG takes any rotation — but it is why these read 360 and 390 rather than 0 and 30.
-      ["six o'clock", 150, 210, 360],
-      ["seven o'clock", 180, 240, 390],
-    ])("rotates the %s glyph to %i°", (_label, startAngle, endAngle, expected) => {
-      // Forced to the standalone path: every span here is wide enough for the default title,
-      // which would otherwise carry the emoji inline instead of rendering it as its own glyph.
-      const group = render({ startAngle, endAngle, eventEmoji: "🎮" }, true);
+      ["six o'clock", 180, 360],
+      ["seven o'clock", 210, 390],
+    ])("rotates the %s glyph upright", (_label, midAngle, expected) => {
+      const group = render({
+        startAngle: midAngle - NARROW,
+        endAngle: midAngle + NARROW,
+        eventEmoji: "🎮",
+      });
 
       expect(
         group.querySelector('[data-testid="event-emoji-e1"]')?.getAttribute("transform")

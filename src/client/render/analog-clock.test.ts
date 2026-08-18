@@ -265,16 +265,32 @@ describe("analogClock", () => {
       expect(element.querySelector('[data-testid="event-emoji-a"]')).toBeNull();
     });
 
-    it("carries the emoji onto the label, and keeps the glyph on the now-empty arc", () => {
-      // The emoji appears twice here on purpose. #23 inlines it to stop it contesting radial room
-      // with a two-line title — but once the title has moved off the dial there is no contest, and
-      // the band would otherwise be an anonymous stripe whose category needs the connector traced
-      // to recover (#29).
+    it("moves the emoji onto the label rather than leaving it on the arc", () => {
+      // Rendering the fixture settled this: a glyph left on the arc overlapped the label's own
+      // text, and the label already carries the emoji inline, so the arc copy was a collision
+      // bought for nothing.
       const { element } = build([input("a", 2, 3, { title: `🔵 📚 ${LONG_TITLE}` })]);
 
       expect(element.querySelector('[data-testid="floating-label-a"]')).not.toBeNull();
       expect(labelText(element, "a")).toContain("📚");
-      expect(element.querySelector('[data-testid="event-emoji-a"]')).not.toBeNull();
+      expect(element.querySelector('[data-testid="event-emoji-a"]')).toBeNull();
+    });
+
+    it("does not let a label's card and an arc glyph both claim the same event", () => {
+      // The guard the collision needed: exactly one surface carries the emoji, whichever it is.
+      const { element } = build([
+        input("labelled", 2, 3, { title: `🔵 📚 ${LONG_TITLE}` }),
+        input("inline", 5, 8, { title: "🟢 🎮 Game Time" }),
+        input("narrow", 10, 10.4, { title: "🟠 🍽️ Lunch" }),
+      ]);
+
+      for (const id of ["labelled", "inline", "narrow"]) {
+        const onArc = element.querySelector(`[data-testid="event-title-${id}"]`) !== null;
+        const glyph = element.querySelector(`[data-testid="event-emoji-${id}"]`) !== null;
+        const label = element.querySelector(`[data-testid="floating-label-${id}"]`) !== null;
+
+        expect([onArc, glyph, label].filter(Boolean)).toHaveLength(1);
+      }
     });
 
     it("never renders the colour-dot prefix, on the arc or the label", () => {
@@ -288,10 +304,13 @@ describe("analogClock", () => {
     });
 
     it("keeps the standalone glyph on an arc too narrow for any title", () => {
-      // Nothing else on the band names this event, so the glyph is the only category cue left.
-      const { element } = build([input("a", 2, 2.4, { title: "🟠 🍽️ Lunch" })]);
+      // 24 minutes is 12°: past the emoji floor, short of the title floor. The title here is the
+      // emoji alone, which fits the 4-unit budget at that span and so is not promoted to a label —
+      // leaving the glyph as the only thing naming the event.
+      const { element } = build([input("a", 2, 2.4, { title: "🟠 🍽️" })]);
 
       expect(element.querySelector('[data-testid="event-title-a"]')).toBeNull();
+      expect(element.querySelector('[data-testid="floating-label-a"]')).toBeNull();
       expect(element.querySelector('[data-testid="event-emoji-a"]')).not.toBeNull();
     });
   });

@@ -6,14 +6,8 @@
  * title needed 561 of the viewBox's 600 units, and the only position satisfying that lay across
  * the numerals and the hands.
  */
-import {
-  type FitTextResult,
-  charBudget,
-  normaliseText,
-  packLines,
-  textWidth,
-  visualWidth
-} from './pack-lines';
+import { visualWidth } from './emoji';
+import { type FitTextResult, charBudget, normaliseText, packLines, textWidth } from './pack-lines';
 
 /** Line spacing, as a multiple of font size. */
 export const LINE_HEIGHT_RATIO = 1.4;

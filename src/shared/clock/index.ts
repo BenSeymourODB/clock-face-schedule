@@ -27,6 +27,16 @@ export {
 } from './clock-utils';
 export { readableTextColor, relativeLuminance } from './contrast';
 export {
+  EMOJI_SEQUENCE,
+  EMOJI_WIDTH_UNITS,
+  LEADING_EMOJI,
+  emojiRunLength,
+  sliceToWidth,
+  toGlyphs,
+  visualWidth,
+  type Glyph
+} from './emoji';
+export {
   FEATHER_DEGREES,
   FEATHER_MAX_SPAN_RATIO,
   computeArcFeathers,
@@ -47,7 +57,6 @@ export {
   normaliseText,
   packLines,
   textWidth,
-  visualWidth,
   type FitTextResult
 } from './pack-lines';
 export { rectEdgeIntersection } from './rect-edge';

@@ -10,6 +10,7 @@
  * `fontSize × CHAR_WIDTH_RATIO` each, with an emoji counting double. Crude, but it runs at build
  * time and in a plain node test.
  */
+import { emojiRunLength, sliceToWidth, visualWidth } from './emoji';
 
 /** Rough advance width per character, as a fraction of font size. */
 export const CHAR_WIDTH_RATIO = 0.6;
@@ -27,9 +28,6 @@ export interface FitTextResult {
   didOverflow: boolean;
 }
 
-/** An emoji renders roughly double the advance width of a plain character. */
-const EMOJI_WIDTH_UNITS = 2;
-
 /**
  * Emoji that stay on one line together.
  *
@@ -38,39 +36,6 @@ const EMOJI_WIDTH_UNITS = 2;
  * to protect, so it may break anywhere.
  */
 const MAX_UNBROKEN_EMOJI = 3;
-
-interface Glyph {
-  text: string;
-  /** 1 for a plain character, `EMOJI_WIDTH_UNITS` for a whole emoji — never split mid-sequence. */
-  width: number;
-}
-
-/**
- * Split `text` into plain characters and whole emoji glyphs, each carrying its own width.
- *
- * The pattern is unanchored, unlike the one in `clock-utils.ts` — that inspects only a leading
- * prefix, where this has to find emoji anywhere now that they render inline with the title.
- */
-function toGlyphs(text: string): Glyph[] {
-  const emoji = /\p{Emoji_Presentation}|\p{Emoji}\uFE0F|\p{Emoji_Modifier_Base}\p{Emoji_Modifier}?/gu;
-  const glyphs: Glyph[] = [];
-  let cursor = 0;
-  let match: RegExpExecArray | null;
-
-  while ((match = emoji.exec(text)) !== null) {
-    for (const char of text.slice(cursor, match.index)) glyphs.push({ text: char, width: 1 });
-    glyphs.push({ text: match[0], width: EMOJI_WIDTH_UNITS });
-    cursor = match.index + match[0].length;
-  }
-  for (const char of text.slice(cursor)) glyphs.push({ text: char, width: 1 });
-
-  return glyphs;
-}
-
-/** Width of `text` in the units `charBudget` counts — 1 per character, 2 per emoji. */
-export function visualWidth(text: string): number {
-  return toGlyphs(text).reduce((total, glyph) => total + glyph.width, 0);
-}
 
 /**
  * Whole characters that fit in `width`. Floors to a whole character so ascenders and descenders
@@ -84,20 +49,6 @@ export function charBudget(width: number, fontSize: number): number {
 /** Width `text` will occupy at `fontSize`, by the same heuristic `charBudget` inverts. */
 export function textWidth(text: string, fontSize: number): number {
   return visualWidth(text) * fontSize * CHAR_WIDTH_RATIO;
-}
-
-/** `text` cut to at most `maxWidth`, never through the middle of an emoji. */
-function sliceToWidth(text: string, maxWidth: number): string {
-  if (maxWidth <= 0) return '';
-
-  let width = 0;
-  let result = '';
-  for (const glyph of toGlyphs(text)) {
-    if (width + glyph.width > maxWidth) break;
-    width += glyph.width;
-    result += glyph.text;
-  }
-  return result;
 }
 
 /** Truncate to `budget`, appending an ellipsis. Returns `text` unchanged if it fits. */
@@ -149,18 +100,6 @@ function packLine(
 /** Collapse runs of whitespace so the character counts mean something. */
 export function normaliseText(text: string): string {
   return text.trim().replace(/\s+/g, ' ');
-}
-
-/**
- * How many emoji `word` holds, or 0 if it carries any text at all.
- *
- * Spaces are discounted so that a run this function has already merged still reads as pure
- * emoji — counting the joining space as text capped every run at two rather than three.
- */
-function emojiRunLength(word: string): number {
-  const glyphs = toGlyphs(word).filter((glyph) => glyph.text !== ' ');
-  if (glyphs.length === 0) return 0;
-  return glyphs.every((glyph) => glyph.width === EMOJI_WIDTH_UNITS) ? glyphs.length : 0;
 }
 
 /**

@@ -331,10 +331,16 @@ export function eventArc({
   const showTitle = !forceHideTitle && arcSpan >= TITLE_MIN_SPAN_DEGREES;
   const titleRendersOnArc = showTitle && resolved.fit.lines.length > 0;
 
-  // The emoji is inline with the title wherever the title itself renders. This glyph is only the
-  // fallback cue for when it doesn't — too narrow for any title, or handed off to a floating
-  // label — so nothing else on the arc is announcing the event's category.
-  if (eventEmoji && !titleRendersOnArc && arcSpan >= EMOJI_MIN_SPAN_DEGREES) {
+  // The emoji is inline with the title wherever the title renders — on the arc, or on the floating
+  // label that took it over. This glyph is the fallback for the one case neither covers: an arc too
+  // narrow to carry a title at all, where nothing else would say what the event is.
+  //
+  // Drawing it alongside a floating label instead collides with it. Measured on the fixture's
+  // conference event, the glyph landed at x∈[91,122] y∈[166,188] against a card whose last line
+  // spanned x∈[-1,99] y∈[156,173] — overlapping text, for a cue the label already carries inline.
+  const showStandaloneGlyph = !forceHideTitle && !titleRendersOnArc;
+
+  if (eventEmoji && showStandaloneGlyph && arcSpan >= EMOJI_MIN_SPAN_DEGREES) {
     const position = polarToCartesian(
       cx,
       cy,
