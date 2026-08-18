@@ -14,6 +14,7 @@ import {
   type OccludedSpan,
   adjustForContrast,
   combineTitleWithEmoji,
+  compositeOver,
   computeArcFeathers,
   computeArcTitleLayout,
   computeDrainFraction,
@@ -35,8 +36,39 @@ const FONT_STACK = "system-ui, -apple-system, sans-serif";
  * The dial's own background, as a hex `contrast.ts` can measure against — the value `--card` holds
  * in `Styles.html`, duplicated here because the renderer knows only the token name (ADR 0007).
  * Keep the two in sync; `Styles.html` carries a comment pointing back.
+ *
+ * Note this is the *face circle's* fill, and the arc band sits outside it, over `--page`. The
+ * elapsed outline below is measured against this one anyway, as #26/#27 wrote it: the real ground is
+ * darker, so an outline adjusted against `--card` over-clears rather than under-clears. Tracked
+ * separately rather than changed here, since correcting it moves every elapsed arc's colour.
  */
 const DIAL_BACKGROUND = "#16181d";
+
+/**
+ * What is actually behind the arc band: `--page`, not `--card`.
+ *
+ * The band is drawn outside the face circle (`analog-clock.ts` insets the face by
+ * `FACE_GAP_RATIO`), so this is the ground a drained arc exposes and the ground its fill composites
+ * over. Sampled off the rendered preview at band radius to confirm it, rather than inferred:
+ * `#0c0e12` both where no arc is drawn and inside a draining arc's spent side.
+ *
+ * The difference is not cosmetic — black text measures 1.09:1 here against 1.18:1 on `--card`, and
+ * every drain-seam split lands 0.03–0.10 of the ramp away if the wrong one is used.
+ */
+const BAND_BACKGROUND = "#0c0e12";
+
+/**
+ * The hex behind `var(--card-foreground)`, for the same reason `BAND_BACKGROUND` is spelled out: a
+ * title copy has to be *measured* against the ground it lands on, and the token is the only thing
+ * the renderer would otherwise know. Keep in sync with `Styles.html`, which pairs it with `--card`.
+ *
+ * Not pure white, which is why it has to be measured rather than assumed — it is 17.54:1 on the band
+ * against `#ffffff`'s 19.32:1, and on a mid-luminance fill that gap is the whole decision.
+ */
+const BAND_FOREGROUND = "#f2f4f8";
+
+/** The other candidate a title copy can take, and the one `readableTextColor` picks for most fills. */
+const BLACK_TEXT = "#000000";
 
 /**
  * Contrast floor for an elapsed outline's own colour, against the dial (#27).
@@ -46,15 +78,6 @@ const DIAL_BACKGROUND = "#16181d";
  * for text rather than the 3:1 graphical-object floor, because this dial is read across a room.
  */
 const OUTLINE_MIN_CONTRAST = 4.5;
-
-/**
- * Contrast floor for a title against whichever ground it lands on.
- *
- * The same 4.5 as `OUTLINE_MIN_CONTRAST` and for the same reason — AA for text, on a dial read
- * across a room — but a separate decision: this one governs which *ground* a title copy may sit on,
- * not how an event colour is adjusted.
- */
-const TITLE_MIN_CONTRAST = 4.5;
 
 /** Below this span there is not enough arc to render an emoji legibly. */
 const EMOJI_MIN_SPAN_DEGREES = 10;
@@ -505,44 +528,53 @@ export function eventArc({
      * `--card-foreground` is 16:1 on `--card`. Computing a ratio there would need the token's hex,
      * which this does not have; the event colour would reintroduce the very failures #27 is about.
      *
-     * A draining arc can have *both* grounds under one title, and where the live colour is black no
-     * single copy serves them: black measures 1.18:1 on the bare dial the drained side exposes.
-     * So each side gets its own copy, masked to its own ground — the same glyphs at the same
-     * coordinates, so a letter on the split changes colour rather than doubling. Only ⚫ and 🟤 take
-     * a white title, and white reads on the fill (15.21:1, 8.35:1) and the dial (17.76:1) alike, so
-     * those keep the single unmasked copy the arc drew a tick earlier, before it started draining.
+     * A draining arc can have *both* grounds under one title, and mostly no single copy serves them:
+     * black measures 1.09:1 on the bare band a drained side exposes, and `--card-foreground` measures
+     * 2.35:1 on a filled 🟡. So each ground gets its own copy, masked to itself — the same glyphs at
+     * the same coordinates, so a letter on the split changes colour rather than doubling.
+     *
+     * Which colour each copy takes is *measured against the ground that copy lands on*, from the two
+     * the theme offers. Deriving it from the authored hex instead — as the live case must, having no
+     * composite to measure — picks black for seven of the nine palette colours, and for two of those
+     * black is the worse choice once composited over the band:
+     *
+     * | on its own fill | black | `--card-foreground` |
+     * | --- | --- | --- |
+     * | 🟡 🟢 🟠 ⚪ 🔵 | 8.11, 6.93, 5.66, 13.85, 4.46 | 2.35, 2.75, 3.37, 1.38, 4.28 |
+     * | 🔴 🟣 | 4.31, 4.14 | **4.43, 4.60** |
+     * | ⚫ 🟤 | 1.36, 2.48 | **14.04, 7.69** |
+     *
+     * So 🔴 and 🟣 join ⚫ and 🟤 in needing no split at all: one unmasked copy in the colour that
+     * reads on both grounds. Their titles do change colour at the moment the event starts draining —
+     * from the live case's black to the light token — which is the same colour they will keep once
+     * elapsed, and worth 0.12 and 0.46 of a contrast ratio on the half that is still filled.
      *
      * The two masks are the drain split *without* the seam ramp and *without* the window feathers:
      *
      * - **No ramp.** Inside the ramp both copies paint at partial alpha and blend toward mid-grey;
      *   measured on the fixture, a glyph there fell to 1.4:1 against its own ground. Hard-edged,
      *   each half is painted at full strength for the ground it lands on.
-     * - **Split at the flip, not at the boundary.** The fill ramps in over `depth` degrees, so text
-     *   coloured for the fill lands on bare dial if it switches at the boundary — 1.18:1, measured.
-     *   `computeDrainTextSplit` moves the seam to where the two colours tie: 4.59–4.61:1 at worst
-     *   across the whole ramp, against 2.50:1 for its midpoint.
+     * - **Split where the colours cross, not at the seam's midpoint.** `computeDrainTextSplit` puts
+     *   it at `textFlipCoverage`: 4.37:1 at worst across the whole ramp, against 2.35:1 for either
+     *   colour used alone. That is the max-min, not a pass — a seam cannot clear AA with this pair,
+     *   and the pair is the theme's (ADR 0007).
      * - **No feathers.** A title at a window edge is deliberately left unmasked (#22) so the name
      *   stays readable where the band does not; a draining arc must not quietly reverse that.
      */
-    const liveTextColor = readableTextColor(color);
-    // Seven of the nine palette colours take a black title — `readableTextColor` measures the
-    // authored hex, not the composite — and black measures 1.18:1 on the bare dial. A white one
-    // (⚫, 🟤) already reads on both grounds, so only a black title needs the split.
-    const titleNeedsSplit =
-      (contrastRatio(liveTextColor, DIAL_BACKGROUND) ?? 0) < TITLE_MIN_CONTRAST;
+    const drainedFill = compositeOver(BAND_BACKGROUND, color, ARC_FILL_OPACITY);
+    const onFill = (text: string) => contrastRatio(text, drainedFill ?? color) ?? 0;
+    const splitCoverage =
+      drain && onFill(BLACK_TEXT) > onFill(BAND_FOREGROUND)
+        ? textFlipCoverage(BAND_BACKGROUND, color, ARC_FILL_OPACITY, BAND_FOREGROUND, BLACK_TEXT)
+        : 1;
     const textSplit =
-      drain && titleNeedsSplit
-        ? computeDrainTextSplit(
-            drain,
-            textFlipCoverage(DIAL_BACKGROUND, color, ARC_FILL_OPACITY)
-          )
-        : undefined;
+      drain && splitCoverage < 1 ? computeDrainTextSplit(drain, splitCoverage) : undefined;
 
     const titleLayers = textSplit
       ? [
           {
             name: "live",
-            fill: readableTextColor(color),
+            fill: BLACK_TEXT,
             mask: buildFadeMask(`arc-title-live-${id}`, [], geometry, [textSplit.live]),
           },
           {
@@ -553,8 +585,8 @@ export function eventArc({
         ]
       : [
           {
-            name: isElapsed ? "spent" : "live",
-            fill: isElapsed ? "var(--card-foreground)" : readableTextColor(color),
+            name: isElapsed || drain ? "spent" : "live",
+            fill: isElapsed || drain ? "var(--card-foreground)" : readableTextColor(color),
             mask: undefined,
           },
         ];

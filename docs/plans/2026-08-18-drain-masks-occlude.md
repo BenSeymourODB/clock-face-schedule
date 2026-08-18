@@ -51,12 +51,13 @@ own right, and fixing it is the prerequisite for looking at anything here.
 
 | field | region | on which mask |
 | --- | --- | --- |
-| `fillOccluded` | boundary → `startAngle` (the spent side) | fill + live separator |
-| `spentOccluded` | boundary → `endAngle` (the remaining side) | elapsed outline |
+| `fillOccluded` | ramp's opaque end → `startAngle` (the spent side) | fill + live separator |
+| `spentOccluded` | ramp's opaque end → `endAngle` (the remaining side) | elapsed outline |
 
-Anchored at the boundary in `fromAngle`, matching `FeatherSpan`'s convention, so both region kinds
-pad away from the boundary in the same direction the existing wedge code already computes. A new
-`OccludedSpan` type rather than reusing `FeatherSpan`, whose contract is a *fade*.
+Anchored at the ramp's own opaque end in `fromAngle`, matching `FeatherSpan`'s convention that
+`fromAngle` is the hidden end, so both region kinds pad away from the seam in the same direction the
+existing wedge code already computes. A new `OccludedSpan` type rather than reusing `FeatherSpan`,
+whose contract is a *fade*. See §3 for why that end is not the boundary itself.
 
 ### 2. `src/client/render/event-arc.ts` — paint solid wedges as well as ramps
 
@@ -66,46 +67,82 @@ properties it must keep:
 - **A wedge, not the box.** `pad` spread on a full-box gradient reaches the far side of an arc that
   curves back past 180°; the same is true of a full-box rect. Occlusions are drawn with `describeArc`
   at the padded radii, exactly as the ramp wedges are.
-- **The solid stops at the boundary.** The ramp already pads `pad` degrees *past* the boundary onto
-  the occluded side, so the stroke is covered there; a solid region overrunning the boundary would
-  blacken the first fraction of a degree the ramp is supposed to own.
+- **The solid stops where its ramp starts.** The ramp already pads `pad` degrees *past* its own
+  opaque end, so the stroke is covered there; a solid region overrunning it would blacken the half of
+  the ramp on its own side and put the crisp edge back, half a ramp from `now`.
 - **Feathers compose.** A draining arc can also be window-clamped, so occlusions are added to the
   same mask as `feathersToSpans`' entries rather than replacing them. The composition is meaningful
   in both directions: a `continuesAfter` feather still shapes the fill's remaining side, and a
   `continuesBefore` feather still shapes the outline's spent side.
 
-### 3. The title has to survive the fill it was sitting on
+### 3. The seam has to sit on `now`
 
-Draining the fill for the first time changes what a title sits on, and this is not cosmetic.
-`readableTextColor` measures the **authored hex**, not the composite, so it picks **black** for seven
-of the nine palette colours — everything except ⚫ and 🟤 — and black measures **1.18:1** on the bare
-dial. Any title over a genuinely drained portion of one of those arcs is invisible. (An earlier draft
-of this plan said four colours; that measured the composited fill rather than the value the code
-actually passes.)
+Anchoring each ramp *at* the boundary — as #28 wrote it, when nothing was hidden and so nothing
+depended on where the fill began — puts the fill's arrival after `now` and the outline's before it,
+which means **at `now` neither is at any strength**. Rendered and measured on a
+`FEATHER_DEGREES`-capped ramp: 50% fill 5.0° past the boundary, full fill 10° past it — **10 and 20
+minutes late on a 12-hour dial** — with a dead band between where the arc states neither "spent" nor
+"left". For a dial whose whole purpose is sparing the reader clock arithmetic, a seam that reads ten
+minutes late is not a rounding error.
 
-So a draining arc with a black title draws it twice, once per side, each copy masked to its own
-ground: `readableTextColor(color)` on the filled side, `var(--card-foreground)` on the drained one.
-⚫ and 🟤 keep the single unmasked copy — white reads at 15.21:1 and 8.35:1 on their fills and
-17.76:1 on the dial, so there is nothing to split.
+Both ramps now straddle the boundary, so they cross at half strength exactly on `now`. Measured on the
+fixture after the change, fill coverage across the seam: `0.00` at 126.25°, **`0.49` at the boundary**,
+`1.00` at 128.75°. The ramp is the same width as before, moved. Each occlusion therefore stops at its
+own ramp's opaque end rather than at the boundary — a solid reaching the boundary would paint over the
+half of the ramp on its own side and put the crisp edge back, half a ramp from `now`.
 
-Two things about those masks were found by rendering, not reasoning, and each cost a measurement:
+### 4. The title has to survive the fill it was sitting on
+
+Draining the fill for the first time gives one title two grounds, and this is not cosmetic. Black
+measures **1.09:1** on the band a drained side exposes; `--card-foreground` measures **2.35:1** on a
+filled 🟡. So a title that spans the seam draws once per side, each copy masked to its own ground —
+same glyphs, same coordinates, so a letter at the split changes colour rather than doubling.
+
+**Which colour each copy takes is measured against the ground that copy lands on**, from the two the
+theme offers. Deriving it from the authored hex — as the live case must, having no composite to
+measure — is wrong for two colours:
+
+| composited over the band | black | `--card-foreground` | needs a split? |
+| --- | --- | --- | --- |
+| 🟡 🟢 🟠 ⚪ 🔵 | 8.11, 6.93, 5.66, 13.85, 4.46 | 2.35, 2.75, 3.37, 1.38, 4.28 | yes |
+| 🔴 🟣 | 4.31, 4.14 | **4.43, 4.60** | no — one light copy |
+| ⚫ 🟤 | 1.36, 2.48 | **14.04, 7.69** | no — one light copy |
+
+🔴 and 🟣 change their title colour at the moment the event starts draining, from the live case's black
+to the light token. That is the colour they keep once elapsed, and it is worth 0.12 and 0.46 of a
+contrast ratio on the half still filled.
+
+Where the split goes was decided by rendering and measuring, and cost three attempts:
 
 | Variant | Worst glyph contrast across the seam |
 | --- | --- |
 | Cross-faded by the arc's own ramped masks | **1.4:1** — both copies at partial alpha, blending to mid-grey |
-| Hard-edged at the boundary | **1.18:1** — the fill has not arrived at the boundary, so black lands on bare dial |
-| Hard-edged at `textFlipCoverage` | **4.61:1** predicted, **4.65:1** measured on the fixture |
+| Hard-edged at the boundary | **1.09:1** — the fill has not arrived there |
+| Hard-edged at the black-vs-**pure-white** tie | **4.18:1** — ties the wrong pair; the renderer paints a token, not white |
+| Hard-edged at the painted pair's own tie | **4.37:1** computed, 5.39:1 at the nearest glyph on the fixture |
 
-`textFlipCoverage` (new, in `contrast.ts`) returns the coverage at which the two candidate text
-colours are equally legible on the part-drained blend; `computeDrainTextSplit` places the hard edge
-there. It is the max-min split by construction, and for the three colours where black never beats
-white even at full fill (🔴 🔵 🟣) it returns 1, confining black to the fully-filled remainder.
+`textFlipCoverage` therefore takes both candidate colours rather than deriving them, and
+`computeDrainTextSplit` places a hard edge at the coverage it returns. **4.37:1 is the max-min, not a
+pass**: the tie *is* the best available, so no split clears AA with this pair, and the pair is the
+theme's (ADR 0007). Stated rather than papered over — the alternative would be hard-coding `#ffffff`
+in place of a token, which buys 0.2 of a ratio and breaks the indirection a light theme needs.
 
-The text masks also carry **no window feather**: a title at a window edge is deliberately left
-unmasked (#22) so the name stays readable where the band does not, and draining must not quietly
-reverse that.
+The text masks also carry **no window feather**: a title at a window edge is deliberately left unmasked
+(#22) so the name stays readable where the band does not, and draining must not quietly reverse that.
 
-### 4. `src/client/sample-events.ts` — one event that straddles `now`
+### 4b. `DIAL_BACKGROUND` was never the ground behind the band
+
+`--card` is the *face circle's* fill. The band is drawn outside it (`analog-clock.ts` insets the face
+by `FACE_GAP_RATIO`), over `--page` — sampled off the rendered preview at band radius, `#0c0e12` both
+where no arc is drawn and inside a draining arc's spent side. Every number above is against `--page`
+for that reason; measuring against `--card` moves each seam split 0.03–0.10 of the ramp and reports
+black on the bare band as 1.18:1 rather than 1.09:1.
+
+#26/#27's elapsed-outline adjustment still measures against `--card`, which errs safe — the real
+ground is darker, so the outline over-clears. Left alone here and tracked separately, since correcting
+it moves every elapsed arc's colour.
+
+### 5. `src/client/sample-events.ts` — one event that straddles `now`
 
 `🟡 Tidy Up`, fixture offsets **+2:30 → +3:14** (44 min, 22° on the 330° window):
 
@@ -133,20 +170,47 @@ reverse that.
 
 ## Tests the suite was missing
 
-`event-arc.test.ts` asserted which mask id each part references and that the two ids differ. Every
-one of those assertions passes on a mask that drains nothing. Added, per #71:
+`event-arc.test.ts` asserted which mask id each part references and that the two ids differ. Every one
+of those assertions passes on a mask that drains nothing. Added:
 
-- the fill's mask fully occludes the spent side — a solid region, not only a ramp;
-- the outline's mask fully occludes the remaining side, so no "already over" outline is drawn over
-  what has not happened;
-- the occluding region stops at the boundary rather than overrunning the ramp;
+- the fill's mask occludes the whole spent side — a solid region, not only a ramp — at the padded
+  radii, and the outline's mask occludes the whole *remaining* side;
+- each solid region stops where its own ramp begins, with exactly the ramp between the two and no
+  double-black across the seam;
+- the occluded region carries the right `largeArcFlag`, exercised on a 288°-remaining side. Without
+  this the wedge could cover the *complement* of its side — hiding the wrong half of the arc outright
+  — and every endpoint-angle assertion would still pass;
 - both masks still carry the window feathers when the arc is clamped as well as draining — the one
   case the fixture cannot show, since `now` sits three hours inside an eleven-hour window;
-- a draining arc draws its title once per side, each masked to that side and coloured for the ground
-  it lands on — and once only, unmasked, for the two colours that need no split;
-- the text split lands past the boundary, inside the ramp, rather than on the boundary itself;
-- the text masks carry no ramp and no feather;
-- `drain.test.ts`: the two occluded regions are anchored at the boundary and reach the arc's ends,
-  and `computeDrainTextSplit` places one split both copies share;
-- `contrast.test.ts`: `textFlipCoverage` beats both the boundary and the midpoint on every palette
-  colour it applies to, and clears 4.5:1 across the whole ramp.
+- each ramp is centred on the boundary, at four fractions including both extremes, so half strength
+  lands on `now`;
+- the two occluded regions track the drain fraction: the old assertion here summed them and got the
+  arc's span for *every* fraction, which is true of any split at all, including a negative or NaN
+  depth;
+- `computeDrainTextSplit` measures its coverage along the ramp, so it moves with the ramp rather than
+  from the boundary, and it survives a capped depth;
+- a title splits once per side, masked and coloured per ground, for the five colours that need it —
+  and stays a single unmasked copy for the four that do not, with the contrast that justifies each
+  measured in the test rather than asserted in a comment;
+- `textFlipCoverage` beats every other split for each affected colour (seven alternatives checked, not
+  just the midpoint), lands somewhere different for the painted pair than for pure white, and lands
+  somewhere different again if measured against `--card` instead of the band's real ground.
+
+## Review round
+
+An adversarial review pass over the first push found six real defects, all of them numbers rather than
+opinions, and all of them fixed above: the split computed for a colour the renderer never paints
+(§4), the wrong ground behind the band (§4b), black painted where black had just been shown to lose
+(§4), the seam reading up to ten minutes late (§3), three assertions that could not fail, and a wedge
+parser that discarded the one field a catastrophic mask would show up in.
+
+Two things it raised are recorded rather than fixed:
+
+- **The fixture crosses the split by about two glyphs.** A mid-arc seam is not reachable without
+  moving a neighbour: with `c` ending at +2:30 and `x` starting at +3:15, an event straddling +3:00
+  that clears the 20° title floor must start at or before +2:35, which puts the seam at ≥62.5% of the
+  arc while the title is centred at 50%. Buying a centred seam means overlapping `x` and halving its
+  ring, which is a stress case of its own.
+- **No fixture event reaches the 10° ramp cap.** `n`'s short remaining side caps its depth at 2.45°,
+  so the fixture shows a narrow seam. The capped case is covered by unit tests and by the measurement
+  in §3, not by the rendered fixture.

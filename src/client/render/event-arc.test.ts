@@ -3,6 +3,7 @@ import {
   FEATHER_DEGREES,
   type ClockEvent,
   adjustForContrast,
+  compositeOver,
   computeArcTitleLayout,
   contrastRatio,
   polarToCartesian,
@@ -11,6 +12,9 @@ import { eventArc } from "./event-arc";
 
 /** The dial background the outline's colour is made legible against — `--card`, per event-arc.ts. */
 const DIAL_BACKGROUND = "#16181d";
+
+/** What is actually behind the arc band, and what a drained arc exposes — `--page`. */
+const BAND_BACKGROUND = "#0c0e12";
 
 const CX = 300;
 const CY = 300;
@@ -789,10 +793,17 @@ describe("eventArc while the event is draining", () => {
 
     const gradient = group.querySelector('mask#arc-fade-e1 linearGradient');
     const midRadius = (INNER + OUTER) / 2;
+    const at = (name: string) => Number(gradient?.getAttribute(name));
+    // The ramp straddles the boundary, so its *centre* is the boundary — asserted here rather than
+    // an endpoint, which sits half a ramp to one side of it.
+    const centre = { x: (at("x1") + at("x2")) / 2, y: (at("y1") + at("y2")) / 2 };
+    const centreAngle = ((Math.atan2(centre.y - CY, centre.x - CX) * 180) / Math.PI + 450) % 360;
     const expected = polarToCartesian(CX, CY, midRadius, 10);
 
-    expect(Number(gradient?.getAttribute("x1"))).toBeCloseTo(expected.x, 4);
-    expect(Number(gradient?.getAttribute("y1"))).toBeCloseTo(expected.y, 4);
+    // Exactly on the boundary's own radial line, and within the sagitta of the arc point: the axis
+    // is a chord, so its midpoint sits ~0.28 units inside the arc at this radius.
+    expect(centreAngle).toBeCloseTo(10, 4);
+    expect(Math.hypot(centre.x - expected.x, centre.y - expected.y)).toBeLessThan(0.4);
   });
 
   /**
@@ -810,56 +821,95 @@ describe("eventArc while the event is draining", () => {
       return (Math.atan2(y - CY, x - CX) * (180 / Math.PI) + 450) % 360;
     }
 
-    /** A mask wedge's angular edges — its `M` point and its outer-arc endpoint — and its span. */
-    function wedgeEdges(path: Element | null): { from: number; to: number; span: number } {
+    /**
+     * A mask wedge's angular edges — its `M` point and its outer-arc endpoint — its span, its radii
+     * and its `largeArcFlag`.
+     *
+     * The flag is parsed on purpose: wrong, a wedge covers the *complement* of the side it was meant
+     * to and hides the wrong half of the arc outright, while its two endpoint angles look identical
+     * either way. Same for the radii — an occlusion drawn off the ring hides nothing at all.
+     */
+    function wedgeEdges(path: Element | null): {
+      from: number;
+      to: number;
+      span: number;
+      largeArc: number;
+      radii: number[];
+    } {
       const d = path?.getAttribute("d") ?? "";
-      const [mx, my, , , , , , ax, ay] = d.split(/[ A]+/).slice(1).map(Number);
+      const [mx, my, , , , largeArc, , ax, ay] = d.split(/[ A]+/).slice(1).map(Number);
       const from = angleOf(mx, my);
       const to = angleOf(ax, ay);
-      return { from, to, span: (to - from + 360) % 360 };
+      const radii = (d.match(/A ([\d.]+) /g) ?? []).map((chunk) => Number.parseFloat(chunk.slice(2)));
+
+      return { from, to, span: (to - from + 360) % 360, largeArc, radii };
     }
+
+    /** The padded radii every wedge is drawn at, so a mis-sized occlusion cannot pass. */
+    const WEDGE_RADII = [OUTER + 1.44, INNER - 1.44];
 
     function occlusion(group: SVGGElement, maskId: string): Element | null {
       return group.querySelector(`mask#${maskId} [data-mask-part="occlusion"]`);
     }
 
-    it("hides the spent side of the fill outright, from the boundary back to the arc's start", () => {
+    // now at 15° of a 0°–60° arc, so the spent side is 15° and the remaining 45°. The ramp is
+    // min(FEATHER_DEGREES, 15 × 0.35) = 5.25° wide and straddles the boundary, so each solid region
+    // reaches to within half of that — 2.625° — of it.
+    const HALF_RAMP = 2.625;
+
+    it("hides the spent side of the fill outright, from the ramp back to the arc's start", () => {
       const wedge = occlusion(draining(), "arc-fade-e1");
-      const { to, span } = wedgeEdges(wedge);
+      const { to, span, radii, largeArc } = wedgeEdges(wedge);
 
       // Opaque black on a luminance mask: gone, not merely dimmed.
       expect(wedge?.getAttribute("fill")).toBe("#000000");
-      // now at 15° of a 0°–60° arc: the whole 0°–15° spent side, plus the stroke past the start.
-      expect(to).toBeCloseTo(15, 4);
-      expect(span).toBeCloseTo(15 + PAD_DEGREES, 3);
+      expect(to).toBeCloseTo(15 - HALF_RAMP, 4);
+      expect(span).toBeCloseTo(15 - HALF_RAMP + PAD_DEGREES, 3);
+      // Drawn across the whole ring plus the stroke, and the short way round.
+      expect(radii).toEqual(WEDGE_RADII);
+      expect(largeArc).toBe(0);
     });
 
     it("hides the remaining side from the outline, so nothing unhappened wears an elapsed edge", () => {
       const wedge = occlusion(draining(), "arc-drain-e1");
-      const { from, span } = wedgeEdges(wedge);
+      const { from, span, radii, largeArc } = wedgeEdges(wedge);
 
       expect(wedge?.getAttribute("fill")).toBe("#000000");
-      expect(from).toBeCloseTo(15, 4);
-      expect(span).toBeCloseTo(45 + PAD_DEGREES, 3);
+      expect(from).toBeCloseTo(15 + HALF_RAMP, 4);
+      expect(span).toBeCloseTo(45 - HALF_RAMP + PAD_DEGREES, 3);
+      expect(radii).toEqual(WEDGE_RADII);
+      expect(largeArc).toBe(0);
     });
 
     it.each([
-      ["fill", "arc-fade-e1", "to"],
-      ["outline", "arc-drain-e1", "from"],
+      ["fill", "arc-fade-e1", "to", -1],
+      ["outline", "arc-drain-e1", "from", 1],
     ] as const)(
-      "stops the %s's solid region exactly at the boundary, leaving the ramp its seam",
-      (_label, maskId, boundaryEdge) => {
-        // The ramp already pads past the boundary to swallow the stroke there. A solid overrunning
-        // it would blacken the degrees the ramp is supposed to fade across, putting back the crisp
-        // edge the whole seam exists to deny.
+      "stops the %s's solid region where its own ramp begins, leaving the seam to the ramp",
+      (_label, maskId, rampEdge, direction) => {
+        // A solid reaching the boundary would paint over the half of the ramp lying on its own side,
+        // and the crisp edge the whole seam exists to deny would be back — half a ramp from `now`.
         // 4 places, not more: `roundCoord` quantises the wedge's own path coordinates.
-        expect(wedgeEdges(occlusion(draining(), maskId))[boundaryEdge]).toBeCloseTo(15, 4);
+        expect(wedgeEdges(occlusion(draining(), maskId))[rampEdge]).toBeCloseTo(
+          15 + direction * HALF_RAMP,
+          4
+        );
       }
     );
 
+    it("leaves the two solid regions exactly the ramp between them", () => {
+      const group = draining();
+      const fill = wedgeEdges(occlusion(group, "arc-fade-e1"));
+      const outline = wedgeEdges(occlusion(group, "arc-drain-e1"));
+
+      // No double-black across the seam, and no bare sliver either side of it.
+      expect(outline.from - fill.to).toBeCloseTo(2 * HALF_RAMP, 3);
+    });
+
     it("scales the hidden region with the boundary rather than fixing it at a ramp's depth", () => {
       // The old failure got worse the longer the event: a 10°-capped ramp on a 120° arc left 83%
-      // of each side untouched. Occlusion has no cap — it is however much side there is.
+      // of each side untouched. Occlusion has no cap — it is however much side there is, less the
+      // half-ramp that side lends to the seam.
       const group = eventArc({
         event: makeEvent({ startAngle: 0, endAngle: 120 }),
         cx: CX,
@@ -871,7 +921,24 @@ describe("eventArc while the event is draining", () => {
       const { span } = wedgeEdges(occlusion(group, "arc-fade-e1"));
 
       expect(span).toBeGreaterThan(FEATHER_DEGREES);
-      expect(span).toBeCloseTo(30 + PAD_DEGREES, 3);
+      expect(span).toBeCloseTo(30 - FEATHER_DEGREES / 2 + PAD_DEGREES, 3);
+    });
+
+    it("draws the long way round when the side it hides exceeds a half turn", () => {
+      // Wrap-aware geometry never normalises past 360 (#33), so a 288°-remaining side is a real
+      // case. With largeArcFlag wrong the wedge would hide the arc's *other* side entirely — and
+      // every endpoint-angle assertion above would still pass.
+      const group = eventArc({
+        event: makeEvent({ startAngle: -20, endAngle: 300 }),
+        cx: CX,
+        cy: CY,
+        innerRadius: INNER,
+        outerRadius: OUTER,
+        nowAngle: 12,
+      });
+
+      expect(wedgeEdges(occlusion(group, "arc-drain-e1")).largeArc).toBe(1);
+      expect(wedgeEdges(occlusion(group, "arc-fade-e1")).largeArc).toBe(0);
     });
 
     it("keeps the window feather on the spent mask too, when the arc is clamped as well", () => {
@@ -951,26 +1018,33 @@ describe("eventArc while the event is draining", () => {
     });
 
     it.each([
-      ["⚫ gray-800", "#1F2937"],
-      ["🟤 amber-800", "#92400E"],
+      ["⚫ gray-800", "#1F2937", 14.04],
+      ["🟤 amber-800", "#92400E", 7.69],
+      // These two take a *black* title while live, derived from the authored hex — but measured on
+      // the composited fill the light token beats it (4.43 against 4.31, 4.60 against 4.14), so they
+      // need no split either, and the copy they get is the one they keep once elapsed.
+      ["🔴 red-500", "#EF4444", 4.43],
+      ["🟣 purple-500", "#A855F7", 4.6],
     ])(
-      "leaves %s a single unmasked copy: white reads on its fill and on the dial alike",
-      (_label, color) => {
-        // The two colours whose title is white. Splitting one that needs no split costs a node and
-        // invites a seam artefact for nothing — and the single copy is exactly what the arc drew a
-        // tick earlier, when the same event was still merely live.
-        expect(titles(color)).toEqual([{ fill: "#ffffff", mask: null }]);
+      "leaves %s one unmasked copy, which reads on its fill (%f:1) and on the band alike",
+      (_label, color, onFill) => {
+        // Splitting a title that needs no split costs two nodes and invites a seam artefact for
+        // nothing.
+        expect(titles(color)).toEqual([{ fill: "var(--card-foreground)", mask: null }]);
+        // And the claim in that sentence, measured rather than asserted.
+        const fill = compositeOver(BAND_BACKGROUND, color, 0.85)!;
+        expect(contrastRatio("#f2f4f8", fill)).toBeCloseTo(onFill, 1);
+        expect(contrastRatio("#f2f4f8", fill)!).toBeGreaterThan(contrastRatio("#000000", fill)!);
       }
     );
 
     it.each([
-      ["🔴 red-500", "#EF4444"],
+      ["🟠 orange-500", "#F97316"],
+      ["🟡 yellow-500", "#EAB308"],
+      ["🟢 green-500", "#22C55E"],
       ["🔵 blue-500", "#3B82F6"],
-      ["🟣 purple-500", "#A855F7"],
-    ])("splits %s too, whose black title reads on the fill but not on the dial", (_label, color) => {
-      // `readableTextColor` measures the authored hex, so these take black titles even though their
-      // *composited* fills are dark enough that white would serve — and black on the drained side's
-      // bare dial is 1.18:1. Seven of the nine palette colours are in this position, not four.
+      ["⚪ gray-100", "#F3F4F6"],
+    ])("splits %s, whose fill genuinely reads better in black", (_label, color) => {
       expect(titles(color)).toEqual([
         { fill: "#000000", mask: "url(#arc-title-live-e1)" },
         { fill: "var(--card-foreground)", mask: "url(#arc-title-spent-e1)" },

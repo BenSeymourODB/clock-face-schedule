@@ -61,8 +61,16 @@ export function computeDrainFraction(
  * Both fades share one depth, capped by whichever side of the boundary is shorter, so the ramp
  * never eats more of either side than #22 already allows an arc to lose at one end.
  *
- * The occlusions run boundary → arc end, so each is anchored at the boundary exactly as the fades
- * are and a caller pads both kinds away from it in the same direction.
+ * **Each ramp straddles the boundary rather than starting at it.** Anchored at the boundary — as
+ * this was until the masks began hiding anything — the fill reached full strength `depth` degrees
+ * *after* `now` and the outline `depth` before it, so at `now` itself neither was at any strength:
+ * measured on a `FEATHER_DEGREES`-capped ramp, 50% fill landed 5.0° past the boundary and full fill
+ * 10°, which on a 12-hour dial reads **10 and 20 minutes late**, inside a dead band where the arc
+ * states neither "spent" nor "left". Centred, the two cross at half strength exactly on `now`, and
+ * the perceived seam is where the time is. It cost nothing: the ramp is the same width, moved.
+ *
+ * The occlusions therefore run from each ramp's own opaque end out to the arc's end, not from the
+ * boundary — a solid region reaching to the boundary would paint over half of its own ramp.
  */
 export function computeDrainMasks(
   startAngle: number,
@@ -73,33 +81,37 @@ export function computeDrainMasks(
   const remaining = endAngle - boundaryAngle;
   const spent = boundaryAngle - startAngle;
   const depth = Math.min(FEATHER_DEGREES, Math.min(remaining, spent) * FEATHER_MAX_SPAN_RATIO);
+  const half = depth / 2;
 
   return {
     boundaryAngle,
-    fillSpan: { fromAngle: boundaryAngle, toAngle: boundaryAngle + depth },
-    spentSpan: { fromAngle: boundaryAngle, toAngle: boundaryAngle - depth },
-    fillOccluded: { fromAngle: boundaryAngle, toAngle: startAngle },
-    spentOccluded: { fromAngle: boundaryAngle, toAngle: endAngle }
+    fillSpan: { fromAngle: boundaryAngle - half, toAngle: boundaryAngle + half },
+    spentSpan: { fromAngle: boundaryAngle + half, toAngle: boundaryAngle - half },
+    fillOccluded: { fromAngle: boundaryAngle - half, toAngle: startAngle },
+    spentOccluded: { fromAngle: boundaryAngle + half, toAngle: endAngle }
   };
 }
 
 /**
  * Where a title crossing the seam should change colour, as the region each copy must not paint.
  *
- * Not at the boundary: the fill ramps in across `depth` degrees, so just past the boundary the
- * ground is still nearly bare dial and text coloured for the fill is invisible on it. `coverage` is
- * the fraction of the ramp at which the two candidate text colours are equally legible — see
- * `textFlipCoverage` — and splitting there maximises the worst contrast anywhere across the seam.
+ * Not at the boundary, and not at the ramp's midpoint: the fill arrives gradually, so the place the
+ * two candidate colours change places is wherever the blend makes them equally legible. `coverage`
+ * is that fraction of the ramp — see `textFlipCoverage` — and splitting there maximises the worst
+ * contrast anywhere across the seam.
+ *
+ * Measured along the ramp itself, so it tracks whatever the ramp does: coverage 0 is the ramp's
+ * opaque end, where no fill has arrived, and 1 its far end, where the fill is at full strength.
  *
  * Hard-edged on purpose. Ramping the two copies against each other instead makes both partly
  * transparent through the middle of the seam, and they blend toward a mid-grey that measured 1.4:1
  * against its own ground.
  */
 export function computeDrainTextSplit(
-  { boundaryAngle, fillSpan, fillOccluded, spentOccluded }: DrainMasks,
+  { fillSpan, fillOccluded, spentOccluded }: DrainMasks,
   coverage: number
 ): { live: OccludedSpan; spent: OccludedSpan } {
-  const splitAngle = boundaryAngle + coverage * (fillSpan.toAngle - boundaryAngle);
+  const splitAngle = fillSpan.fromAngle + coverage * (fillSpan.toAngle - fillSpan.fromAngle);
 
   return {
     live: { fromAngle: splitAngle, toAngle: fillOccluded.toAngle },

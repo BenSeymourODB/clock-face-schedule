@@ -215,65 +215,100 @@ describe("compositeOver", () => {
 
 /**
  * The seam of a draining arc (#28) is a fill ramping in from nothing, so a title crossing it has one
- * ground at each end and somewhere in between the right text colour changes. This finds where.
+ * ground at each end and somewhere in between the two candidate colours change places. This finds
+ * where — for the pair actually painted, which is why both are arguments.
  */
 describe("textFlipCoverage", () => {
   const ARC_FILL_OPACITY = 0.85;
-  const flip = (color: string) => textFlipCoverage(CARD, color, ARC_FILL_OPACITY);
+  /** What is behind the arc band: `--page`, not the face's `--card`. See `BAND_BACKGROUND`. */
+  const BAND = "#0c0e12";
+  /** The pair the renderer paints: `--card-foreground` on the drained side, black on the fill. */
+  const LIGHT = "#f2f4f8";
+  const DARK = "#000000";
+
+  const flip = (color: string) => textFlipCoverage(BAND, color, ARC_FILL_OPACITY, LIGHT, DARK);
 
   /** Worst contrast anywhere across the ramp, if the text switches colour at `split`. */
-  function worstAcrossRamp(color: string, split: number): number {
+  function worstAcrossRamp(color: string, split: number, light = LIGHT): number {
     let worst = Infinity;
     for (let coverage = 0; coverage <= 1.0001; coverage += 0.002) {
-      const ground = compositeOver(CARD, color, ARC_FILL_OPACITY * coverage)!;
-      const text = coverage < split ? "#ffffff" : "#000000";
+      const ground = compositeOver(BAND, color, ARC_FILL_OPACITY * coverage)!;
+      const text = coverage < split ? light : DARK;
       worst = Math.min(worst, contrastRatio(text, ground)!);
     }
     return worst;
   }
 
-  it.each([
-    ["🔴 red-500", "#EF4444"],
-    ["🔵 blue-500", "#3B82F6"],
-    ["⚫ gray-800", "#1F2937"],
-    ["🟤 amber-800", "#92400E"],
-  ])(
-    "puts the split at the ramp's far end for %s, where the darker text never wins inside it",
-    (_label, color) => {
-      // ⚫ and 🟤 read as white text on their own fills; 🔴 and 🔵 composite dark enough that white
-      // still wins at full strength. Either way there is no crossing to find inside the ramp.
-      expect(flip(color)).toBe(1);
-    }
-  );
-
-  it.each([
+  /** The colours whose fill genuinely wants the darker text, and so need a split at all. */
+  const SPLIT_COLOURS = [
     ["🟠 orange-500", "#F97316"],
     ["🟡 yellow-500", "#EAB308"],
     ["🟢 green-500", "#22C55E"],
+    ["🔵 blue-500", "#3B82F6"],
     ["⚪ gray-100", "#F3F4F6"],
-  ])("flips partway along the ramp for %s, not at either end", (_label, color) => {
+  ] as const;
+
+  it.each([
+    ["🔴 red-500", "#EF4444"],
+    ["🟣 purple-500", "#A855F7"],
+    ["⚫ gray-800", "#1F2937"],
+    ["🟤 amber-800", "#92400E"],
+  ])("reports no crossing for %s, whose fill reads better in the light colour anyway", (
+    _label,
+    color
+  ) => {
+    // Measured on the composited fill: black is 4.31 / 4.14 / 1.36 / 2.48 against the light token's
+    // 4.43 / 4.60 / 14.04 / 7.69. A caller reads 1 as "one copy, light, no split".
+    expect(flip(color)).toBe(1);
+  });
+
+  it.each(SPLIT_COLOURS)("crosses partway along the ramp for %s, at neither end", (_label, color) => {
     expect(flip(color)).toBeGreaterThan(0);
     expect(flip(color)).toBeLessThan(1);
   });
 
-  it.each([
-    ["🟠 orange-500", "#F97316"],
-    ["🟡 yellow-500", "#EAB308"],
-    ["🟢 green-500", "#22C55E"],
-    ["⚪ gray-100", "#F3F4F6"],
-  ])("%s: splitting at the flip clears AA across the whole ramp", (_label, color) => {
-    // At the boundary itself the fill has not arrived, so text coloured for it measures 1.18:1 —
-    // the defect this exists to prevent. The ramp's midpoint is better and still not enough.
+  it.each(SPLIT_COLOURS)("%s: splitting at the crossing is the best available seam", (
+    _label,
+    color
+  ) => {
+    const best = worstAcrossRamp(color, flip(color));
+
+    // Either colour used alone across the whole ramp is far worse — that is the defect (#71).
     expect(worstAcrossRamp(color, 0)).toBeLessThan(1.2);
-    // Never worse than the midpoint, and better for three of the four — ⚪ gray-100's own flip lands
-    // at 0.500, so for that one colour the midpoint happens to be the right answer already.
-    expect(worstAcrossRamp(color, flip(color))).toBeGreaterThanOrEqual(
-      worstAcrossRamp(color, 0.5)
-    );
-    expect(worstAcrossRamp(color, flip(color))).toBeGreaterThanOrEqual(4.5);
+    expect(worstAcrossRamp(color, 1)).toBeLessThan(4.4);
+    // And no other split does better: the crossing is the max-min, so it beats every alternative.
+    for (const split of [0.1, 0.25, 0.4, 0.5, 0.6, 0.75, 0.9]) {
+      expect(best).toBeGreaterThanOrEqual(worstAcrossRamp(color, split) - 1e-9);
+    }
+    // 4.37:1 for the palette — short of AA, and unreachable with this pair whatever the split.
+    // Guards the honest floor rather than asserting a pass the colours cannot deliver.
+    expect(best).toBeGreaterThan(4.3);
   });
 
-  it("reports the far end for an unparseable colour, rather than splitting on a guess", () => {
-    expect(textFlipCoverage(CARD, "papayawhip", 0.85)).toBe(1);
+  it("crosses at a different place for the pair actually painted than for pure white", () => {
+    // The bug this signature exists to prevent: deriving the candidates gives the black-vs-#ffffff
+    // tie, and the renderer paints `--card-foreground`. On 🟡 that is 0.028 of the ramp out, and it
+    // costs contrast at the seam — the split lands where the *wrong* pair crosses.
+    const painted = flip("#EAB308");
+    const pureWhite = textFlipCoverage(BAND, "#EAB308", ARC_FILL_OPACITY, "#ffffff", DARK);
+
+    expect(painted).not.toBeCloseTo(pureWhite, 3);
+    expect(worstAcrossRamp("#EAB308", painted)).toBeGreaterThan(
+      worstAcrossRamp("#EAB308", pureWhite)
+    );
+  });
+
+  it("reads the ground it is given: `--card` puts every crossing somewhere else", () => {
+    // The band sits over `--page`, outside the face circle. Measuring against `--card` moved each
+    // crossing 0.03–0.10 of the ramp, which is why `BAND_BACKGROUND` exists.
+    for (const [, color] of SPLIT_COLOURS) {
+      const onCard = textFlipCoverage("#16181d", color, ARC_FILL_OPACITY, LIGHT, DARK);
+
+      expect(onCard).not.toBeCloseTo(flip(color), 2);
+    }
+  });
+
+  it("reports no crossing for an unparseable colour, rather than splitting on a guess", () => {
+    expect(textFlipCoverage(BAND, "papayawhip", 0.85, LIGHT, DARK)).toBe(1);
   });
 });
