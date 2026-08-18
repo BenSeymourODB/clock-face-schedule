@@ -5,6 +5,7 @@ import {
   contrastRatio,
   readableTextColor,
   relativeLuminance,
+  textFlipCoverage,
 } from "./contrast";
 
 /** The dial's own background, the ground every event colour is measured against (`--card`). */
@@ -209,5 +210,70 @@ describe("compositeOver", () => {
   it("returns null when either colour is unparseable", () => {
     expect(compositeOver("papayawhip", "#ffffff", 0.5)).toBeNull();
     expect(compositeOver("#ffffff", "papayawhip", 0.5)).toBeNull();
+  });
+});
+
+/**
+ * The seam of a draining arc (#28) is a fill ramping in from nothing, so a title crossing it has one
+ * ground at each end and somewhere in between the right text colour changes. This finds where.
+ */
+describe("textFlipCoverage", () => {
+  const ARC_FILL_OPACITY = 0.85;
+  const flip = (color: string) => textFlipCoverage(CARD, color, ARC_FILL_OPACITY);
+
+  /** Worst contrast anywhere across the ramp, if the text switches colour at `split`. */
+  function worstAcrossRamp(color: string, split: number): number {
+    let worst = Infinity;
+    for (let coverage = 0; coverage <= 1.0001; coverage += 0.002) {
+      const ground = compositeOver(CARD, color, ARC_FILL_OPACITY * coverage)!;
+      const text = coverage < split ? "#ffffff" : "#000000";
+      worst = Math.min(worst, contrastRatio(text, ground)!);
+    }
+    return worst;
+  }
+
+  it.each([
+    ["🔴 red-500", "#EF4444"],
+    ["🔵 blue-500", "#3B82F6"],
+    ["⚫ gray-800", "#1F2937"],
+    ["🟤 amber-800", "#92400E"],
+  ])(
+    "puts the split at the ramp's far end for %s, where the darker text never wins inside it",
+    (_label, color) => {
+      // ⚫ and 🟤 read as white text on their own fills; 🔴 and 🔵 composite dark enough that white
+      // still wins at full strength. Either way there is no crossing to find inside the ramp.
+      expect(flip(color)).toBe(1);
+    }
+  );
+
+  it.each([
+    ["🟠 orange-500", "#F97316"],
+    ["🟡 yellow-500", "#EAB308"],
+    ["🟢 green-500", "#22C55E"],
+    ["⚪ gray-100", "#F3F4F6"],
+  ])("flips partway along the ramp for %s, not at either end", (_label, color) => {
+    expect(flip(color)).toBeGreaterThan(0);
+    expect(flip(color)).toBeLessThan(1);
+  });
+
+  it.each([
+    ["🟠 orange-500", "#F97316"],
+    ["🟡 yellow-500", "#EAB308"],
+    ["🟢 green-500", "#22C55E"],
+    ["⚪ gray-100", "#F3F4F6"],
+  ])("%s: splitting at the flip clears AA across the whole ramp", (_label, color) => {
+    // At the boundary itself the fill has not arrived, so text coloured for it measures 1.18:1 —
+    // the defect this exists to prevent. The ramp's midpoint is better and still not enough.
+    expect(worstAcrossRamp(color, 0)).toBeLessThan(1.2);
+    // Never worse than the midpoint, and better for three of the four — ⚪ gray-100's own flip lands
+    // at 0.500, so for that one colour the midpoint happens to be the right answer already.
+    expect(worstAcrossRamp(color, flip(color))).toBeGreaterThanOrEqual(
+      worstAcrossRamp(color, 0.5)
+    );
+    expect(worstAcrossRamp(color, flip(color))).toBeGreaterThanOrEqual(4.5);
+  });
+
+  it("reports the far end for an unparseable colour, rather than splitting on a guess", () => {
+    expect(textFlipCoverage(CARD, "papayawhip", 0.85)).toBe(1);
   });
 });

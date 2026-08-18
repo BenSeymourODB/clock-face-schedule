@@ -38,6 +38,19 @@ export function sampleEvents(windowStart: Date): ClockEventInput[] {
     // before "g" starts, deliberately, so the stretch between them is empty *and inside* the
     // window — the one stress case the window-track (#25) exists to distinguish from the gap.
     { id: "d", title: "🟡 🍽️ Lunch", startDate: at(4, 30), endDate: at(5, 20), isAllDay: false, fallbackColor },
+    // Straddles `now`, which is always fixture offset +3:00 — the fixture is seeded from
+    // `getRollingWindow(new Date()).windowStart`, i.e. exactly `now − 3h`, so no other offset can
+    // be the current time whatever the wall clock says. Without this event the *draining* state
+    // (#28) never renders in demo mode at all, which is how masks that drained nothing survived
+    // both #28 and #27 (#71). Yellow and 44 minutes on purpose: 22° clears the 20° title floor, so
+    // the title renders on the arc rather than being promoted to a floating label that would
+    // sidestep the question, and yellow takes a black title — 1.18:1 on the bare dial the drained
+    // side exposes, so the title has to change colour across the seam. The title is long enough to
+    // reach past the seam for the same reason: a short one sits entirely on the spent side and
+    // never exercises the split. Overlaps only "b", which ends at +3:00, so peak concurrency stays
+    // three and the cluster above keeps its ring thickness — and a drained portion ends up beside a
+    // fully elapsed arc, which is the comparison a viewer actually has to make.
+    { id: "n", title: "🟡 Tidy Up and Line Up", startDate: at(2, 30), endDate: at(3, 14), isAllDay: false, fallbackColor },
     // ⚫ measures 1.21:1 on the dial background, so once elapsed its outline is invisible without
     // the neutral band beneath it. Placed clear of the cluster so the two stresses stay separable.
     { id: "x", title: "⚫ Assembly", startDate: at(3, 15), endDate: at(4, 0), isAllDay: false, fallbackColor },

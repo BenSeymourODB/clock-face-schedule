@@ -795,6 +795,236 @@ describe("eventArc while the event is draining", () => {
     expect(Number(gradient?.getAttribute("y1"))).toBeCloseTo(expected.y, 4);
   });
 
+  /**
+   * #71: every assertion above passes on a mask that drains nothing, because they check *which*
+   * mask each part references and never what the mask does. A white ground plus one gradient wedge
+   * left 65–83% of the spent side at full fill; these pin the occluding region that fixes it.
+   */
+  describe("what the masks actually hide", () => {
+    // (OUTER − INNER) × ARC_SEPARATOR_RATIO, as an angle at the outer radius: how far every wedge
+    // reaches past its far edge to swallow the stroke straddling the path there.
+    const PAD_DEGREES = (1.44 / OUTER) * (180 / Math.PI);
+
+    /** Angle of a point, in the dial's 0°-at-twelve convention. */
+    function angleOf(x: number, y: number): number {
+      return (Math.atan2(y - CY, x - CX) * (180 / Math.PI) + 450) % 360;
+    }
+
+    /** A mask wedge's angular edges — its `M` point and its outer-arc endpoint — and its span. */
+    function wedgeEdges(path: Element | null): { from: number; to: number; span: number } {
+      const d = path?.getAttribute("d") ?? "";
+      const [mx, my, , , , , , ax, ay] = d.split(/[ A]+/).slice(1).map(Number);
+      const from = angleOf(mx, my);
+      const to = angleOf(ax, ay);
+      return { from, to, span: (to - from + 360) % 360 };
+    }
+
+    function occlusion(group: SVGGElement, maskId: string): Element | null {
+      return group.querySelector(`mask#${maskId} [data-mask-part="occlusion"]`);
+    }
+
+    it("hides the spent side of the fill outright, from the boundary back to the arc's start", () => {
+      const wedge = occlusion(draining(), "arc-fade-e1");
+      const { to, span } = wedgeEdges(wedge);
+
+      // Opaque black on a luminance mask: gone, not merely dimmed.
+      expect(wedge?.getAttribute("fill")).toBe("#000000");
+      // now at 15° of a 0°–60° arc: the whole 0°–15° spent side, plus the stroke past the start.
+      expect(to).toBeCloseTo(15, 4);
+      expect(span).toBeCloseTo(15 + PAD_DEGREES, 3);
+    });
+
+    it("hides the remaining side from the outline, so nothing unhappened wears an elapsed edge", () => {
+      const wedge = occlusion(draining(), "arc-drain-e1");
+      const { from, span } = wedgeEdges(wedge);
+
+      expect(wedge?.getAttribute("fill")).toBe("#000000");
+      expect(from).toBeCloseTo(15, 4);
+      expect(span).toBeCloseTo(45 + PAD_DEGREES, 3);
+    });
+
+    it.each([
+      ["fill", "arc-fade-e1", "to"],
+      ["outline", "arc-drain-e1", "from"],
+    ] as const)(
+      "stops the %s's solid region exactly at the boundary, leaving the ramp its seam",
+      (_label, maskId, boundaryEdge) => {
+        // The ramp already pads past the boundary to swallow the stroke there. A solid overrunning
+        // it would blacken the degrees the ramp is supposed to fade across, putting back the crisp
+        // edge the whole seam exists to deny.
+        // 4 places, not more: `roundCoord` quantises the wedge's own path coordinates.
+        expect(wedgeEdges(occlusion(draining(), maskId))[boundaryEdge]).toBeCloseTo(15, 4);
+      }
+    );
+
+    it("scales the hidden region with the boundary rather than fixing it at a ramp's depth", () => {
+      // The old failure got worse the longer the event: a 10°-capped ramp on a 120° arc left 83%
+      // of each side untouched. Occlusion has no cap — it is however much side there is.
+      const group = eventArc({
+        event: makeEvent({ startAngle: 0, endAngle: 120 }),
+        cx: CX,
+        cy: CY,
+        innerRadius: INNER,
+        outerRadius: OUTER,
+        nowAngle: 30,
+      });
+      const { span } = wedgeEdges(occlusion(group, "arc-fade-e1"));
+
+      expect(span).toBeGreaterThan(FEATHER_DEGREES);
+      expect(span).toBeCloseTo(30 + PAD_DEGREES, 3);
+    });
+
+    it("keeps the window feather on the spent mask too, when the arc is clamped as well", () => {
+      const group = eventArc({
+        event: makeEvent({ startAngle: 0, endAngle: 60, continuesBefore: true }),
+        cx: CX,
+        cy: CY,
+        innerRadius: INNER,
+        outerRadius: OUTER,
+        nowAngle: 15,
+      });
+      const mask = group.querySelector("mask#arc-drain-e1");
+
+      // A clamped leading edge falls on the spent side, so it is the outline's mask that has to
+      // carry it — the fade and the occlusion compose rather than one replacing the other.
+      expect([...(mask?.querySelectorAll("linearGradient") ?? [])].map((n) => n.id)).toEqual([
+        "arc-drain-e1-start",
+        "arc-drain-e1-drain",
+      ]);
+      expect(mask?.querySelector('[data-mask-part="occlusion"]')).not.toBeNull();
+    });
+  });
+
+  /**
+   * Draining the fill for the first time changes what the title sits on. Black — which
+   * `readableTextColor` picks for 🟠 🟡 🟢 ⚪ once composited over the dial — measures 1.18:1 on the
+   * bare dial the drained side exposes, and white on those same fills measures 1.7–3.0:1, so no one
+   * colour serves both grounds.
+   */
+  describe("the title across the seam", () => {
+    function titles(color: string): { fill: string | null; mask: string | null }[] {
+      const group = eventArc({
+        event: makeEvent({ startAngle: 0, endAngle: 60, color }),
+        cx: CX,
+        cy: CY,
+        innerRadius: INNER,
+        outerRadius: OUTER,
+        nowAngle: 15,
+      });
+
+      return [...group.querySelectorAll('[data-testid="event-title-e1"] text')].map((node) => ({
+        fill: node.getAttribute("fill"),
+        mask: node.getAttribute("mask"),
+      }));
+    }
+
+    it("draws one copy per side, each masked to the ground it is coloured for", () => {
+      // ⚪ gray-100: the worst case, since its fill takes black text and the dial cannot.
+      expect(titles("#F3F4F6")).toEqual([
+        { fill: "#000000", mask: "url(#arc-title-live-e1)" },
+        { fill: "var(--card-foreground)", mask: "url(#arc-title-spent-e1)" },
+      ]);
+    });
+
+    it.each([
+      ["arc-title-live-e1"],
+      ["arc-title-spent-e1"],
+    ])("hard-edges %s: a glyph in a ramp blends to mid-grey and drops out", (maskId) => {
+      // Measured on the fixture at 1.4:1 against its own ground when both copies painted at partial
+      // alpha — a letter missing from the middle of the title. The arc's own masks keep their ramp;
+      // the text's carry the split alone.
+      const group = eventArc({
+        event: makeEvent({ startAngle: 0, endAngle: 60, continuesBefore: true }),
+        cx: CX,
+        cy: CY,
+        innerRadius: INNER,
+        outerRadius: OUTER,
+        nowAngle: 15,
+      });
+      const mask = group.querySelector(`mask#${maskId}`);
+
+      expect(mask?.querySelector('[data-mask-part="occlusion"]')).not.toBeNull();
+      expect(mask?.querySelector('[data-mask-part="ramp"]')).toBeNull();
+      // And no window feather either: a clamped title is deliberately left readable (#22), and
+      // draining must not quietly reverse that.
+      expect(mask?.querySelectorAll("linearGradient")).toHaveLength(0);
+    });
+
+    it.each([
+      ["⚫ gray-800", "#1F2937"],
+      ["🟤 amber-800", "#92400E"],
+    ])(
+      "leaves %s a single unmasked copy: white reads on its fill and on the dial alike",
+      (_label, color) => {
+        // The two colours whose title is white. Splitting one that needs no split costs a node and
+        // invites a seam artefact for nothing — and the single copy is exactly what the arc drew a
+        // tick earlier, when the same event was still merely live.
+        expect(titles(color)).toEqual([{ fill: "#ffffff", mask: null }]);
+      }
+    );
+
+    it.each([
+      ["🔴 red-500", "#EF4444"],
+      ["🔵 blue-500", "#3B82F6"],
+      ["🟣 purple-500", "#A855F7"],
+    ])("splits %s too, whose black title reads on the fill but not on the dial", (_label, color) => {
+      // `readableTextColor` measures the authored hex, so these take black titles even though their
+      // *composited* fills are dark enough that white would serve — and black on the drained side's
+      // bare dial is 1.18:1. Seven of the nine palette colours are in this position, not four.
+      expect(titles(color)).toEqual([
+        { fill: "#000000", mask: "url(#arc-title-live-e1)" },
+        { fill: "var(--card-foreground)", mask: "url(#arc-title-spent-e1)" },
+      ]);
+    });
+
+    it("splits past the boundary, where the fill has actually arrived", () => {
+      // At the boundary the ramp has delivered no fill yet, so text coloured for the fill measures
+      // 1.18:1 there. The split belongs at `textFlipCoverage` along the ramp instead.
+      const group = eventArc({
+        event: makeEvent({ startAngle: 0, endAngle: 60, color: "#EAB308" }),
+        cx: CX,
+        cy: CY,
+        innerRadius: INNER,
+        outerRadius: OUTER,
+        nowAngle: 15,
+      });
+      const d =
+        group
+          .querySelector('mask#arc-title-live-e1 [data-mask-part="occlusion"]')
+          ?.getAttribute("d") ?? "";
+      const [, , , , , , , ax, ay] = d.split(/[ A]+/).slice(1).map(Number);
+      const splitAngle = (Math.atan2(ay - CY, ax - CX) * (180 / Math.PI) + 450) % 360;
+
+      // 15° boundary; the ramp reaches 15° + min(FEATHER_DEGREES, 15 × 0.35).
+      expect(splitAngle).toBeGreaterThan(15);
+      expect(splitAngle).toBeLessThanOrEqual(15 + 15 * 0.35);
+    });
+
+    it("still draws a single unmasked copy when the arc is not draining", () => {
+      const group = render({ startAngle: 0, endAngle: 60, color: "#F3F4F6" });
+      const nodes = [...group.querySelectorAll('[data-testid="event-title-e1"] text')];
+
+      expect(nodes).toHaveLength(1);
+      expect(nodes[0].hasAttribute("mask")).toBe(false);
+    });
+
+    it("keeps both copies on one baseline path, so the seam recolours a letter rather than doubling it", () => {
+      const group = eventArc({
+        event: makeEvent({ startAngle: 0, endAngle: 60, color: "#F3F4F6" }),
+        cx: CX,
+        cy: CY,
+        innerRadius: INNER,
+        outerRadius: OUTER,
+        nowAngle: 15,
+      });
+      const hrefs = [
+        ...group.querySelectorAll('[data-testid="event-title-e1"] textPath'),
+      ].map((node) => node.getAttribute("href"));
+
+      expect(hrefs).toEqual(["#text-path-e1-0", "#text-path-e1-0"]);
+    });
+  });
+
   it("combines a window-edge feather with the drain fade on the fill's own mask", () => {
     const group = eventArc({
       event: makeEvent({ startAngle: 0, endAngle: 60, continuesAfter: true }),

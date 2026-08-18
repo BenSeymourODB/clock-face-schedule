@@ -37,13 +37,20 @@ export {
   compositeOver,
   contrastRatio,
   readableTextColor,
-  relativeLuminance
+  relativeLuminance,
+  textFlipCoverage
 } from './contrast';
 // `emoji.ts` is deliberately absent. Its consumers — `clock-utils`, `pack-lines`, `fit-label` —
 // are all inside this directory and import it directly, and re-exporting the pattern here put a
 // top-level `new RegExp` in the barrel that esbuild would not tree-shake, carrying the whole
 // sequence string into the *server* bundle even though `parseEventTitle` is dropped there.
-export { computeDrainFraction, computeDrainMasks, type DrainMasks } from './drain';
+export {
+  computeDrainFraction,
+  computeDrainMasks,
+  computeDrainTextSplit,
+  type DrainMasks,
+  type OccludedSpan
+} from './drain';
 export {
   FEATHER_DEGREES,
   FEATHER_MAX_SPAN_RATIO,

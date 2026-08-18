@@ -175,3 +175,41 @@ export function adjustForContrast(
 
   return compositeOver(color, target, hi) ?? target;
 }
+
+/**
+ * How much of `tint` has to be over `background` before the *darker* of the two candidate text
+ * colours becomes the better one — as a fraction of `alpha`, 0–1.
+ *
+ * The case is a fill that ramps in rather than arriving all at once: a draining arc's seam (#28) runs
+ * from bare dial to full fill across a few degrees, and a title crossing it has one ground at each
+ * end. Splitting the text at the boundary is wrong, because the fill has not arrived there yet —
+ * measured on the fixture, black text a third of a degree past the boundary sat on a ground it
+ * cleared **1.18:1** against, which is a letter missing from the middle of the title.
+ *
+ * Returns the tie, where the two candidates are equally legible on the blend. Split there and the
+ * worst contrast anywhere across the ramp is as high as it can be made: 4.59:1 to 4.61:1 for the
+ * palette colours whose title is black, against 2.50:1 for the ramp's midpoint and 1.18:1 for its
+ * start. Contrast against the blend is monotonic in coverage for each candidate, so the crossing is
+ * unique and a binary search finds it.
+ *
+ * Returns 1 when the crossing never happens inside the ramp — 🔴 🔵 🟣, whose fills are dark enough
+ * that white stays the better choice even at full strength, and any unparseable colour. That is not
+ * "no split": it is a split at the far end of the ramp, which is the correct place for one when the
+ * darker colour only ever wins on fill at full strength.
+ */
+export function textFlipCoverage(background: string, tint: string, alpha: number): number {
+  const flipped = (coverage: number): boolean => {
+    const ground = compositeOver(background, tint, alpha * coverage);
+    return ground !== null && readableTextColor(ground) !== readableTextColor(background);
+  };
+
+  let lo = 0;
+  let hi = 1;
+  for (let step = 0; step < BLEND_SEARCH_STEPS; step += 1) {
+    const mid = (lo + hi) / 2;
+    if (flipped(mid)) hi = mid;
+    else lo = mid;
+  }
+
+  return hi;
+}

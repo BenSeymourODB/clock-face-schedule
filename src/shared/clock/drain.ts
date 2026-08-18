@@ -8,6 +8,20 @@
  */
 import { FEATHER_DEGREES, FEATHER_MAX_SPAN_RATIO, type FeatherSpan } from './feather';
 
+/**
+ * A region hidden outright rather than faded, anchored at a boundary the way `FeatherSpan` is:
+ * `fromAngle` is the boundary, `toAngle` the far end of the region beyond it.
+ *
+ * Distinct from `FeatherSpan` because a drain boundary asks for something a window edge never
+ * does. #22's mask model — an opaque ground with one gradient wedge laid over it — can only
+ * *soften* an edge, since everything the wedge does not reach stays opaque. A drain boundary needs
+ * one side gone, and a ramp alone left 65–83% of it untouched (#71).
+ */
+export interface OccludedSpan {
+  fromAngle: number;
+  toAngle: number;
+}
+
 export interface DrainMasks {
   /** Where the boundary falls in the arc's own *drawn* coordinate space. */
   boundaryAngle: number;
@@ -15,6 +29,10 @@ export interface DrainMasks {
   fillSpan: FeatherSpan;
   /** The mirror image: reveals the elapsed outline moving toward what's spent. */
   spentSpan: FeatherSpan;
+  /** The spent side, which the fill and the live separator must not paint at all. */
+  fillOccluded: OccludedSpan;
+  /** The remaining side, which the elapsed outline must not paint at all. */
+  spentOccluded: OccludedSpan;
 }
 
 /**
@@ -37,10 +55,14 @@ export function computeDrainFraction(
 }
 
 /**
- * Where the drawn arc carries the drain boundary, and the two fades that meet there.
+ * Where the drawn arc carries the drain boundary, the two fades that meet there, and the side each
+ * mask has to hide outright.
  *
  * Both fades share one depth, capped by whichever side of the boundary is shorter, so the ramp
  * never eats more of either side than #22 already allows an arc to lose at one end.
+ *
+ * The occlusions run boundary → arc end, so each is anchored at the boundary exactly as the fades
+ * are and a caller pads both kinds away from it in the same direction.
  */
 export function computeDrainMasks(
   startAngle: number,
@@ -55,6 +77,32 @@ export function computeDrainMasks(
   return {
     boundaryAngle,
     fillSpan: { fromAngle: boundaryAngle, toAngle: boundaryAngle + depth },
-    spentSpan: { fromAngle: boundaryAngle, toAngle: boundaryAngle - depth }
+    spentSpan: { fromAngle: boundaryAngle, toAngle: boundaryAngle - depth },
+    fillOccluded: { fromAngle: boundaryAngle, toAngle: startAngle },
+    spentOccluded: { fromAngle: boundaryAngle, toAngle: endAngle }
+  };
+}
+
+/**
+ * Where a title crossing the seam should change colour, as the region each copy must not paint.
+ *
+ * Not at the boundary: the fill ramps in across `depth` degrees, so just past the boundary the
+ * ground is still nearly bare dial and text coloured for the fill is invisible on it. `coverage` is
+ * the fraction of the ramp at which the two candidate text colours are equally legible — see
+ * `textFlipCoverage` — and splitting there maximises the worst contrast anywhere across the seam.
+ *
+ * Hard-edged on purpose. Ramping the two copies against each other instead makes both partly
+ * transparent through the middle of the seam, and they blend toward a mid-grey that measured 1.4:1
+ * against its own ground.
+ */
+export function computeDrainTextSplit(
+  { boundaryAngle, fillSpan, fillOccluded, spentOccluded }: DrainMasks,
+  coverage: number
+): { live: OccludedSpan; spent: OccludedSpan } {
+  const splitAngle = boundaryAngle + coverage * (fillSpan.toAngle - boundaryAngle);
+
+  return {
+    live: { fromAngle: splitAngle, toAngle: fillOccluded.toAngle },
+    spent: { fromAngle: splitAngle, toAngle: spentOccluded.toAngle }
   };
 }

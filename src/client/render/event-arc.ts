@@ -11,17 +11,21 @@ import {
   type ArcTitleLayout,
   type ClockEvent,
   type FeatherSpan,
+  type OccludedSpan,
   adjustForContrast,
   combineTitleWithEmoji,
   computeArcFeathers,
   computeArcTitleLayout,
   computeDrainFraction,
   computeDrainMasks,
+  computeDrainTextSplit,
+  contrastRatio,
   describeArc,
   describeTextArc,
   polarToCartesian,
   readableTextColor,
   roundCoord,
+  textFlipCoverage,
 } from "../../shared/clock";
 import { svg } from "../svg";
 
@@ -42,6 +46,15 @@ const DIAL_BACKGROUND = "#16181d";
  * for text rather than the 3:1 graphical-object floor, because this dial is read across a room.
  */
 const OUTLINE_MIN_CONTRAST = 4.5;
+
+/**
+ * Contrast floor for a title against whichever ground it lands on.
+ *
+ * The same 4.5 as `OUTLINE_MIN_CONTRAST` and for the same reason — AA for text, on a dial read
+ * across a room — but a separate decision: this one governs which *ground* a title copy may sit on,
+ * not how an event colour is adjusted.
+ */
+const TITLE_MIN_CONTRAST = 4.5;
 
 /** Below this span there is not enough arc to render an emoji legibly. */
 const EMOJI_MIN_SPAN_DEGREES = 10;
@@ -145,23 +158,31 @@ function feathersToSpans(feathers: ArcFeathers): NamedSpan[] {
 
 /**
  * A luminance mask that fades the arc out across whichever spans it is given — a window edge
- * (#22), a drain boundary (#28), or both at once.
+ * (#22), a drain boundary (#28), or both at once — and hides outright whichever regions it is told
+ * to occlude.
  *
  * Masks the whole path rather than tinting its fill, because the separator stroke traces the arc's
  * closed outline — leave it alone and a crisp line still caps the boundary, which is the very
  * thing the fade exists to deny.
  *
  * A white ground makes everything opaque; each fade lays a black gradient over it, running from
- * opaque black at the boundary to zero alpha where the arc resumes full strength. The gradient is
- * painted onto a wedge rather than the whole box so that `pad` spread cannot reach the far side of
- * an arc that curves back around past 180°.
+ * opaque black at the boundary to zero alpha where the arc resumes full strength. That is the whole
+ * model a window feather needs, where the arc genuinely continues past the edge — but it can only
+ * soften an edge, never hide a side, and a drain boundary needs one side gone (#71). So an
+ * occluded region is painted solid black on the same ground, stopping *at* the boundary: the ramp
+ * already pads past it to swallow the stroke, and a solid overrunning the boundary would blacken
+ * the first fraction of a degree the ramp is supposed to own.
+ *
+ * Every region is painted onto a wedge rather than the whole box, so that neither `pad` spread nor
+ * a rect can reach the far side of an arc that curves back around past 180°.
  */
 function buildFadeMask(
   maskId: string,
   spans: NamedSpan[],
-  { cx, cy, innerRadius, outerRadius, separatorWidth }: FadeMaskGeometry
+  { cx, cy, innerRadius, outerRadius, separatorWidth }: FadeMaskGeometry,
+  occlusions: OccludedSpan[] = []
 ): SVGMaskElement | undefined {
-  if (spans.length === 0) return undefined;
+  if (spans.length === 0 && occlusions.length === 0) return undefined;
 
   // The wedge has to swallow the stroke, which straddles the path by half its width in every
   // direction — including angularly, past the boundary.
@@ -186,8 +207,39 @@ function buildFadeMask(
   });
 
   mask.append(
-    svg("rect", { x: box.x, y: box.y, width: box.size, height: box.size, fill: "#ffffff" })
+    svg("rect", {
+      x: box.x,
+      y: box.y,
+      width: box.size,
+      height: box.size,
+      fill: "#ffffff",
+      "data-mask-part": "ground",
+    })
   );
+
+  /** The padded wedge every region is painted onto, between two angles in any order. */
+  const wedge = (fromAngle: number, toAngle: number): string =>
+    describeArc(
+      cx,
+      cy,
+      outerRadius + separatorWidth,
+      Math.max(0, innerRadius - separatorWidth),
+      Math.min(fromAngle, toAngle),
+      Math.max(fromAngle, toAngle)
+    );
+
+  for (const span of occlusions) {
+    // Padded away from the boundary, so the stroke straddling the arc's far end is swallowed too.
+    const away = Math.sign(span.toAngle - span.fromAngle);
+
+    mask.append(
+      svg("path", {
+        "data-mask-part": "occlusion",
+        d: wedge(span.fromAngle, span.toAngle + away * padDegrees),
+        fill: "#000000",
+      })
+    );
+  }
 
   for (const { key, span } of spans) {
     const gradientId = `${maskId}-${key}`;
@@ -214,14 +266,8 @@ function buildFadeMask(
         ]
       ),
       svg("path", {
-        d: describeArc(
-          cx,
-          cy,
-          outerRadius + separatorWidth,
-          Math.max(0, innerRadius - separatorWidth),
-          Math.min(wedgeEdge, span.toAngle),
-          Math.max(wedgeEdge, span.toAngle)
-        ),
+        "data-mask-part": "ramp",
+        d: wedge(wedgeEdge, span.toAngle),
         fill: `url(#${gradientId})`,
       })
     );
@@ -307,19 +353,28 @@ export function eventArc({
   // Not draining: fill and every border layer share one mask, exactly as before #28. Draining:
   // the fill needs to fade toward what's left while the halo/outline fade the opposite way toward
   // what's spent, so they need two masks meeting at the same boundary.
+  const drain = isDraining
+    ? computeDrainMasks(startAngle, endAngle, drainFraction)
+    : undefined;
+
   let fillMask: SVGMaskElement | undefined;
   let spentMask: SVGMaskElement | undefined;
-  if (isDraining) {
-    const { fillSpan, spentSpan } = computeDrainMasks(startAngle, endAngle, drainFraction);
+  if (drain) {
+    const { fillSpan, spentSpan, fillOccluded, spentOccluded } = drain;
+    // Each mask hides the side it does not own outright and ramps only across the seam. The
+    // feathers ride along on both: a draining arc can be window-clamped as well, and the clamp
+    // still shapes whichever side of the boundary reaches the window edge.
     fillMask = buildFadeMask(
       `arc-fade-${id}`,
       [...featherSpans, { key: "drain", span: fillSpan }],
-      geometry
+      geometry,
+      [fillOccluded]
     );
     spentMask = buildFadeMask(
       `arc-drain-${id}`,
       [...featherSpans, { key: "drain", span: spentSpan }],
-      geometry
+      geometry,
+      [spentOccluded]
     );
   } else {
     fillMask = buildFadeMask(`arc-fade-${id}`, featherSpans, geometry);
@@ -440,6 +495,74 @@ export function eventArc({
     const { titleRadius, titleFontSize, fit } = resolved;
     const lineOffset = titleFontSize * TITLE_LINE_OFFSET_RATIO;
 
+    /**
+     * The copies of each title line, and what each is coloured for.
+     *
+     * One, normally: the title sits on the event's own colour, which no token describes and which
+     * the calendar may supply, so `readableTextColor` picks against it (NDWC used a fixed white,
+     * which measures 1.9:1 on the palette's yellow, #15). Once the arc is elapsed the fill is gone
+     * and the text sits on the dial instead, where the theme already guarantees a pairing —
+     * `--card-foreground` is 16:1 on `--card`. Computing a ratio there would need the token's hex,
+     * which this does not have; the event colour would reintroduce the very failures #27 is about.
+     *
+     * A draining arc can have *both* grounds under one title, and where the live colour is black no
+     * single copy serves them: black measures 1.18:1 on the bare dial the drained side exposes.
+     * So each side gets its own copy, masked to its own ground — the same glyphs at the same
+     * coordinates, so a letter on the split changes colour rather than doubling. Only ⚫ and 🟤 take
+     * a white title, and white reads on the fill (15.21:1, 8.35:1) and the dial (17.76:1) alike, so
+     * those keep the single unmasked copy the arc drew a tick earlier, before it started draining.
+     *
+     * The two masks are the drain split *without* the seam ramp and *without* the window feathers:
+     *
+     * - **No ramp.** Inside the ramp both copies paint at partial alpha and blend toward mid-grey;
+     *   measured on the fixture, a glyph there fell to 1.4:1 against its own ground. Hard-edged,
+     *   each half is painted at full strength for the ground it lands on.
+     * - **Split at the flip, not at the boundary.** The fill ramps in over `depth` degrees, so text
+     *   coloured for the fill lands on bare dial if it switches at the boundary — 1.18:1, measured.
+     *   `computeDrainTextSplit` moves the seam to where the two colours tie: 4.59–4.61:1 at worst
+     *   across the whole ramp, against 2.50:1 for its midpoint.
+     * - **No feathers.** A title at a window edge is deliberately left unmasked (#22) so the name
+     *   stays readable where the band does not; a draining arc must not quietly reverse that.
+     */
+    const liveTextColor = readableTextColor(color);
+    // Seven of the nine palette colours take a black title — `readableTextColor` measures the
+    // authored hex, not the composite — and black measures 1.18:1 on the bare dial. A white one
+    // (⚫, 🟤) already reads on both grounds, so only a black title needs the split.
+    const titleNeedsSplit =
+      (contrastRatio(liveTextColor, DIAL_BACKGROUND) ?? 0) < TITLE_MIN_CONTRAST;
+    const textSplit =
+      drain && titleNeedsSplit
+        ? computeDrainTextSplit(
+            drain,
+            textFlipCoverage(DIAL_BACKGROUND, color, ARC_FILL_OPACITY)
+          )
+        : undefined;
+
+    const titleLayers = textSplit
+      ? [
+          {
+            name: "live",
+            fill: readableTextColor(color),
+            mask: buildFadeMask(`arc-title-live-${id}`, [], geometry, [textSplit.live]),
+          },
+          {
+            name: "spent",
+            fill: "var(--card-foreground)",
+            mask: buildFadeMask(`arc-title-spent-${id}`, [], geometry, [textSplit.spent]),
+          },
+        ]
+      : [
+          {
+            name: isElapsed ? "spent" : "live",
+            fill: isElapsed ? "var(--card-foreground)" : readableTextColor(color),
+            mask: undefined,
+          },
+        ];
+
+    for (const layer of titleLayers) {
+      if (layer.mask) defs.append(layer.mask);
+    }
+
     // The first line has to appear *above* the second on screen, and which radius that is flips
     // with the half of the dial: further out is higher at the top and lower at the bottom. Always
     // putting line one on the outer radius made lower-half titles read bottom-up.
@@ -465,38 +588,35 @@ export function eventArc({
       );
 
       // One <text> per line rather than one <text> with two <textPath> children, so each line
-      // has its own typographic context and there is no SVG 2 path-sequencing question.
-      titleGroup.append(
-        svg(
-          "text",
-          {
-            "font-size": titleFontSize,
-            "font-weight": 500,
-            // Chosen per arc: the title sits on the event's own colour, which no token
-            // describes and which the calendar may supply. NDWC used a fixed white, which
-            // measures 1.9:1 on the palette's yellow (#15).
-            //
-            // Once the fill is gone the text sits on the dial's own background instead, and the
-            // theme already guarantees a pairing for that — `--card-foreground` is 16:1 on
-            // `--card`. Computing a ratio there would need the token's hex, which this does not
-            // have; the event colour would reintroduce the very failures #27 is about.
-            fill: isElapsed ? "var(--card-foreground)" : readableTextColor(color),
-            "font-family": FONT_STACK,
-          },
-          [
-            svg(
-              "textPath",
-              {
-                href: `#${pathId}`,
-                startOffset: "50%",
-                "text-anchor": "middle",
-                "dominant-baseline": "central",
-              },
-              [fit.lines[index]]
-            ),
-          ]
-        )
-      );
+      // has its own typographic context and there is no SVG 2 path-sequencing question. A
+      // draining arc adds a second copy per line — see `titleLayers`.
+      for (const layer of titleLayers) {
+        titleGroup.append(
+          svg(
+            "text",
+            {
+              "data-title-layer": layer.name,
+              "font-size": titleFontSize,
+              "font-weight": 500,
+              fill: layer.fill,
+              mask: layer.mask && `url(#${layer.mask.id})`,
+              "font-family": FONT_STACK,
+            },
+            [
+              svg(
+                "textPath",
+                {
+                  href: `#${pathId}`,
+                  startOffset: "50%",
+                  "text-anchor": "middle",
+                  "dominant-baseline": "central",
+                },
+                [fit.lines[index]]
+              ),
+            ]
+          )
+        );
+      }
     });
 
     group.append(titleGroup);
