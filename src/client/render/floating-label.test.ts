@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { floatingLabel } from "./floating-label";
+import { roundCoord } from "../../shared/clock";
+import { floatingLabel, floatingLabelGeometry } from "./floating-label";
 
 const CX = 300;
 const CY = 300;
@@ -225,7 +226,7 @@ describe("floatingLabel against the dial's real geometry", () => {
   const LONG = "Parent Teacher Conference Planning Committee";
   const EVERY_15_DEGREES = Array.from({ length: 24 }, (_unused, i) => i * 15);
 
-  function card(anchorAngle: number, text = LONG) {
+  function card(anchorAngle: number, text = LONG, duration?: string) {
     const group = floatingLabel({
       id: "e1",
       text,
@@ -238,6 +239,7 @@ describe("floatingLabel against the dial's real geometry", () => {
       clockBox: CLOCK_BOX,
       faceRadius: FACE,
       fontSize: FONT,
+      duration,
     });
     const [x, y, width, height] = numbers(part(group, "rect"), "x", "y", "width", "height");
     return { group, x, y, width, height };
@@ -295,5 +297,81 @@ describe("floatingLabel against the dial's real geometry", () => {
 
   it("keeps a short title to a single line", () => {
     expect(lineTexts(card(302.5, "Lunch").group)).toEqual(["Lunch"]);
+  });
+
+  /**
+   * #35's duration, on the surface where it earns most: a label exists because the arc was too
+   * narrow for its title, and a narrow arc is exactly where `MIN_ARC_DEGREES` has already flattened
+   * ten minutes and fifteen into the same 7.5°.
+   */
+  describe("duration line", () => {
+    it("follows the title on a line of its own", () => {
+      expect(lineTexts(card(302.5, "Assembly", "45 min").group)).toEqual(["Assembly", "45 min"]);
+    });
+
+    // A card sized to three lines that then draws four is #21 again with a different arithmetic
+    // error behind it: the clearance below is computed from the tallest the card may become, so the
+    // duration has to be counted there and not only where it is drawn.
+    it.each(EVERY_15_DEGREES)("still clears the clock face at %i°", (anchorAngle) => {
+      expect(gapToCentre(card(anchorAngle, LONG, "1 hr 10"))).toBeGreaterThan(FACE);
+    });
+
+    it.each(EVERY_15_DEGREES)("still needs no horizontal clamping at %i°", (anchorAngle) => {
+      const { x, width } = card(anchorAngle, LONG, "1 hr 10");
+      const natural = CX + LABEL_RADIUS_REAL * Math.sin((anchorAngle * Math.PI) / 180);
+
+      expect(x + width / 2).toBeCloseTo(natural, 4);
+    });
+
+    // The card is sized to its widest line, and a short title with a long duration inverts which
+    // line that is.
+    it("widens the card when the duration is the longest line", () => {
+      const withDuration = card(0, "Yoga", "20 min");
+      const plain = card(0, "Yoga");
+
+      expect(lineTexts(withDuration.group)).toEqual(["Yoga", "20 min"]);
+      expect(withDuration.width).toBeGreaterThan(plain.width);
+    });
+
+    // The dial chooses whether a card can afford this line by laying it out twice and comparing the
+    // boxes, so the geometry it measures has to be the geometry that gets drawn. If the two drifted
+    // it would decline durations that fit and keep ones that overlap.
+    it.each([
+      ["with a duration", "1 hr 10"],
+      ["without one", undefined],
+    ])("reports the same box it draws, %s", (_label, duration) => {
+      const params = {
+        id: "e1",
+        text: LONG,
+        anchorAngle: 302.5,
+        anchorRadius: OUTER,
+        labelRadius: LABEL_RADIUS_REAL,
+        color: "#22c55e",
+        cx: CX,
+        cy: CY,
+        clockBox: CLOCK_BOX,
+        faceRadius: FACE,
+        fontSize: FONT,
+        duration,
+      };
+      const { rect, lines } = floatingLabelGeometry(params);
+      const group = floatingLabel(params);
+      const [x, y, width, height] = numbers(part(group, "rect"), "x", "y", "width", "height");
+
+      expect([x, y, width, height]).toEqual([
+        roundCoord(rect.x),
+        roundCoord(rect.y),
+        roundCoord(rect.width),
+        roundCoord(rect.height),
+      ]);
+      expect(lineTexts(group)).toEqual(lines);
+    });
+
+    it("grows the card downward by exactly one line", () => {
+      const plain = card(302.5, "Assembly");
+      const withDuration = card(302.5, "Assembly", "45 min");
+
+      expect(withDuration.height).toBeCloseTo(plain.height + FONT * 1.4, 4);
+    });
   });
 });

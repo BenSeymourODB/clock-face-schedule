@@ -1,4 +1,4 @@
-**Status:** in progress
+**Status:** done
 
 **Issue:** [#38 — A shared event-card component for labels and agenda cards](https://github.com/BenSeymourODB/clock-face-schedule/issues/38)
 

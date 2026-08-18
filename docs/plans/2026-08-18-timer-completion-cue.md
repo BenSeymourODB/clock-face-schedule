@@ -1,6 +1,6 @@
 # Timer completion cue: audio, and a visible end state
 
-**Status:** in progress
+**Status:** done
 **Issue:** #45
 **Docs:** [../brainstorms/2026-08-17-class-timer.md](../brainstorms/2026-08-17-class-timer.md), epic
 #42, [2026-08-18-timer-state-runtime.md](2026-08-18-timer-state-runtime.md) (#43)

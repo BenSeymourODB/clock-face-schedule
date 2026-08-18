@@ -217,6 +217,7 @@ export function eventsToClockEvents(
       trueEndAngle: actual.endAngle,
       continuesBefore: actual.continuesBefore,
       continuesAfter: actual.continuesAfter,
+      durationMinutes: (end.getTime() - start.getTime()) / (60 * 1000),
       color: parsed.color,
       eventEmoji: parsed.eventEmoji,
       isAllDay: event.isAllDay

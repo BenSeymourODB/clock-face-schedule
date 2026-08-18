@@ -61,6 +61,61 @@ describe('fitLabelToWidth', () => {
     expect(result.width).toBeGreaterThanOrEqual(0);
     expect(result.didOverflow).toBe(true);
   });
+
+  describe('trailingLine', () => {
+    it('appends it after the wrapped text and grows the card by one line', () => {
+      const plain = fit('Assembly', 400);
+      const withDuration = fitLabelToWidth('Assembly', 400, FONT, 3, PADDING, '45 min');
+
+      expect(withDuration.lines).toEqual(['Assembly', '45 min']);
+      expect(withDuration.height).toBeCloseTo(
+        labelCardHeight(2, FONT, PADDING.y),
+        4
+      );
+      expect(withDuration.height).toBeGreaterThan(plain.height);
+    });
+
+    // The card is sized to its widest line, and a short title with a long duration inverts which
+    // line that is — "Yoga" is 4 units against "20 min"'s 6. Sizing from the title alone would
+    // clip the duration.
+    it('widens the card when the trailing line is the widest line', () => {
+      const result = fitLabelToWidth('Yoga', 400, FONT, 3, PADDING, '20 min');
+
+      expect(result.width).toBeCloseTo(6 * CHAR + PADDING.x * 2, 4);
+    });
+
+    // Widening past maxWidth is #21's defect — the clamp's only remaining move is to pull the card
+    // in over the numerals and the hands.
+    it('drops it rather than exceeding the width it was given', () => {
+      const result = fitLabelToWidth('PE', 4 * CHAR + PADDING.x * 2, FONT, 3, PADDING, '20 min');
+
+      expect(result.lines).toEqual(['PE']);
+      expect(result.width).toBeLessThanOrEqual(4 * CHAR + PADDING.x * 2);
+    });
+
+    it('is never wrapped or ellipsized, because half a duration is worse than none', () => {
+      const result = fitLabelToWidth(LONG, 160, FONT, 2, PADDING, '1 hr 30');
+
+      expect(result.lines[result.lines.length - 1]).toBe('1 hr 30');
+    });
+
+    // didOverflow describes the *title*: it is what routes the label onto the dial in the first
+    // place, and a duration line neither rescues nor causes that.
+    it('leaves didOverflow describing the title', () => {
+      const cut = fitLabelToWidth(LONG, 160, FONT, 2, PADDING, '1 hr');
+      const whole = fitLabelToWidth('Lunch', 400, FONT, 3, PADDING, '2 hr');
+
+      expect(cut.didOverflow).toBe(true);
+      expect(whole.didOverflow).toBe(false);
+    });
+
+    it('bounds the wrapped text by maxLines, excluding itself', () => {
+      const result = fitLabelToWidth(LONG, 160, FONT, 3, PADDING, '1 hr');
+
+      expect(result.lines).toHaveLength(4);
+      expect(result.lines[3]).toBe('1 hr');
+    });
+  });
 });
 
 describe('labelLineOffsets', () => {

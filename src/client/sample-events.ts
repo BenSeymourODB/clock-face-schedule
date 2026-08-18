@@ -8,8 +8,9 @@
  *
  * Chosen to exercise what is hardest to judge from a specification — three-deep overlap, a title
  * too long for its arc, an event short enough to need the minimum-width floor, an event crossing
- * each end of the rolling window (#25), and a floating label washed with a colour the palette
- * itself fails contrast for once filled (⚫, #26/#27).
+ * each end of the rolling window (#25), a floating label washed with a colour the palette itself
+ * fails contrast for once filled (⚫, #26/#27), and a card whose duration line is wider than its
+ * title (#35).
  *
  * Anchored to `windowStart` — the rolling window's own leading edge — rather than a fixed
  * `periodStart`, so the whole fixture lands inside whatever window is live the moment demo mode
@@ -34,10 +35,25 @@ export function sampleEvents(windowStart: Date): ClockEventInput[] {
     { id: "a", title: "🟢 🎮 Game Time", startDate: at(0, 30), endDate: at(2, 0), isAllDay: false, fallbackColor },
     { id: "b", title: "🔴 Deadline", startDate: at(1, 0), endDate: at(3, 0), isAllDay: false, fallbackColor },
     { id: "c", title: "🟣 Study", startDate: at(1, 30), endDate: at(2, 30), isAllDay: false, fallbackColor },
-    // Overlaps nothing — should keep the whole band despite the cluster above. Ends 80 minutes
-    // before "g" starts, deliberately, so the stretch between them is empty *and inside* the
+    // Overlaps nothing — should keep the whole band despite the cluster above. Ends 55 minutes
+    // before "j" starts, deliberately, so the stretch between them is empty *and inside* the
     // window — the one stress case the window-track (#25) exists to distinguish from the gap.
     { id: "d", title: "🟡 🍽️ Lunch", startDate: at(4, 30), endDate: at(5, 20), isAllDay: false, fallbackColor },
+    // Twenty-two minutes with a four-character title: 11° of arc against a three-character budget
+    // on a lone ring, so it overflows onto a label whose duration line ("22 min", 6 units) is
+    // *wider* than its title (4). Every other card here has a title wider than its duration, so nothing else
+    // exercises a card that sizes itself to the trailing line rather than to the text (#35). Must
+    // stay a lone arc to do that: on a two-deep ring the smaller font gives a 7-character budget,
+    // "Yoga" fits, and there is no card at all.
+    //
+    // Sited in the empty in-window stretch after "d" rather than beside another label. Next to the
+    // conference — the obvious free slot — its card landed *inside* that card, which is wide enough
+    // at six o'clock to swallow it whole: #30's crowding, and nothing to do with the duration line,
+    // so the fixture should not conflate the two.
+    // Twenty-two rather than a round twenty because an exactly-20-minute event computes to
+    // 9.999999999999943° and loses the 10° overflow floor to floating-point error, rendering no text
+    // of any kind. Real, and not this change's to fix — see #69.
+    { id: "j", title: "🔵 Yoga", startDate: at(6, 15), endDate: at(6, 37), isAllDay: false, fallbackColor },
     // ⚫ measures 1.21:1 on the dial background, so once elapsed its outline is invisible without
     // the neutral band beneath it. Placed clear of the cluster so the two stresses stay separable.
     { id: "x", title: "⚫ Assembly", startDate: at(3, 15), endDate: at(4, 0), isAllDay: false, fallbackColor },

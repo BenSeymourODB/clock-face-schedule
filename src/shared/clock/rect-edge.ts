@@ -1,7 +1,35 @@
 /**
- * Where a floating label's connector line should stop.
- * Extracted from next-digital-wall-calendar's `floating-label.tsx`.
+ * Where a floating label's connector line should stop, and whether two cards would touch.
+ * `rectEdgeIntersection` extracted from next-digital-wall-calendar's `floating-label.tsx`.
  */
+
+/** A card's own box, as the renderer draws it. */
+export interface Rect {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+/**
+ * Whether two cards share any area.
+ *
+ * Touching edges do not count: cards are drawn abutting all over this dial and a shared boundary
+ * is not an overlap.
+ *
+ * Not the start of the displacement pass #30 asks for — nothing here moves a card. It exists so
+ * that an *optional* line of card text (#35's duration) can be declined where adding it would put
+ * one card over another, which would hide a title that is on a card precisely because it did not
+ * fit its arc.
+ */
+export function rectsOverlap(a: Rect, b: Rect): boolean {
+  return (
+    a.x < b.x + b.width &&
+    b.x < a.x + a.width &&
+    a.y < b.y + b.height &&
+    b.y < a.y + a.height
+  );
+}
 
 /**
  * Point where the ray from `center` toward `toward` crosses the boundary of an

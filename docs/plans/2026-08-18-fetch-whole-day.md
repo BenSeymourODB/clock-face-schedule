@@ -1,6 +1,6 @@
 # Fetch the whole day, not whatever the 12-hour period anchors to
 
-**Status:** in progress
+**Status:** done
 **Issue:** [#37](https://github.com/BenSeymourODB/clock-face-schedule/issues/37)
 **Docs:** [../brainstorms/2026-08-17-agenda-panel.md](../brainstorms/2026-08-17-agenda-panel.md), [../DESIGN.md](../DESIGN.md)
 

@@ -29,23 +29,35 @@ export function labelCardHeight(lineCount: number, fontSize: number, paddingY: n
  *
  * `padding` is the card's inset on one side; it is subtracted from the text budget and added
  * back to the returned width, so callers pass the same number they draw with.
+ *
+ * `trailingLine` is a short line placed after the wrapped text and counted in the card's width and
+ * height — #35's duration. It is never wrapped or ellipsized, because a duration cut in half is
+ * worse than absent; if it exceeds the budget it is dropped instead, since widening the card past
+ * `maxWidth` is exactly the defect #21 fixed. `maxLines` bounds the wrapped text only, so a caller
+ * adding a trailing line must budget for one more line when it derives `maxWidth`.
  */
 export function fitLabelToWidth(
   text: string,
   maxWidth: number,
   fontSize: number,
   maxLines: number,
-  padding: { x: number; y: number }
+  padding: { x: number; y: number },
+  trailingLine?: string
 ): LabelLayout {
   const budget = charBudget(maxWidth - padding.x * 2, fontSize);
   const fit = packLines(normaliseText(text), budget, maxLines);
 
-  const widest = fit.lines.reduce((longest, line) => Math.max(longest, visualWidth(line)), 0);
+  const trailing =
+    trailingLine !== undefined && visualWidth(trailingLine) <= budget ? trailingLine : undefined;
+  const lines = trailing === undefined ? fit.lines : [...fit.lines, trailing];
+
+  const widest = lines.reduce((longest, line) => Math.max(longest, visualWidth(line)), 0);
 
   return {
     ...fit,
+    lines,
     width: textWidth('x'.repeat(widest), fontSize) + padding.x * 2,
-    height: labelCardHeight(fit.lines.length, fontSize, padding.y)
+    height: labelCardHeight(lines.length, fontSize, padding.y)
   };
 }
 
