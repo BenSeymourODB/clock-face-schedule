@@ -34,12 +34,40 @@ export interface RingAssignment {
  * always equals the maximum number of mutually overlapping events, so it never opens a ring it
  * did not need. Keeping earlier events further out is also the reading order a viewer expects.
  *
+ * `windowStartAngle` rebases every angle onto how far past it they fall, in `[0, 360)`, before
+ * sorting. `calculateTrueArcAngles` never reduces an angle modulo 360 (clock-utils.ts), so its
+ * output is already in chronological order for any window and needs no rebasing — this parameter
+ * is a backstop for a caller that instead hands in angles independently normalised per event (e.g.
+ * a raw hand-position value), where two events on opposite sides of a period boundary can sort in
+ * the wrong order without it. Assumes `windowStartAngle` does not fall strictly inside any single
+ * candidate's own span; a candidate already straddling the rebase origin sorts incorrectly
+ * regardless; upstream code deriving `windowStartAngle` from the window's own edge, rather than
+ * from a point nothing spans, avoids this. Defaults to 0, a no-op against angles already in
+ * `[0, 360)` from a period-aligned window — today's only caller.
+ *
  * Optimal in ring *count* says nothing about ring *thickness*. Callers divide a fixed band by
  * `clusterDepth`, so a deep cluster still yields rings too thin to carry an emoji or a title;
  * capping that is the caller's problem, not this function's.
  */
-export function assignRings(events: RingCandidate[]): Map<string, RingAssignment> {
-  const sorted = [...events].sort((a, b) => a.startAngle - b.startAngle);
+export function assignRings(
+  events: RingCandidate[],
+  windowStartAngle = 0
+): Map<string, RingAssignment> {
+  const relativeAngle = (angle: number): number => {
+    const wrapped = (angle - windowStartAngle) % 360;
+    return wrapped < 0 ? wrapped + 360 : wrapped;
+  };
+
+  const rebased = events.map((event) => {
+    const startAngle = relativeAngle(event.startAngle);
+    let endAngle = relativeAngle(event.endAngle);
+    // An event's own end must not appear to precede its start once each is independently
+    // rebased into [0, 360) — it can only mean the event's span crosses the window's own start.
+    if (endAngle <= startAngle) endAngle += 360;
+    return { id: event.id, startAngle, endAngle };
+  });
+
+  const sorted = [...rebased].sort((a, b) => a.startAngle - b.startAngle);
 
   /** End angle of the last event placed on each ring of the cluster currently being built. */
   const ringEnds: number[] = [];
