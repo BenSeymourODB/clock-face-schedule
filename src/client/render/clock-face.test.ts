@@ -121,6 +121,57 @@ describe("clockFace", () => {
     });
   });
 
+  describe("hand halos", () => {
+    // Guards #44: a hand crossing a filled background (a future timer band) needs a contrasting
+    // outline to stay legible, since it otherwise shares its colour with `--card-foreground`.
+    it.each(["hour-hand", "minute-hand"])("draws a %s halo wider than the hand, in --card", (id) => {
+      const { element } = build(at(6, 30));
+      const halo = find(element, `${id}-halo`);
+      const hand = find(element, id);
+
+      expect(halo?.getAttribute("stroke")).toBe("var(--card)");
+      expect(Number(halo?.getAttribute("stroke-width"))).toBeGreaterThan(
+        Number(hand?.getAttribute("stroke-width"))
+      );
+    });
+
+    it("gives the second hand a halo only when the hand itself is drawn", () => {
+      expect(find(build(at(1, 1, 30)).element, "second-hand-halo")).toBeNull();
+
+      const { element } = build(at(1, 1, 30), true);
+      expect(find(element, "second-hand-halo")?.getAttribute("stroke")).toBe("var(--card)");
+    });
+
+    it("mounts each halo immediately before its hand, so the hand paints on top", () => {
+      const { element } = build(at(6, 30), true);
+
+      for (const id of ["hour-hand", "minute-hand", "second-hand"]) {
+        const halo = find(element, `${id}-halo`);
+        expect(halo?.nextElementSibling).toBe(find(element, id));
+      }
+    });
+
+    it("shares geometry and angle with its hand, and follows it on setTime", () => {
+      const { element, setTime } = build(at(3, 0), true);
+
+      for (const id of ["hour-hand", "minute-hand", "second-hand"]) {
+        const halo = find(element, `${id}-halo`);
+        const hand = find(element, id);
+        for (const attr of ["x1", "y1", "x2", "y2", "transform"]) {
+          expect(halo?.getAttribute(attr)).toBe(hand?.getAttribute(attr));
+        }
+      }
+
+      setTime(at(9, 45, 30));
+
+      for (const id of ["hour-hand", "minute-hand", "second-hand"]) {
+        expect(find(element, `${id}-halo`)?.getAttribute("transform")).toBe(
+          find(element, id)?.getAttribute("transform")
+        );
+      }
+    });
+  });
+
   describe("period indicator", () => {
     it.each([
       [at(0, 0), "AM"],
