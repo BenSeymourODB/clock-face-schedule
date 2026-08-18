@@ -154,11 +154,21 @@ a pin anchors them to midnight — measured by rendering, not predicted:
 | `01:30` | The three-deep cluster mid-drain — 🎮 Game Time and 🔴 Deadline draining, 🟣 Study still live. |
 | `04:15` | ⚫ Staff Debrief and 🟤 ⚽ draining, ⚫ Assembly elapsed: the two palette colours that fail contrast on the dial, in both treatments at once. |
 | `08:30` | 🟣 Free Play draining, with 📚 Reading — the ten-minute event held open by the minimum span — elapsed beside it. |
-| `11:00` | 🟢 Aftercare draining and running past the window's end. Nothing live at all. |
+| `11:00` | 🟢 Aftercare draining and running past the window's end, with every other event already finished. |
 
 Note the first row: **unpinned, the fixture never has an event in progress**, at any time of day.
 It is anchored to the rolling window's own start, so every event's offset from "now" is a constant.
 That is why the preview had never drawn a draining arc before this existed.
+
+Two consequences of that anchoring worth knowing before you pin something:
+
+- **`?freeze=1` on its own does not move the fixture.** It holds the real clock still, so the dial
+  keeps the picture it already had. Only `?now=` re-anchors.
+- **A pinned time is useful in the morning, and empty by the evening.** The fixture spans 22:50 the
+  previous day to 13:15, against a window of `[now − 3h, now + 8h]`, so arcs drop away through the
+  afternoon: **13** arcs at 03:00, 9 at 06:00, 5 at 09:00, 3 at 12:00, and **none from 17:00**.
+  That is what the fixture covers, not a fault in the pin — `?now=19:00` correctly shows an empty
+  dial, because the fixture has nothing at seven in the evening.
 
 ### The manifest is the source of truth
 

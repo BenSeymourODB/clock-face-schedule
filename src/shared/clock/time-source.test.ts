@@ -64,6 +64,12 @@ describe("parseClockPin", () => {
     ["04:60", "a minute past the end of the hour"],
     ["04:15:60", "a second past the end of the minute"],
     ["2026-02-30T04:15", "a date the month does not have"],
+    // The zoned branch hands the string to the platform parser, which rolls an impossible date
+    // into the next month just as quietly as the constructor does. Asserting the rejection only
+    // on the unzoned form was a test agreeing with the code rather than checking it.
+    ["2026-02-30T04:15Z", "the same date, with an explicit offset"],
+    ["2026-02-29T10:00Z", "29 February in a non-leap year, with an offset"],
+    ["2026-04-31T00:00+01:00", "31 April, with an offset"],
     ["2026-13-01T04:15", "a month the year does not have"],
     ["04", "an hour with no minutes"],
     ["2026-08-18", "a date with no time"],
@@ -85,6 +91,21 @@ describe("parseClockPin", () => {
     expect(parseClockPin("2026-02-29T10:00", null, REFERENCE)).toBeNull();
   });
 
+  // The two branches diverged once already, on the calendar guard. They have to accept the same
+  // inputs as well as reject the same ones, or `?now=` means something different depending on
+  // whether an offset happens to be present.
+  it.each<[string, string]>([
+    ["2026-08-18T4:15", "2026-08-18T04:15"],
+    ["2026-08-18T4:15Z", "2026-08-18T04:15Z"],
+    ["2026-08-18T04:15+0100", "2026-08-18T04:15+01:00"],
+  ])("reads %s the same as %s", (loose, canonical) => {
+    const fromLoose = parseClockPin(loose, null, REFERENCE);
+    const fromCanonical = parseClockPin(canonical, null, REFERENCE);
+
+    expect(fromLoose).not.toBeNull();
+    expect(fromLoose!.origin.getTime()).toBe(fromCanonical!.origin.getTime());
+  });
+
   /**
    * A wall time inside a spring-forward gap does not exist, and the constructor resolves it to the
    * hour after. That is the right answer for a pin — the reviewer wanted an instant, not a string —
@@ -103,7 +124,7 @@ describe("parseClockPin", () => {
   it("freezes at the reference when freeze is given alone", () => {
     const pin = parseClockPin(null, "1", REFERENCE);
 
-    expect(pin).toEqual({ origin: REFERENCE, frozen: true });
+    expect(pin).toEqual({ origin: REFERENCE, frozen: true, displaced: false });
   });
 
   it("keeps a requested freeze even when the time beside it is unreadable", () => {
@@ -111,7 +132,15 @@ describe("parseClockPin", () => {
     // the freeze — otherwise a typo silently leaves the clock running.
     const pin = parseClockPin("noon", "1", REFERENCE);
 
-    expect(pin).toEqual({ origin: REFERENCE, frozen: true });
+    expect(pin).toEqual({ origin: REFERENCE, frozen: true, displaced: false });
+  });
+
+  it("marks a time from ?now as displaced, and a bare freeze as not", () => {
+    // Everything that changes what it draws because time *moved* keys on this, so freezing the
+    // real clock where it stands must not look like a displacement.
+    expect(parseClockPin("04:15", "1", REFERENCE)!.displaced).toBe(true);
+    expect(parseClockPin(null, "1", REFERENCE)!.displaced).toBe(false);
+    expect(parseClockPin("noon", "1", REFERENCE)!.displaced).toBe(false);
   });
 
   it.each<[string | null, boolean]>([
@@ -137,7 +166,7 @@ describe("createTimeSource", () => {
 
   it("holds still when frozen, however far the real clock runs on", () => {
     let real = 1_000;
-    const now = createTimeSource({ origin: new Date(500_000), frozen: true }, () => real);
+    const now = createTimeSource({ origin: new Date(500_000), frozen: true, displaced: true }, () => real);
 
     expect(now().getTime()).toBe(500_000);
     real += 6 * 60 * 60 * 1_000;
@@ -146,7 +175,7 @@ describe("createTimeSource", () => {
 
   it("runs at real speed from its origin when not frozen", () => {
     let real = 1_000;
-    const now = createTimeSource({ origin: new Date(500_000), frozen: false }, () => real);
+    const now = createTimeSource({ origin: new Date(500_000), frozen: false, displaced: true }, () => real);
 
     expect(now().getTime()).toBe(500_000);
     real += 90_000;
@@ -155,7 +184,7 @@ describe("createTimeSource", () => {
 
   it("returns a fresh Date each call, so a caller cannot mutate the origin", () => {
     const origin = new Date(500_000);
-    const now = createTimeSource({ origin, frozen: true }, () => 0);
+    const now = createTimeSource({ origin, frozen: true, displaced: true }, () => 0);
 
     const first = now();
     first.setFullYear(1999);
@@ -166,9 +195,10 @@ describe("createTimeSource", () => {
 });
 
 describe("describeClockPin", () => {
+  const origin = new Date(2026, 7, 18, 4, 15, 0);
+
   it("says the clock is pinned, and that it is not the real time", () => {
-    const origin = new Date(2026, 7, 18, 4, 15, 0);
-    const label = describeClockPin({ origin, frozen: false });
+    const label = describeClockPin({ origin, frozen: false, displaced: true }, REFERENCE);
 
     expect(label).toContain("pinned to");
     expect(label).toContain(origin.toLocaleTimeString());
@@ -176,16 +206,32 @@ describe("describeClockPin", () => {
   });
 
   it("distinguishes frozen from merely displaced", () => {
-    const origin = new Date(2026, 7, 18, 4, 15, 0);
+    const pin = { origin, frozen: true, displaced: true };
 
-    expect(describeClockPin({ origin, frozen: true })).toContain("frozen at");
-    expect(describeClockPin({ origin, frozen: true })).not.toContain("pinned to");
+    expect(describeClockPin(pin, REFERENCE)).toContain("frozen at");
+    expect(describeClockPin(pin, REFERENCE)).not.toContain("pinned to");
+  });
+
+  // `?now=` takes a date as well as a time, so a pin months away announced as a bare "9:05:00 AM"
+  // is precisely the display that must not be mistaken for a real one.
+  it("names the date when the pinned day is not today", () => {
+    const christmas = new Date(2026, 11, 25, 9, 5, 0);
+    const label = describeClockPin({ origin: christmas, frozen: true, displaced: true }, REFERENCE);
+
+    expect(label).toContain(christmas.toLocaleString());
+  });
+
+  it("stays short when the pinned time is today", () => {
+    const label = describeClockPin({ origin, frozen: true, displaced: true }, REFERENCE);
+
+    expect(label).toContain(origin.toLocaleTimeString());
+    expect(label).not.toContain(origin.toLocaleString());
   });
 });
 
 describe("describePinnedInstant", () => {
   const origin = new Date(2026, 7, 18, 4, 15, 0);
-  const pin = { origin, frozen: true };
+  const pin = { origin, frozen: true, displaced: true };
 
   /**
    * The defect a render caught: the `?check=1` row reused the status line's wording, which named
@@ -200,17 +246,21 @@ describe("describePinnedInstant", () => {
     const row = describePinnedInstant(pin, origin);
 
     expect(row).not.toContain("not the real time");
-    expect(row).not.toContain(describeClockPin(pin));
+    expect(row).not.toContain(describeClockPin(pin, origin));
   });
 
   it("reports the resolved instant, not the authored origin", () => {
     const later = new Date(2026, 7, 18, 4, 20, 0);
 
-    expect(describePinnedInstant({ origin, frozen: false }, later)).toContain(later.toString());
+    expect(describePinnedInstant({ origin, frozen: false, displaced: true }, later)).toContain(
+      later.toString()
+    );
   });
 
   it("says whether the clock is still running", () => {
-    expect(describePinnedInstant({ origin, frozen: true }, origin)).toContain("frozen");
-    expect(describePinnedInstant({ origin, frozen: false }, origin)).toContain("running");
+    expect(describePinnedInstant(pin, origin)).toContain("frozen");
+    expect(describePinnedInstant({ origin, frozen: false, displaced: true }, origin)).toContain(
+      "running"
+    );
   });
 });

@@ -86,7 +86,7 @@ function startDisplay(): void {
    * itself for the reason demo mode does: a wall showing a time that is not the time is worse than
    * one showing invented events, and worse still if it looks ordinary.
    */
-  const notices = clockPin ? [describeClockPin(clockPin)] : [];
+  const notices = clockPin ? [describeClockPin(clockPin, new Date())] : [];
 
   function setStatusText(text: string | null): void {
     if (!statusLine) return;

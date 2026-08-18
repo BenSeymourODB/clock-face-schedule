@@ -47,14 +47,22 @@ export function readClockPin(
  * is invariant under any value of `?now`. Pinning the clock would rotate the picture and change
  * nothing about the states, which are the reason for pinning it.
  *
- * So a pinned clock anchors the fixture to that day's midnight instead. The offsets then read as
- * clock times and the pinned time of day becomes the phase between `now` and the anchor. The two
- * rules coincide at 03:00, where midnight *is* `now − 3h`, which makes the unpinned picture "as if
- * pinned to 03:00" rather than a third behaviour.
+ * So a **displaced** clock anchors the fixture to that day's midnight instead. The offsets then
+ * read as clock times and the pinned time of day becomes the phase between `now` and the anchor.
+ * The two rules coincide at 03:00, where midnight *is* `now − 3h`, which makes the unpinned
+ * picture "as if pinned to 03:00" rather than a third behaviour.
  *
- * Not made unconditional: anchoring to midnight always is what #25 moved away from, and it would
- * leave the fixture off the dial outside a few hours of the day.
+ * **Displaced, not merely pinned.** `?freeze=1` alone holds the real clock still without moving
+ * it, so re-anchoring for it would empty the dial for no reason a viewer asked for: at 14:37 the
+ * fixture drops from thirteen arcs to one, because midnight anchoring puts the whole fixture
+ * behind the window.
+ *
+ * The same arithmetic bounds where a displaced pin is useful at all. The fixture spans 22:50 the
+ * previous day to 13:15, against a window of `[now − 3h, now + 8h]`, so arcs on the dial fall away
+ * through the afternoon — 13 at 03:00, 5 at 09:00, 3 at 12:00, and **none from 17:00**. That is a
+ * property of what the fixture covers rather than of the anchoring, and it is why midnight
+ * anchoring is not made unconditional: #25 moved away from exactly this.
  */
 export function fixtureAnchor(pin: ClockPin | null, now: Date): Date {
-  return pin ? getDayStart(now) : getRollingWindow(now).windowStart;
+  return pin?.displaced ? getDayStart(now) : getRollingWindow(now).windowStart;
 }
