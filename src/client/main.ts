@@ -12,7 +12,7 @@ import {
   getRollingWindow,
 } from "../shared/clock";
 import { analogClock } from "./render/analog-clock";
-import { sampleEvents } from "./sample-events";
+import { fixtureCopyIndices, recurringSampleEvents } from "./sample-events";
 import { type ScheduleStatus, describeStatus, nextStatus } from "./schedule-status";
 
 const TICK_INTERVAL_MS = 1_000;
@@ -82,8 +82,26 @@ function startDisplay(): void {
   if (mount instanceof HTMLElement && mount.dataset["demo"] === "1") {
     // Anchored to the rolling window's own start, not periodStart, so the fixture lands inside
     // whatever window is live at load time regardless of the hour — see sample-events.ts.
-    clock.setEvents(sampleEvents(getRollingWindow(new Date()).windowStart));
+    const fixtureAnchor = getRollingWindow(new Date()).windowStart;
+    let emitted = "";
+
+    /**
+     * The window keeps moving after load, so a single copy of the fixture scrolls out of it and the
+     * dial empties (#62). The clock re-filters what it holds against the live window on every
+     * render, so the scrolling needs no help — this only hands it copies it has not been given, and
+     * only when the set changes, since `setEvents` redraws every arc.
+     */
+    function refreshFixture(): void {
+      const view = getRollingWindow(new Date());
+      const copies = fixtureCopyIndices(fixtureAnchor, view).join(",");
+      if (copies === emitted) return;
+      emitted = copies;
+      clock.setEvents(recurringSampleEvents(fixtureAnchor, view));
+    }
+
+    refreshFixture();
     setStatusText("Sample events — not a real calendar");
+    window.setInterval(refreshFixture, POLL_INTERVAL_MS);
     return;
   }
 
