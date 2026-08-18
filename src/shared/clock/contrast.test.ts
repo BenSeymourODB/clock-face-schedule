@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { contrastRatio, readableTextColor, relativeLuminance } from "./contrast";
+import { compositeOver, contrastRatio, readableTextColor, relativeLuminance } from "./contrast";
 
 /** Every colour a title can land on via a colour-dot emoji prefix. */
 const PALETTE = [
@@ -99,5 +99,24 @@ describe("readableTextColor", () => {
 
       expect(ratio).toBeGreaterThanOrEqual(AA_NORMAL_TEXT);
     }
+  });
+});
+
+describe("compositeOver", () => {
+  it("returns the background untouched at zero alpha", () => {
+    expect(compositeOver("#16181d", "#EF4444", 0)).toBe("#16181d");
+  });
+
+  it("returns the tint outright at full alpha", () => {
+    expect(compositeOver("#16181d", "#ef4444", 1)).toBe("#ef4444");
+  });
+
+  it("blends linearly per channel, the way SVG fill-opacity does", () => {
+    expect(compositeOver("#000000", "#ffffff", 0.2)).toBe("#333333");
+  });
+
+  it("returns null when either colour is unparseable", () => {
+    expect(compositeOver("papayawhip", "#ffffff", 0.5)).toBeNull();
+    expect(compositeOver("#ffffff", "papayawhip", 0.5)).toBeNull();
   });
 });

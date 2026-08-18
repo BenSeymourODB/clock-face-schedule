@@ -81,8 +81,41 @@ describe("floatingLabel", () => {
     });
 
     it("borders in the event colour", () => {
-      expect(rect?.getAttribute("stroke")).toBe("#22c55e");
+      expect(part(group, "border")?.getAttribute("stroke")).toBe("#22c55e");
       expect(part(group, "connector")?.getAttribute("stroke")).toBe("#22c55e");
+    });
+
+    it("washes the card's field with the event colour, tying it to its arc (#29)", () => {
+      const wash = part(group, "wash");
+
+      expect(wash?.getAttribute("fill")).toBe("#22c55e");
+      expect(Number(wash?.getAttribute("fill-opacity"))).toBeGreaterThan(0);
+      expect(Number(wash?.getAttribute("fill-opacity"))).toBeLessThan(1);
+    });
+
+    it("stacks base, wash and border as separate rects sharing the card's exact geometry", () => {
+      const wash = part(group, "wash");
+      const border = part(group, "border");
+
+      for (const attr of ["x", "y", "width", "height", "rx", "ry"]) {
+        expect(wash?.getAttribute(attr)).toBe(rect?.getAttribute(attr));
+        expect(border?.getAttribute(attr)).toBe(rect?.getAttribute(attr));
+      }
+    });
+
+    it("keeps the wash and border from also carrying the base's fill", () => {
+      // A wash with no fill would be invisible; a border with a fill would blot out the wash
+      // underneath it — each rect's un-shared paint attribute must be the deliberate one.
+      expect(part(group, "wash")?.getAttribute("stroke")).toBeNull();
+      expect(part(group, "border")?.getAttribute("fill")).toBe("none");
+    });
+
+    it("paints the border above the wash, so it reads at full strength", () => {
+      const rectEls: Element[] = [...group.querySelectorAll("rect")];
+
+      expect(rectEls.indexOf(part(group, "border") as Element)).toBeGreaterThan(
+        rectEls.indexOf(part(group, "wash") as Element)
+      );
     });
 
     it("renders the full text on one line when the card has room for it", () => {

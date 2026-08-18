@@ -27,7 +27,7 @@ export {
   polarToCartesian,
   roundCoord
 } from './clock-utils';
-export { readableTextColor, relativeLuminance } from './contrast';
+export { compositeOver, readableTextColor, relativeLuminance } from './contrast';
 // `emoji.ts` is deliberately absent. Its consumers — `clock-utils`, `pack-lines`, `fit-label` —
 // are all inside this directory and import it directly, and re-exporting the pattern here put a
 // top-level `new RegExp` in the barrel that esbuild would not tree-shake, carrying the whole
