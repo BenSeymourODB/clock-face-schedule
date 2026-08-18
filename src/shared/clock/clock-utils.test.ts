@@ -11,6 +11,7 @@ import {
   getFetchWindow,
   getPeriodBounds,
   getPeriodStart,
+  hasEventInProgress,
   parseEventTitle,
   polarToCartesian,
   roundCoord
@@ -631,5 +632,43 @@ describe('elapsedEventIds', () => {
     const events = (endHours as number[]).map((hour) => endingAt(`e${hour}`, hour));
 
     expect(elapsedEventIds(events, now).size).toBe(0);
+  });
+});
+
+describe('hasEventInProgress', () => {
+  const now = new Date(2026, 3, 12, 10, 0, 0);
+
+  function spanning(id: string, startHour: number, endHour: number) {
+    return makeEvent({
+      id,
+      startDate: new Date(2026, 3, 12, startHour, 0, 0).toISOString(),
+      endDate: new Date(2026, 3, 12, endHour, 0, 0).toISOString()
+    });
+  }
+
+  it('is true while an event straddles now', () => {
+    expect(hasEventInProgress([spanning('running', 9, 11)], now)).toBe(true);
+  });
+
+  it.each([
+    ['everything has finished', [spanning('done', 8, 9)]],
+    ['everything is still to come', [spanning('later', 11, 12)]],
+    ['there is nothing at all', []]
+  ])('is false when %s', (_label, events) => {
+    expect(hasEventInProgress(events as ReturnType<typeof spanning>[], now)).toBe(false);
+  });
+
+  it('counts an event starting exactly now as in progress', () => {
+    expect(hasEventInProgress([spanning('starting', 10, 11)], now)).toBe(true);
+  });
+
+  it('counts an event ending exactly now as finished, not in progress', () => {
+    // Matches elapsedEventIds' own boundary: the two must never both claim (or both disown) the
+    // same instant, or an arc could be drawn neither live nor elapsed.
+    expect(hasEventInProgress([spanning('flush', 9, 10)], now)).toBe(false);
+  });
+
+  it('ignores all-day events, which have no angle to drain', () => {
+    expect(hasEventInProgress([makeEvent({ isAllDay: true })], now)).toBe(false);
   });
 });

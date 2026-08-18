@@ -23,6 +23,7 @@ export {
   getFetchWindow,
   getPeriodBounds,
   getPeriodStart,
+  hasEventInProgress,
   parseEventTitle,
   polarToCartesian,
   roundCoord
@@ -32,6 +33,7 @@ export { compositeOver, readableTextColor, relativeLuminance } from './contrast'
 // are all inside this directory and import it directly, and re-exporting the pattern here put a
 // top-level `new RegExp` in the barrel that esbuild would not tree-shake, carrying the whole
 // sequence string into the *server* bundle even though `parseEventTitle` is dropped there.
+export { computeDrainFraction, computeDrainMasks, type DrainMasks } from './drain';
 export {
   FEATHER_DEGREES,
   FEATHER_MAX_SPAN_RATIO,

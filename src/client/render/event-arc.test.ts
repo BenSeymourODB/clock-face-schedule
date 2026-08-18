@@ -3,6 +3,7 @@ import {
   FEATHER_DEGREES,
   type ClockEvent,
   computeArcTitleLayout,
+  polarToCartesian,
 } from "../../shared/clock";
 import { eventArc } from "./event-arc";
 
@@ -455,7 +456,13 @@ describe("eventArc once the event has ended", () => {
       isElapsed,
     });
     const at = (part: string) => group.querySelector(`[data-arc-part="${part}"]`);
-    return { group, fill: at("fill"), separator: at("separator"), outline: at("outline") };
+    return {
+      group,
+      fill: at("fill"),
+      separator: at("separator"),
+      halo: at("halo"),
+      outline: at("outline"),
+    };
   }
 
   it("empties the fill rather than removing the path", () => {
@@ -490,10 +497,10 @@ describe("eventArc once the event has ended", () => {
   ])("backs %s with a neutral band, so the shape reads whatever the colour", (_label, color) => {
     // Outlined, the event's colour is the foreground against a ground it did not choose, and two
     // of the palette's nine fail there. The neutral band is not decoration (#27).
-    const { separator, outline } = parts({ color });
+    const { halo, outline } = parts({ color });
 
-    expect(separator?.getAttribute("stroke")).toBe("var(--border)");
-    expect(Number(separator?.getAttribute("stroke-width"))).toBeGreaterThan(
+    expect(halo?.getAttribute("stroke")).toBe("var(--border)");
+    expect(Number(halo?.getAttribute("stroke-width"))).toBeGreaterThan(
       Number(outline?.getAttribute("stroke-width"))
     );
   });
@@ -570,10 +577,127 @@ describe("eventArc once the event has ended", () => {
   it("fades every layer when the period also clipped the arc", () => {
     // A clamped elapsed arc has to fade whole — an outline surviving a fade would cap the boundary
     // with exactly the crisp edge #22 removed.
-    const { fill, separator, outline } = parts({ continuesAfter: true });
+    const { fill, halo, outline } = parts({ continuesAfter: true });
 
-    for (const layer of [fill, separator, outline]) {
+    for (const layer of [fill, halo, outline]) {
       expect(layer?.getAttribute("mask")).toBe("url(#arc-fade-e1)");
     }
+  });
+
+  it("draws no separator once the event is fully elapsed", () => {
+    // The live band and the elapsed halo mean two different things; showing both at once on a
+    // fully-spent arc would say "still live" and "already over" in the same breath.
+    expect(parts().separator).toBeNull();
+  });
+});
+
+/**
+ * #28: a still-running event splits at "now" rather than flipping straight from live to elapsed —
+ * the spent portion reads like #26's hollow outline, the rest keeps its fill.
+ */
+describe("eventArc while the event is draining", () => {
+  function at(group: SVGGElement, part: string) {
+    return group.querySelector(`[data-arc-part="${part}"]`);
+  }
+
+  function draining(overrides: Partial<ClockEvent> = {}, nowAngle = 15): SVGGElement {
+    return eventArc({
+      event: makeEvent({ startAngle: 0, endAngle: 60, ...overrides }),
+      cx: CX,
+      cy: CY,
+      innerRadius: INNER,
+      outerRadius: OUTER,
+      nowAngle,
+    });
+  }
+
+  it("keeps the fill's own opacity at full strength — the mask does the draining", () => {
+    expect(at(draining(), "fill")?.getAttribute("fill-opacity")).toBe("0.85");
+  });
+
+  it("draws all three border layers at once: the live separator, the spent halo and outline", () => {
+    const group = draining();
+
+    expect(at(group, "separator")).not.toBeNull();
+    expect(at(group, "halo")).not.toBeNull();
+    expect(at(group, "outline")).not.toBeNull();
+  });
+
+  it("masks the fill and the live separator with the fade toward what's left", () => {
+    const group = draining();
+
+    expect(at(group, "fill")?.getAttribute("mask")).toBe("url(#arc-fade-e1)");
+    expect(at(group, "separator")?.getAttribute("mask")).toBe("url(#arc-fade-e1)");
+  });
+
+  it("masks the halo and outline with a distinct fade toward what's spent", () => {
+    // Fill fades in one direction, the elapsed treatment in the other — one mask cannot hold both
+    // gradients pointed opposite ways from the same boundary.
+    const group = draining();
+
+    expect(at(group, "halo")?.getAttribute("mask")).toBe("url(#arc-drain-e1)");
+    expect(at(group, "outline")?.getAttribute("mask")).toBe("url(#arc-drain-e1)");
+  });
+
+  it("does not drain an event that has not started yet", () => {
+    const group = draining({}, -5);
+
+    expect(at(group, "halo")).toBeNull();
+    expect(at(group, "outline")).toBeNull();
+    expect(at(group, "fill")?.hasAttribute("mask")).toBe(false);
+  });
+
+  it("leaves isElapsed in sole charge once the event has fully finished", () => {
+    // now sits inside [0, 60], which would otherwise read as draining — isElapsed must still win.
+    const group = eventArc({
+      event: makeEvent({ startAngle: 0, endAngle: 60 }),
+      cx: CX,
+      cy: CY,
+      innerRadius: INNER,
+      outerRadius: OUTER,
+      isElapsed: true,
+      nowAngle: 15,
+    });
+
+    expect(at(group, "fill")?.getAttribute("fill-opacity")).toBe("0");
+    expect(at(group, "separator")).toBeNull();
+    expect(at(group, "halo")?.hasAttribute("mask")).toBe(false);
+  });
+
+  it("places the boundary from the true angles, not the widened drawn ones", () => {
+    // A short event widened past MIN_ARC_DEGREES draws wider than its true span. Halfway through
+    // the true 0°–10° span must land at the drawn arc's own halfway point, 10° of 0°–20°, not at
+    // true-angle 5°.
+    const group = eventArc({
+      event: makeEvent({ startAngle: 0, endAngle: 20, trueStartAngle: 0, trueEndAngle: 10 }),
+      cx: CX,
+      cy: CY,
+      innerRadius: INNER,
+      outerRadius: OUTER,
+      nowAngle: 5,
+    });
+
+    const gradient = group.querySelector('mask#arc-fade-e1 linearGradient');
+    const midRadius = (INNER + OUTER) / 2;
+    const expected = polarToCartesian(CX, CY, midRadius, 10);
+
+    expect(Number(gradient?.getAttribute("x1"))).toBeCloseTo(expected.x, 4);
+    expect(Number(gradient?.getAttribute("y1"))).toBeCloseTo(expected.y, 4);
+  });
+
+  it("combines a window-edge feather with the drain fade on the fill's own mask", () => {
+    const group = eventArc({
+      event: makeEvent({ startAngle: 0, endAngle: 60, continuesAfter: true }),
+      cx: CX,
+      cy: CY,
+      innerRadius: INNER,
+      outerRadius: OUTER,
+      nowAngle: 15,
+    });
+
+    const ids = [...group.querySelectorAll('mask#arc-fade-e1 linearGradient')].map((node) =>
+      node.getAttribute("id")
+    );
+    expect(ids).toEqual(["arc-fade-e1-end", "arc-fade-e1-drain"]);
   });
 });

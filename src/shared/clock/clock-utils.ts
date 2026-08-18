@@ -279,6 +279,24 @@ export function elapsedEventIds(events: ClockEventInput[], now: Date): Set<strin
 }
 
 /**
+ * Whether any event straddles `now` — started but not finished.
+ *
+ * Drives the dial's rebuild cadence (#28): the drain boundary moves every second while this is
+ * true, so `analogClock.setTime` rebuilds every tick rather than only at rollover or an elapsed
+ * crossing. A boolean rather than a set, since nothing downstream needs *which* event — only
+ * whether the band currently has anything to keep moving.
+ */
+export function hasEventInProgress(events: ClockEventInput[], now: Date): boolean {
+  const nowMs = now.getTime();
+  return events.some((event) => {
+    if (event.isAllDay) return false;
+    const start = new Date(event.startDate).getTime();
+    const end = new Date(event.endDate).getTime();
+    return start <= nowMs && nowMs < end;
+  });
+}
+
+/**
  * Round a computed coordinate to a stable precision.
  *
  * Inherited to guard against two runtimes disagreeing at the least-significant bit; this
