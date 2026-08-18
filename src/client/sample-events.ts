@@ -8,25 +8,36 @@
  *
  * Chosen to exercise what is hardest to judge from a specification — three-deep overlap, a title
  * too long for its arc, an event short enough to need the minimum-width floor, an event crossing
- * each end of the period, and a floating label washed with a colour the palette itself fails
- * contrast for once filled (⚫, #26/#27).
+ * each end of the rolling window (#25), and a floating label washed with a colour the palette
+ * itself fails contrast for once filled (⚫, #26/#27).
+ *
+ * Anchored to `windowStart` — the rolling window's own leading edge — rather than a fixed
+ * `periodStart`, so the whole fixture lands inside whatever window is live the moment demo mode
+ * loads, regardless of the time of day. The window is 11 hours (was 12), so "y" — the event
+ * meant to cross the *trailing* edge — moved 15 minutes earlier to still cross it; every other
+ * event already fit inside the shorter span unchanged. Because the window keeps moving with real
+ * time after load, the fixture will gradually scroll out of view on a display left running for
+ * hours — acceptable for a legibility check at load time, tracked as a known limitation for a
+ * longer-running demo in #62.
  */
 import type { ClockEventInput } from "../shared/clock";
 
-export function sampleEvents(periodStart: Date): ClockEventInput[] {
+export function sampleEvents(windowStart: Date): ClockEventInput[] {
   const at = (hours: number, minutes: number) =>
-    new Date(periodStart.getTime() + (hours * 60 + minutes) * 60_000).toISOString();
+    new Date(windowStart.getTime() + (hours * 60 + minutes) * 60_000).toISOString();
   const fallbackColor = "#3b82f6";
 
   return [
-    // Already running when the period began — its leading end is the period's, not the event's.
+    // Already running when the window began — its leading end is the window's, not the event's.
     { id: "z", title: "⚪ Breakfast Club", startDate: at(-1, 10), endDate: at(0, 20), isAllDay: false, fallbackColor },
     // Three deep between 01:00 and 02:00.
     { id: "a", title: "🟢 🎮 Game Time", startDate: at(0, 30), endDate: at(2, 0), isAllDay: false, fallbackColor },
     { id: "b", title: "🔴 Deadline", startDate: at(1, 0), endDate: at(3, 0), isAllDay: false, fallbackColor },
     { id: "c", title: "🟣 Study", startDate: at(1, 30), endDate: at(2, 30), isAllDay: false, fallbackColor },
-    // Overlaps nothing — should keep the whole band despite the cluster above.
-    { id: "d", title: "🟡 🍽️ Lunch", startDate: at(4, 30), endDate: at(6, 30), isAllDay: false, fallbackColor },
+    // Overlaps nothing — should keep the whole band despite the cluster above. Ends 80 minutes
+    // before "g" starts, deliberately, so the stretch between them is empty *and inside* the
+    // window — the one stress case the window-track (#25) exists to distinguish from the gap.
+    { id: "d", title: "🟡 🍽️ Lunch", startDate: at(4, 30), endDate: at(5, 20), isAllDay: false, fallbackColor },
     // ⚫ measures 1.21:1 on the dial background, so once elapsed its outline is invisible without
     // the neutral band beneath it. Placed clear of the cluster so the two stresses stay separable.
     { id: "x", title: "⚫ Assembly", startDate: at(3, 15), endDate: at(4, 0), isAllDay: false, fallbackColor },
@@ -53,7 +64,7 @@ export function sampleEvents(periodStart: Date): ClockEventInput[] {
     // only the *leading* emoji is stripped, so 🪀🎈 stay adjacent inside cleanTitle, and a line of
     // pure emoji gets none of the slack that over-charged plain characters usually provide.
     { id: "h", title: "🟣 🧸 🪀🎈 Free Play", startDate: at(8, 20), endDate: at(9, 25), isAllDay: false, fallbackColor },
-    // Runs on past the period's end, so the dial must not claim it finishes there.
-    { id: "y", title: "🟢 Aftercare", startDate: at(11, 5), endDate: at(13, 30), isAllDay: false, fallbackColor },
+    // Runs on past the window's end, so the dial must not claim it finishes there.
+    { id: "y", title: "🟢 Aftercare", startDate: at(10, 50), endDate: at(13, 15), isAllDay: false, fallbackColor },
   ];
 }

@@ -4,6 +4,7 @@
  */
 import {
   type ClockEventInput,
+  angleForTime,
   assignRings,
   calculateTrueArcAngles,
   combineTitleWithEmoji,
@@ -11,8 +12,8 @@ import {
   elapsedEventIds,
   eventsToClockEvents,
   filterEventsForPeriod,
-  getPeriodBounds,
   getPeriodStart,
+  getRollingWindow,
   hasEventInProgress,
   roundCoord,
 } from "../../shared/clock";
@@ -20,6 +21,7 @@ import { svg } from "../svg";
 import { clockFace } from "./clock-face";
 import { eventArc } from "./event-arc";
 import { floatingLabel } from "./floating-label";
+import { windowTrack } from "./window-track";
 
 const DEFAULT_SIZE = 600;
 
@@ -81,6 +83,11 @@ const LABEL_RADIUS_RATIO = 0.02;
  */
 const LABEL_FONT_SIZE_RATIO = 0.06;
 
+/** Which calendar minute `time` falls in — the arcs' rebuild granularity now the window rolls. */
+function minuteKey(time: Date): number {
+  return Math.floor(time.getTime() / 60_000);
+}
+
 export interface AnalogClockParams {
   events: ClockEventInput[];
   size?: number;
@@ -94,8 +101,8 @@ export interface AnalogClockParams {
 export interface AnalogClockHandle {
   element: SVGSVGElement;
   /**
-   * Advance the clock. Re-points the hands only; the arcs are rebuilt just when the 12-hour
-   * period rolls over, since nothing else about them changes with the second.
+   * Advance the clock. Re-points the hands every call; the arcs are rebuilt once a calendar
+   * minute, since the rolling window (#25) moves continuously but a tick runs every second.
    */
   setTime(time: Date): void;
   /** Replace the event set and rebuild the arcs. */
@@ -154,10 +161,11 @@ export function analogClock({
 
   let currentTime = time;
   let currentEvents = events;
-  let periodStart = getPeriodStart(time);
   let renderedCount = 0;
   /** Size only — the change detector for arcs whose event has finished since the last tick. */
   let elapsedCount = 0;
+  /** The rolling window moves continuously, so the change detector is the calendar minute. */
+  let renderedMinute = minuteKey(time);
 
   function describe(): void {
     const plural = renderedCount === 1 ? "event" : "events";
@@ -171,13 +179,27 @@ export function analogClock({
     arcsLayer.textContent = "";
     labelsLayer.textContent = "";
 
-    const bounds = getPeriodBounds(currentTime);
-    periodStart = bounds.periodStart;
+    // periodStart is the angle origin only — it never moves the window, which is now the rolling
+    // 3h-behind/8h-ahead range (#25) rather than the fixed 12-hour period.
+    const periodStart = getPeriodStart(currentTime);
+    const { windowStart, windowEnd } = getRollingWindow(currentTime);
+
+    arcsLayer.append(
+      windowTrack({
+        cx,
+        cy,
+        outerRadius,
+        windowStartAngle: angleForTime(windowStart, periodStart),
+        windowEndAngle: angleForTime(windowEnd, periodStart),
+      })
+    );
 
     // All-day events drop out here — they have no start or end angle and belong beside the dial.
     const resolved = eventsToClockEvents(
-      filterEventsForPeriod(currentEvents, bounds.periodStart, bounds.periodEnd),
-      bounds.periodStart
+      filterEventsForPeriod(currentEvents, windowStart, windowEnd),
+      periodStart,
+      windowStart,
+      windowEnd
     );
     renderedCount = resolved.length;
 
@@ -267,6 +289,8 @@ export function analogClock({
     // Clockwise, so labels stack down the page in the order a reader scans the dial.
     overflowing.sort((a, b) => a.startAngle - b.startAngle);
     labelsLayer.append(...overflowing.map(({ label }) => label));
+
+    renderedMinute = minuteKey(currentTime);
   }
 
   renderEvents();
@@ -280,14 +304,17 @@ export function analogClock({
       face.setTime(next);
 
       // Arcs used to be rebuilt only on period rollover, since nothing else about them changed
-      // with the clock. An elapsed arc is drawn differently, so they also rebuild the moment an
-      // event finishes — a handful of times a day rather than once a second. A still-running
-      // event now drains continuously (#28), so on top of those two, rebuild every tick for as
-      // long as anything is actually in progress — the same rebuild the codebase already accepts
-      // at rollover and elapsed crossings, just while there is something for it to keep drawing.
-      const rolledOver = getPeriodStart(next).getTime() !== periodStart.getTime();
+      // between rollovers. The window now moves continuously (#25), so that trigger is replaced
+      // by a calendar-minute check instead — the finest grain that still keeps the tick's
+      // per-second DOM work at zero the rest of the time, and a period rollover is always also a
+      // minute change, so nothing is lost by dropping the old rollover check specifically. Two
+      // triggers still need finer-than-a-minute granularity: an elapsed arc is drawn differently
+      // (#26), so an event finishing has to rebuild immediately rather than waiting up to a
+      // minute; and a still-running event drains continuously (#28), so rebuild every tick for as
+      // long as anything is actually in progress.
+      const minuteChanged = minuteKey(next) !== renderedMinute;
       const elapsedChanged = elapsedEventIds(currentEvents, next).size !== elapsedCount;
-      if (rolledOver || elapsedChanged || hasEventInProgress(currentEvents, next)) {
+      if (minuteChanged || elapsedChanged || hasEventInProgress(currentEvents, next)) {
         renderEvents();
       }
       describe();
