@@ -61,9 +61,11 @@ export {
   remainingBandCount,
   remainingSeconds,
   resumeTimer,
+  shouldPlayCompletionCue,
   startTimer,
   stopTimer,
   tick,
+  type TimerCompletionReason,
   type TimerState,
   type TimerStatus
 } from './timer';
