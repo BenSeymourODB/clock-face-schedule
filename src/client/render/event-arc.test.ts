@@ -2,10 +2,15 @@ import { describe, expect, it } from "vitest";
 import {
   FEATHER_DEGREES,
   type ClockEvent,
+  adjustForContrast,
   computeArcTitleLayout,
+  contrastRatio,
   polarToCartesian,
 } from "../../shared/clock";
 import { eventArc } from "./event-arc";
+
+/** The dial background the outline's colour is made legible against — `--card`, per event-arc.ts. */
+const DIAL_BACKGROUND = "#16181d";
 
 const CX = 300;
 const CY = 300;
@@ -547,8 +552,21 @@ describe("eventArc once the event has ended", () => {
   it("outlines in the event colour, so identity survives losing the fill", () => {
     const { outline } = parts();
 
+    // Green clears the floor, so the contrast pass returns it untouched and the outline is the
+    // event's own colour.
     expect(outline?.getAttribute("stroke")).toBe("#22c55e");
     expect(outline?.getAttribute("fill")).toBe("none");
+  });
+
+  it("makes the outline colour contrast-safe against the dial, not the raw event colour (#27)", () => {
+    // ⚫ gray-800 is invisible on the dial as a raw outline (1.21:1). The renderer must hand the
+    // colour through adjustForContrast against the dial background — the specific defect #26 left
+    // and this issue closes. Whether the *result* clears the floor is proven in contrast.test.ts.
+    const color = "#1F2937";
+    const { outline } = parts({ color });
+
+    expect(outline?.getAttribute("stroke")).toBe(adjustForContrast(color, DIAL_BACKGROUND, 4.5));
+    expect(outline?.getAttribute("stroke")).not.toBe(color);
   });
 
   it("draws no outline layer while the event is still to come", () => {
@@ -559,24 +577,52 @@ describe("eventArc once the event has ended", () => {
     ["⚫ gray-800, which measures 1.21:1 on the dial", "#1F2937"],
     ["🟤 amber-800, which measures 2.50:1", "#92400E"],
     ["🟡 yellow, which needs no help", "#EAB308"],
-  ])("backs %s with a neutral band, so the shape reads whatever the colour", (_label, color) => {
-    // Outlined, the event's colour is the foreground against a ground it did not choose, and two
-    // of the palette's nine fail there. The neutral band is not decoration (#27).
+  ])("carries %s at a contrast-safe weight, with no neutral band beneath", (_label, color) => {
+    // #26 backed the outline with a `var(--border)` band because the event's colour could not be
+    // trusted to contrast. #27 fixes the colour itself, so the outline stands alone — and must,
+    // since nothing else now draws the arc's shape.
     const { halo, outline } = parts({ color });
 
-    expect(halo?.getAttribute("stroke")).toBe("var(--border)");
-    expect(Number(halo?.getAttribute("stroke-width"))).toBeGreaterThan(
-      Number(outline?.getAttribute("stroke-width"))
+    expect(halo).toBeNull();
+    expect(contrastRatio(outline!.getAttribute("stroke")!, DIAL_BACKGROUND)).toBeGreaterThanOrEqual(
+      4.5
     );
   });
 
   it("weights the outline well above the separator hairline it replaces", () => {
-    // With no fill behind it, a hairline is all that stands between the event and not being drawn.
+    // With no fill and no neutral band behind it, a hairline is all that stands between the event
+    // and not being drawn.
     const elapsed = Number(parts().outline?.getAttribute("stroke-width"));
     const live = Number(parts({}, false).separator?.getAttribute("stroke-width"));
 
     expect(elapsed).toBeGreaterThan(live * 2);
     expect(elapsed).toBeCloseTo(ARC_HEIGHT * 0.07, 4);
+  });
+
+  it("stays uniform at every depth the band can carry, so no ratio widening breaks it", () => {
+    // Guards the reason ELAPSED_BORDER_RATIO did not grow into the retired halo's width: at 0.12
+    // the ring cap clamps a three- and four-deep outline, handing the most crowded arcs the
+    // thinnest mark — the inversion #26 fixed. Recomputed here rather than asserted as a constant.
+    const BAND = 75.92;
+    const gap = Math.max(2, BAND * 0.06);
+    const widths = [1, 2, 3, 4].map((depth) => {
+      const thickness = (BAND - (depth > 1 ? (depth - 1) * gap : 0)) / depth;
+      return Number(
+        eventArc({
+          event: makeEvent(),
+          cx: CX,
+          cy: CY,
+          innerRadius: OUTER - thickness,
+          outerRadius: OUTER,
+          isElapsed: true,
+          bandThickness: BAND,
+        })
+          .querySelector('[data-arc-part="outline"]')
+          ?.getAttribute("stroke-width")
+      );
+    });
+
+    expect(new Set(widths).size).toBe(1);
   });
 
   it("keeps its outline weight when stacking thins the ring", () => {
@@ -642,15 +688,15 @@ describe("eventArc once the event has ended", () => {
   it("fades every layer when the period also clipped the arc", () => {
     // A clamped elapsed arc has to fade whole — an outline surviving a fade would cap the boundary
     // with exactly the crisp edge #22 removed.
-    const { fill, halo, outline } = parts({ continuesAfter: true });
+    const { fill, outline } = parts({ continuesAfter: true });
 
-    for (const layer of [fill, halo, outline]) {
+    for (const layer of [fill, outline]) {
       expect(layer?.getAttribute("mask")).toBe("url(#arc-fade-e1)");
     }
   });
 
   it("draws no separator once the event is fully elapsed", () => {
-    // The live band and the elapsed halo mean two different things; showing both at once on a
+    // The live band and the elapsed outline mean two different things; showing both at once on a
     // fully-spent arc would say "still live" and "already over" in the same breath.
     expect(parts().separator).toBeNull();
   });
@@ -680,12 +726,13 @@ describe("eventArc while the event is draining", () => {
     expect(at(draining(), "fill")?.getAttribute("fill-opacity")).toBe("0.85");
   });
 
-  it("draws all three border layers at once: the live separator, the spent halo and outline", () => {
+  it("draws both border layers at once: the live separator and the spent outline", () => {
     const group = draining();
 
     expect(at(group, "separator")).not.toBeNull();
-    expect(at(group, "halo")).not.toBeNull();
     expect(at(group, "outline")).not.toBeNull();
+    // The neutral band #26 drew beneath the outline is gone (#27) — nothing should reintroduce it.
+    expect(at(group, "halo")).toBeNull();
   });
 
   it("masks the fill and the live separator with the fade toward what's left", () => {
@@ -695,19 +742,17 @@ describe("eventArc while the event is draining", () => {
     expect(at(group, "separator")?.getAttribute("mask")).toBe("url(#arc-fade-e1)");
   });
 
-  it("masks the halo and outline with a distinct fade toward what's spent", () => {
+  it("masks the outline with a distinct fade toward what's spent", () => {
     // Fill fades in one direction, the elapsed treatment in the other — one mask cannot hold both
     // gradients pointed opposite ways from the same boundary.
     const group = draining();
 
-    expect(at(group, "halo")?.getAttribute("mask")).toBe("url(#arc-drain-e1)");
     expect(at(group, "outline")?.getAttribute("mask")).toBe("url(#arc-drain-e1)");
   });
 
   it("does not drain an event that has not started yet", () => {
     const group = draining({}, -5);
 
-    expect(at(group, "halo")).toBeNull();
     expect(at(group, "outline")).toBeNull();
     expect(at(group, "fill")?.hasAttribute("mask")).toBe(false);
   });
@@ -726,7 +771,7 @@ describe("eventArc while the event is draining", () => {
 
     expect(at(group, "fill")?.getAttribute("fill-opacity")).toBe("0");
     expect(at(group, "separator")).toBeNull();
-    expect(at(group, "halo")?.hasAttribute("mask")).toBe(false);
+    expect(at(group, "outline")?.hasAttribute("mask")).toBe(false);
   });
 
   it("places the boundary from the true angles, not the widened drawn ones", () => {

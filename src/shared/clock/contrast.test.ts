@@ -1,5 +1,28 @@
 import { describe, expect, it } from "vitest";
-import { compositeOver, contrastRatio, readableTextColor, relativeLuminance } from "./contrast";
+import {
+  adjustForContrast,
+  compositeOver,
+  contrastRatio,
+  readableTextColor,
+  relativeLuminance,
+} from "./contrast";
+
+/** The dial's own background, the ground every event colour is measured against (`--card`). */
+const CARD = "#16181d";
+
+/** Hue in degrees, for asserting an adjustment preserved a colour's identity. Undefined for greys. */
+function hue(color: string): number | undefined {
+  const hex = color.replace(/^#/, "");
+  const [r, g, b] = [0, 2, 4].map((i) => Number.parseInt(hex.slice(i, i + 2), 16) / 255);
+  const max = Math.max(r, g, b);
+  const delta = max - Math.min(r, g, b);
+  if (delta === 0) return undefined;
+  let h: number;
+  if (max === r) h = (g - b) / delta + (g < b ? 6 : 0);
+  else if (max === g) h = (b - r) / delta + 2;
+  else h = (r - g) / delta + 4;
+  return h * 60;
+}
 
 /** Every colour a title can land on via a colour-dot emoji prefix. */
 const PALETTE = [
@@ -99,6 +122,74 @@ describe("readableTextColor", () => {
 
       expect(ratio).toBeGreaterThanOrEqual(AA_NORMAL_TEXT);
     }
+  });
+});
+
+describe("adjustForContrast", () => {
+  it("returns a colour already clearing the floor untouched", () => {
+    // 🔴 red is 4.72:1 on the dial — above 4.5, so no adjustment and byte-identical output.
+    expect(contrastRatio("#EF4444", CARD)).toBeGreaterThanOrEqual(AA_NORMAL_TEXT);
+    expect(adjustForContrast("#EF4444", CARD)).toBe("#EF4444");
+  });
+
+  it("passes an unparseable colour or background straight through", () => {
+    expect(adjustForContrast("papayawhip", CARD)).toBe("papayawhip");
+    expect(adjustForContrast("#fff", "papayawhip")).toBe("#fff");
+  });
+
+  describe("every palette colour clears the floor once adjusted", () => {
+    it.each(PALETTE)("on %s", (_name, color) => {
+      const adjusted = adjustForContrast(color, CARD);
+
+      expect(contrastRatio(adjusted, CARD)).toBeGreaterThanOrEqual(AA_NORMAL_TEXT);
+    });
+  });
+
+  describe("the colours the outline made load-bearing, invisible before and legible after", () => {
+    it.each([
+      ["⚫ near-black", "#1F2937", 1.21],
+      ["🟤 brown", "#92400E", 2.5],
+    ])("%s was %d:1 on the dial and is now compliant", (_name, color, before) => {
+      // Guards the regression #26 shipped: these outlines were effectively invisible on the dial.
+      expect(contrastRatio(color, CARD)).toBeCloseTo(before, 1);
+
+      const adjusted = adjustForContrast(color, CARD);
+      expect(adjusted).not.toBe(color);
+      expect(contrastRatio(adjusted, CARD)).toBeGreaterThanOrEqual(AA_NORMAL_TEXT);
+    });
+
+    it("keeps hue while lightening, so the adjusted colour still identifies the event", () => {
+      // ⚫ is a near-grey, so hue is not meaningful; 🟤 brown carries a hue that must survive.
+      const brown = "#92400E";
+      const adjusted = adjustForContrast(brown, CARD);
+
+      expect(hue(adjusted)).toBeCloseTo(hue(brown) as number, 0);
+      expect(relativeLuminance(adjusted)!).toBeGreaterThan(relativeLuminance(brown)!);
+    });
+  });
+
+  it("darkens toward black on a light ground instead, keeping hue", () => {
+    // The mirror direction, exercising the theme-general path ahead of any light theme wiring.
+    const banana = "#fbd75b";
+    const adjusted = adjustForContrast(banana, "#ffffff");
+
+    expect(contrastRatio(adjusted, "#ffffff")).toBeGreaterThanOrEqual(AA_NORMAL_TEXT);
+    expect(relativeLuminance(adjusted)!).toBeLessThan(relativeLuminance(banana)!);
+    expect(hue(adjusted)).toBeCloseTo(hue(banana) as number, 0);
+  });
+
+  it("adjusts an arbitrary calendar colour no table could enumerate", () => {
+    // The case a school hits immediately: one calendar per class, each a custom hex.
+    const teal = "#0f766e";
+    expect(contrastRatio(teal, CARD)!).toBeLessThan(AA_NORMAL_TEXT);
+    expect(contrastRatio(adjustForContrast(teal, CARD), CARD)).toBeGreaterThanOrEqual(
+      AA_NORMAL_TEXT
+    );
+  });
+
+  it("makes the minimal move — a lower floor leaves a colour that clears it untouched", () => {
+    // ⚫ fails 4.5 but clears 1.0 trivially, so at a 1.0 floor it is returned as-is.
+    expect(adjustForContrast("#1F2937", CARD, 1)).toBe("#1F2937");
   });
 });
 

@@ -11,6 +11,7 @@ import {
   type ArcTitleLayout,
   type ClockEvent,
   type FeatherSpan,
+  adjustForContrast,
   combineTitleWithEmoji,
   computeArcFeathers,
   computeArcTitleLayout,
@@ -25,6 +26,22 @@ import {
 import { svg } from "../svg";
 
 const FONT_STACK = "system-ui, -apple-system, sans-serif";
+
+/**
+ * The dial's own background, as a hex `contrast.ts` can measure against — the value `--card` holds
+ * in `Styles.html`, duplicated here because the renderer knows only the token name (ADR 0007).
+ * Keep the two in sync; `Styles.html` carries a comment pointing back.
+ */
+const DIAL_BACKGROUND = "#16181d";
+
+/**
+ * Contrast floor for an elapsed outline's own colour, against the dial (#27).
+ *
+ * Outlined, an event colour is the foreground rather than the fill, so it has to clear a threshold
+ * it never had to when filled — and ⚫ (1.21:1) and 🟤 (2.50:1) fail it outright. 4.5:1 is WCAG AA
+ * for text rather than the 3:1 graphical-object floor, because this dial is read across a room.
+ */
+const OUTLINE_MIN_CONTRAST = 4.5;
 
 /** Below this span there is not enough arc to render an emoji legibly. */
 const EMOJI_MIN_SPAN_DEGREES = 10;
@@ -74,8 +91,7 @@ const ARC_SEPARATOR_RATIO = 0.03;
 const ARC_SEPARATOR_MIN = 1;
 
 /**
- * An elapsed arc's outline, and the neutral band beneath it, as fractions of **the whole band** —
- * not of this arc's ring.
+ * An elapsed arc's outline, as a fraction of **the whole band** — not of this arc's ring.
  *
  * Heavier than the separator because the outline now *is* the arc: with no fill behind it, a
  * hairline is all that stands between the event and not being drawn. Sizing from the ring got that
@@ -84,14 +100,19 @@ const ARC_SEPARATOR_MIN = 1;
  * the faintest outline. The band does not change with overlap depth, so every elapsed arc on the
  * dial now carries the same weight.
  *
- * The neutral band is load-bearing rather than decorative. Outlined, an event's colour becomes the
- * foreground against a background it did not choose, and two of the palette's nine fail there —
- * ⚫ gray-800 measures 1.21:1 on `--card`, which is not a faint edge but no edge. Drawing
- * `var(--border)` (3.7:1) wider and underneath means the shape always reads and the colour carries
- * identity rather than legibility. #27 fixes the colours themselves, and may retire this.
+ * #26 drew this as a 0.07 coloured line inside a 0.12 neutral `var(--border)` band, because an
+ * event's colour could not be trusted to contrast — ⚫ gray-800 measures 1.21:1 on `--card`, which
+ * is not a faint edge but no edge. Now that #27 resolves the colour itself to 4.5:1 the neutral band
+ * has nothing left to carry and is gone, leaving one coloured outline that reads on its own.
+ *
+ * The ratio stays at 0.07 rather than growing into the width the neutral band used to occupy.
+ * Widening it to 0.12 was tried and reverted: `ELAPSED_STROKE_MAX_RATIO` then clamps it on a
+ * three-deep ring (8.91 against the 9.11 a lone arc gets) and a four-deep one (6.23), so the arcs
+ * with least room would again carry the thinnest outline — the exact inversion this constant's
+ * band-sizing exists to prevent. 0.082 is the widest that stays uniform at the four-ring cap, so
+ * there is no room worth taking.
  */
 const ELAPSED_BORDER_RATIO = 0.07;
-const ELAPSED_HALO_RATIO = 0.12;
 
 /**
  * Ceiling on either stroke, as a fraction of the ring it is drawn on.
@@ -355,25 +376,19 @@ export function eventArc({
     );
   }
 
-  // The elapsed treatment — a neutral halo backing a coloured outline (#26) — whenever any part
-  // of this arc has already happened: the pure-elapsed case, or a draining event's spent portion.
+  // The elapsed treatment — a single coloured outline (#26, #27) — whenever any part of this arc
+  // has already happened: the pure-elapsed case, or a draining event's spent portion.
   if (isElapsed || isDraining) {
     group.append(
-      svg("path", {
-        "data-testid": `event-arc-halo-${id}`,
-        "data-arc-part": "halo",
-        d,
-        fill: "none",
-        stroke: "var(--border)",
-        "stroke-width": stroke(ELAPSED_HALO_RATIO),
-        mask: spentFade,
-      }),
       svg("path", {
         "data-testid": `event-arc-outline-${id}`,
         "data-arc-part": "outline",
         d,
         fill: "none",
-        stroke: color,
+        // The outline carries both the event's identity and its legibility, with no neutral band
+        // beneath it, so the colour has to clear contrast against the dial on its own (#27).
+        // Preserves hue, so a ⚫ or 🟤 event stays recognisably itself while becoming visible.
+        stroke: adjustForContrast(color, DIAL_BACKGROUND, OUTLINE_MIN_CONTRAST),
         "stroke-width": stroke(ELAPSED_BORDER_RATIO),
         mask: spentFade,
       })

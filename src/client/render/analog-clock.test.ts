@@ -437,13 +437,13 @@ describe("analogClock", () => {
       const clock = build([input("lesson", 9.5, 10)]);
       const before = clock.element.querySelector('path[data-arc-part="fill"]');
       expect(before?.getAttribute("fill-opacity")).toBe("0.85");
-      expect(clock.element.querySelector('[data-arc-part="halo"]')).toBeNull();
+      expect(clock.element.querySelector('[data-arc-part="outline"]')).toBeNull();
 
       clock.setTime(new Date(2026, 7, 15, 9, 45, 0));
       const draining = clock.element.querySelector('path[data-arc-part="fill"]');
       expect(draining).not.toBe(before);
       expect(draining?.getAttribute("fill-opacity")).toBe("0.85");
-      expect(clock.element.querySelector('[data-arc-part="halo"]')).not.toBeNull();
+      expect(clock.element.querySelector('[data-arc-part="outline"]')).not.toBeNull();
 
       clock.setTime(new Date(2026, 7, 15, 9, 50, 0));
       expect(clock.element.querySelector('path[data-arc-part="fill"]')).not.toBe(draining);

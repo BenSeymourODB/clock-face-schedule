@@ -121,3 +121,57 @@ export function readableTextColor(background: string): string {
 
   return againstBlack >= againstWhite ? BLACK : WHITE;
 }
+
+/** WCAG AA for normal text. The floor #27 settled on — a display read across a room has no margin. */
+const DEFAULT_MIN_CONTRAST = 4.5;
+
+/** Iterations of the blend search. 2⁻²⁴ resolution on the fraction is far below one 8-bit step. */
+const BLEND_SEARCH_STEPS = 24;
+
+/**
+ * The nearest variant of `color` that clears `minRatio` against `background`, keeping its hue.
+ *
+ * Where a *filled* arc's colour is the background and `readableTextColor` picks the text against it,
+ * an *outlined* arc (#26) inverts that: the colour becomes the foreground against a background it
+ * does not control, and two palette colours fail it outright (⚫ 1.21:1, 🟤 2.50:1 on the dial).
+ * A curated table cannot close this — one colour source is an arbitrary calendar hex — so the
+ * adjustment is computed.
+ *
+ * Blends toward the background's far extreme: white on a dark ground, black on a light one, by the
+ * smallest fraction that clears the ratio. Mixing toward a neutral keeps HSL hue exactly while
+ * raising lightness and shedding saturation — the "lighten *and* desaturate on dark" Material
+ * prescribes, and its mirror on light. Contrast is monotonic in that fraction, so a binary search
+ * lands the minimal adjustment: a colour already clearing the floor is returned untouched, and one
+ * that fails moves no further than it must.
+ *
+ * Returns `color` unchanged if either value is not a parseable hex — the same parseability guard the
+ * rest of this module makes, so an unresolvable colour degrades to its authored form rather than
+ * throwing.
+ */
+export function adjustForContrast(
+  color: string,
+  background: string,
+  minRatio: number = DEFAULT_MIN_CONTRAST
+): string {
+  const backgroundLuminance = relativeLuminance(background);
+  const current = contrastRatio(color, background);
+  if (backgroundLuminance === null || current === null) return color;
+  if (current >= minRatio) return color;
+
+  const target = backgroundLuminance < 0.5 ? WHITE : BLACK;
+  // The extreme itself may not clear a very high `minRatio` (e.g. white on a mid-grey); then the
+  // best available answer is the extreme, and there is nothing further to search for.
+  if ((contrastRatio(target, background) ?? 0) < minRatio) return target;
+
+  let lo = 0;
+  let hi = 1;
+  for (let step = 0; step < BLEND_SEARCH_STEPS; step += 1) {
+    const mid = (lo + hi) / 2;
+    const candidate = compositeOver(color, target, mid);
+    const ratio = candidate === null ? null : contrastRatio(candidate, background);
+    if (ratio !== null && ratio >= minRatio) hi = mid;
+    else lo = mid;
+  }
+
+  return compositeOver(color, target, hi) ?? target;
+}
