@@ -23,33 +23,60 @@ export const EMOJI_WIDTH_UNITS = 2;
  * cut between the parts, which renders as a lone letter for a flag, or the wrong person for a
  * profession.
  *
+ * **Order matters**: alternation is first-match-wins, and the composite branches would otherwise be
+ * starved by the plain `Emoji_Presentation` inside the general branch. The tag branch requires at
+ * least one tag character precisely so it cannot shadow a bare glyph.
+ *
  * Note what is excluded: `\p{Emoji}` alone matches digits, `#` and `©`, so every bare-emoji branch
  * demands U+FE0F. Without it "Room 7" would be charged as double-width.
  */
-export const EMOJI_SEQUENCE = [
-  // A flag: a pair of regional indicators. First, as each is Emoji_Presentation on its own.
-  '\\p{Regional_Indicator}\\p{Regional_Indicator}',
+const EMOJI_SEQUENCE =
+  // A flag: a pair of regional indicators.
+  '\\p{Regional_Indicator}\\p{Regional_Indicator}' +
+  // A subdivision flag: a base glyph carrying a tag sequence, e.g. 🏴󠁧󠁢󠁳󠁣󠁴󠁿. Tags are required here,
+  // so a bare 🏴 still falls through to the general branch below.
+  '|\\p{Emoji_Presentation}[\\u{E0020}-\\u{E007E}]+\\u{E007F}' +
   // A keycap: base character, emoji selector, enclosing keycap.
-  '\\p{Emoji}\\uFE0F\\u20E3',
+  '|\\p{Emoji}\\uFE0F\\u20E3' +
   // A base glyph, an optional skin tone, then any number of ZWJ-joined continuations.
-  '(?:\\p{Emoji_Presentation}|\\p{Emoji}\\uFE0F)\\p{Emoji_Modifier}?' +
-    '(?:\\u200D(?:\\p{Emoji_Presentation}|\\p{Emoji}\\uFE0F)\\p{Emoji_Modifier}?)*',
+  '|(?:\\p{Emoji_Presentation}|\\p{Emoji}\\uFE0F)\\p{Emoji_Modifier}?' +
+  '(?:\\u200D(?:\\p{Emoji_Presentation}|\\p{Emoji}\\uFE0F)\\p{Emoji_Modifier}?)*' +
   // A modifier base carrying a tone, where the base lacks Emoji_Presentation itself.
-  '\\p{Emoji_Modifier_Base}\\p{Emoji_Modifier}',
-].join('|');
+  '|\\p{Emoji_Modifier_Base}\\p{Emoji_Modifier}';
 
 /**
- * The same sequence, anchored, for taking an emoji prefix off the front of a title.
+ * Both patterns are built on first use and cached, rather than at module scope.
+ *
+ * Caching matters because `packLine` measures the growing candidate line on every word, and
+ * compiling a fresh pattern per call made tokenisation quadratic. Deferring matters because a
+ * top-level `new RegExp` is a side effect esbuild will not drop: with these as module constants,
+ * the whole sequence string travelled into the **server** bundle (+549 bytes) even though
+ * `parseEventTitle` is tree-shaken out of it. Built lazily, nothing in this module survives a
+ * bundle that does not call into it.
+ */
+let leading: RegExp | undefined;
+let scanner: RegExp | undefined;
+
+/**
+ * The sequence anchored, for taking an emoji prefix off the front of a title.
  *
  * Also admits a bare `Emoji_Modifier_Base` — a glyph like ☝ that carries neither
  * Emoji_Presentation nor a skin tone. It is allowed as a *prefix* but not as a width unit: as a
  * prefix the alternative is failing to recognise an authored emoji at all, whereas in running text
  * it is a narrow text-presentation glyph that double-charging would misjudge.
  */
-export const LEADING_EMOJI = new RegExp(
-  `^(?:${EMOJI_SEQUENCE}|\\p{Emoji_Modifier_Base})`,
-  'u'
-);
+export function leadingEmoji(): RegExp {
+  if (leading === undefined) {
+    leading = new RegExp(`^(?:${EMOJI_SEQUENCE}|\\p{Emoji_Modifier_Base})`, 'u');
+  }
+  return leading;
+}
+
+/** The scanning form, for finding emoji anywhere in a string. */
+function emojiScanner(): RegExp {
+  if (scanner === undefined) scanner = new RegExp(EMOJI_SEQUENCE, 'gu');
+  return scanner;
+}
 
 export interface Glyph {
   text: string;
@@ -59,11 +86,13 @@ export interface Glyph {
 
 /** Split `text` into plain characters and whole emoji glyphs, each carrying its own width. */
 export function toGlyphs(text: string): Glyph[] {
-  const emoji = new RegExp(EMOJI_SEQUENCE, 'gu');
+  const emoji = emojiScanner();
   const glyphs: Glyph[] = [];
   let cursor = 0;
   let match: RegExpExecArray | null;
 
+  // The cached pattern is stateful, so rewind it; nothing re-enters this mid-scan.
+  emoji.lastIndex = 0;
   while ((match = emoji.exec(text)) !== null) {
     for (const char of text.slice(cursor, match.index)) glyphs.push({ text: char, width: 1 });
     glyphs.push({ text: match[0], width: EMOJI_WIDTH_UNITS });

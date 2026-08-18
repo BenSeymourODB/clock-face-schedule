@@ -299,9 +299,17 @@ describe("eventArc", () => {
       });
 
       expect(group.querySelector('[data-testid="event-emoji-e1"]')).toBeNull();
-      expect(
-        [...group.querySelectorAll("textPath")].map((node) => node.textContent)
-      ).toEqual(twoLines.fit.lines);
+
+      // Both lines stay inside the ring they belong to. This travelled with the collision test
+      // that used to live here, and is worth keeping on its own: an inline emoji makes a title
+      // wider, and radial containment is the property that would fail if lines were re-spaced.
+      const baselines = [...group.querySelectorAll("defs path")].map((node) =>
+        arcRadius(node.getAttribute("d") ?? "")
+      );
+      const half = twoLines.titleFontSize / 2;
+
+      expect(Math.min(...baselines) - half).toBeGreaterThanOrEqual(INNER);
+      expect(Math.max(...baselines) + half).toBeLessThanOrEqual(OUTER);
     });
 
     it("uses the layout it is given rather than recomputing one", () => {

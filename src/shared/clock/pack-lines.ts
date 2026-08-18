@@ -103,8 +103,15 @@ export function normaliseText(text: string): string {
 }
 
 /**
- * Glue neighbouring all-emoji words into single units of up to `MAX_UNBROKEN_EMOJI`, so a short
- * run wraps as one token instead of scattering across lines.
+ * Glue a short neighbouring run of all-emoji words into one unbreakable token.
+ *
+ * A run of `MAX_UNBROKEN_EMOJI` or fewer becomes a single token. A longer run is left as separate
+ * words, so the packer may break it wherever the line runs out — it is a strip of pictures with no
+ * syllable to protect.
+ *
+ * Chunking a long run into fixed groups of three instead, as this first did, is not the same thing
+ * and packs worse: it left "🧸 🪀 ⚽ 🎲 🚀 Free Play" as ["🧸 🪀 ⚽", "🎲 🚀 Free…"], overflowing
+ * with five of line one's fourteen units unused, where free breaking fits it in two.
  *
  * The boundary to the text that follows is deliberately left alone: after an emoji is an ordinary
  * place to wrap, so a title too tight for "🍽️ Lunch" on one line may still put the glyph above
@@ -112,17 +119,31 @@ export function normaliseText(text: string): string {
  */
 function mergeEmojiRuns(words: string[]): string[] {
   const merged: string[] = [];
+  let index = 0;
 
-  for (const word of words) {
-    const previous = merged[merged.length - 1];
-    const priorRun = previous === undefined ? 0 : emojiRunLength(previous);
-    const run = emojiRunLength(word);
-
-    if (priorRun > 0 && run > 0 && priorRun + run <= MAX_UNBROKEN_EMOJI) {
-      merged[merged.length - 1] = `${previous} ${word}`;
-    } else {
-      merged.push(word);
+  while (index < words.length) {
+    if (emojiRunLength(words[index]) === 0) {
+      merged.push(words[index]);
+      index += 1;
+      continue;
     }
+
+    // Measure the whole run in emoji, not in words: one word may already hold several.
+    let end = index;
+    let emoji = 0;
+    while (end < words.length) {
+      const run = emojiRunLength(words[end]);
+      if (run === 0) break;
+      emoji += run;
+      end += 1;
+    }
+
+    if (emoji <= MAX_UNBROKEN_EMOJI) {
+      merged.push(words.slice(index, end).join(' '));
+    } else {
+      for (let i = index; i < end; i += 1) merged.push(words[i]);
+    }
+    index = end;
   }
 
   return merged;

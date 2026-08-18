@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { LEADING_EMOJI, emojiRunLength, sliceToWidth, visualWidth } from './emoji';
+import { emojiRunLength, leadingEmoji, sliceToWidth, visualWidth } from './emoji';
 
 /** Composite emoji, each drawn as a single glyph out of several code points. */
 const TEACHER = '\u{1F469}‍\u{1F3EB}';
@@ -7,6 +7,8 @@ const FAMILY = '\u{1F468}‍\u{1F469}‍\u{1F467}';
 const THUMBS_TONE = '\u{1F44D}\u{1F3FD}';
 const FLAG_GB = '\u{1F1EC}\u{1F1E7}';
 const KEYCAP_ONE = '1️⃣';
+/** 🏴󠁧󠁢󠁳󠁣󠁴󠁿 — a base glyph plus a six-character tag sequence. Plausible input for a UK school. */
+const FLAG_SCOTLAND = '\u{1F3F4}\u{E0067}\u{E0062}\u{E0073}\u{E0063}\u{E0074}\u{E007F}';
 
 describe('visualWidth', () => {
   it('counts a plain character as one unit', () => {
@@ -36,7 +38,8 @@ describe('visualWidth', () => {
     ['a three-person ZWJ family', FAMILY],
     ['a skin-tone modifier', THUMBS_TONE],
     ['a regional-indicator flag', FLAG_GB],
-    ['a keycap', KEYCAP_ONE]
+    ['a keycap', KEYCAP_ONE],
+    ['a tag-sequence subdivision flag', FLAG_SCOTLAND]
   ])('measures %s as one glyph, not one per code point', (_label, text) => {
     // Each draws as a single glyph while spending several code points. Counting the parts
     // separately over-charged the budget — the ZWJ family measured 5 units against a true 2.
@@ -75,12 +78,16 @@ describe('sliceToWidth', () => {
   it.each([
     ['a flag', FLAG_GB],
     ['a ZWJ profession', TEACHER],
-    ['a skin tone', THUMBS_TONE]
+    ['a skin tone', THUMBS_TONE],
+    ['a tag-sequence flag', FLAG_SCOTLAND]
   ])('never returns a fragment of %s', (_label, composite) => {
     for (let width = 0; width <= 4; width += 1) {
       const cut = sliceToWidth(composite, width);
       expect(cut === '' || cut === composite).toBe(true);
     }
+    // A bare 🏴 would be a *valid* slice of nothing here, so pin that the whole thing does fit
+    // once there is room — otherwise "always empty" would satisfy the sweep above.
+    expect(sliceToWidth(composite, 2)).toBe(composite);
   });
 });
 
@@ -102,26 +109,28 @@ describe('emojiRunLength', () => {
  * front of a title. It must recognise the same sequences as the width pattern, or the title
  * splitter leaves half a sequence behind — which put a bare joiner at the head of a rendered title.
  */
-describe('LEADING_EMOJI', () => {
+describe('leadingEmoji()', () => {
   it.each([
     ['a colour dot', '\u{1F7E1} Lunch', '\u{1F7E1}'],
     ['a plate with its selector', '\u{1F37D}️ Lunch', '\u{1F37D}️'],
     ['a whole ZWJ profession', `${TEACHER} Parent Evening`, TEACHER],
     ['a whole flag', `${FLAG_GB} Trip`, FLAG_GB],
-    ['a whole skin-toned hand', `${THUMBS_TONE} Well Done`, THUMBS_TONE]
+    ['a whole skin-toned hand', `${THUMBS_TONE} Well Done`, THUMBS_TONE],
+    ['a whole tag-sequence flag', `${FLAG_SCOTLAND} Trip`, FLAG_SCOTLAND],
+    ['a bare black flag, tags being optional', '\u{1F3F4} Pirates', '\u{1F3F4}']
   ])('takes %s', (_label, title, expected) => {
-    expect(title.match(LEADING_EMOJI)?.[0]).toBe(expected);
+    expect(title.match(leadingEmoji())?.[0]).toBe(expected);
   });
 
   it('matches nothing when the title opens with text', () => {
-    expect('Team Meeting'.match(LEADING_EMOJI)).toBeNull();
+    expect('Team Meeting'.match(leadingEmoji())).toBeNull();
   });
 
   it('leaves no joiner behind when it takes a ZWJ sequence', () => {
     // The defect verbatim: matching only 👩 left "‍🏫 Parent…" as the title, and joining that back
     // to the emoji with a space rendered "👩 ‍🏫" — a woman, a space, then a stray school.
     const title = `${TEACHER} Parent Evening`;
-    const remainder = title.slice(title.match(LEADING_EMOJI)?.[0].length ?? 0);
+    const remainder = title.slice(title.match(leadingEmoji())?.[0].length ?? 0);
 
     expect(remainder.indexOf('‍')).toBe(-1);
     expect(remainder).toBe(' Parent Evening');

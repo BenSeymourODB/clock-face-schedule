@@ -2,7 +2,7 @@
  * Geometry and time-window helpers for the analog clock face.
  * Ported from next-digital-wall-calendar's `analog-clock/clock-utils.ts`.
  */
-import { LEADING_EMOJI } from './emoji';
+import { leadingEmoji } from './emoji';
 import type {
   ArcAngles,
   ClampedArcAngles,
@@ -45,7 +45,7 @@ export function parseEventTitle(title: string, fallbackColor: string): ParsedEve
   let eventEmoji: string | undefined;
   let color = fallbackColor;
 
-  const colorMatch = remaining.match(LEADING_EMOJI);
+  const colorMatch = remaining.match(leadingEmoji());
   if (colorMatch) {
     const candidate = colorMatch[0];
     if (COLOR_EMOJI_MAP[candidate]) {
@@ -56,7 +56,7 @@ export function parseEventTitle(title: string, fallbackColor: string): ParsedEve
   }
 
   // A second emoji (or the first, when no colour dot matched) is the event's own.
-  const eventMatch = remaining.match(LEADING_EMOJI);
+  const eventMatch = remaining.match(leadingEmoji());
   if (eventMatch) {
     eventEmoji = eventMatch[0];
     remaining = remaining.slice(eventEmoji.length).replace(/^ /, '');
