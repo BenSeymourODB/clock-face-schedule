@@ -459,17 +459,22 @@ describe("analogClock", () => {
     it("rebuilds the arcs the moment an event finishes, even within the same minute", () => {
       // Elapsed arcs are drawn hollow (#26), so a tick can no longer assume nothing about an arc
       // changes between minute-boundary rebuilds — the elapsed check is a backstop alongside the
-      // minute check for exactly this case.
-      const lessonEnd = new Date(2026, 7, 15, 10, 0, 30);
+      // minute check for exactly this case. Timed to start and end entirely within one calendar
+      // minute, and not yet started at build time, so neither the minute check nor drain's
+      // in-progress check (#28) is what triggers the rebuild — isolating the elapsed check alone.
+      const brief = {
+        startDate: new Date(2026, 7, 15, 10, 0, 10).toISOString(),
+        endDate: new Date(2026, 7, 15, 10, 0, 40).toISOString(),
+      };
       const clock = build(
-        [input("lesson", 9.5, 10, { endDate: lessonEnd.toISOString() })],
+        [input("brief", 9.5, 10, brief)],
         { time: new Date(2026, 7, 15, 10, 0, 0) }
       );
       const before = clock.element.querySelector('path[data-arc-part="fill"]');
       expect(before?.getAttribute("fill-opacity")).toBe("0.85");
       expect(clock.element.querySelector('[data-arc-part="halo"]')).toBeNull();
 
-      clock.setTime(new Date(2026, 7, 15, 10, 0, 45)); // same minute, event now elapsed
+      clock.setTime(new Date(2026, 7, 15, 10, 0, 50)); // same minute, event now elapsed
       const after = clock.element.querySelector('path[data-arc-part="fill"]');
 
       expect(after?.getAttribute("fill-opacity")).toBe("0");
