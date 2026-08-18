@@ -74,6 +74,16 @@ const STROKE = {
   secondHand: 0.01,
 } as const;
 
+/**
+ * Halo added to each side of a hand's own stroke, as a fraction of the face radius.
+ *
+ * Sized to match the thinnest hairlines already on the face (`STROKE.face` / `minuteTick` /
+ * `secondHand`) rather than to stand out — the halo is currently invisible in normal use, since
+ * hands never cross anything but `--card`, and it should stay that way until something is drawn
+ * under them.
+ */
+const HAND_HALO_RATIO = 0.01;
+
 export interface ClockFaceParams {
   /**
    * Radius the face is drawn at — used as given, not scaled down.
@@ -206,46 +216,82 @@ export function clockFace({
 
   const angles = handAngles(time);
 
-  const hourHand = svg("line", {
-    "data-testid": "hour-hand",
-    x1: cx,
-    y1: cy,
-    x2: cx,
-    y2: roundCoord(cy - faceRadius * RADIUS.hourHand),
-    stroke: "var(--card-foreground)",
-    "stroke-width": roundCoord(faceRadius * SCALE.hourHandWidth),
-    "stroke-linecap": "round",
-    transform: rotateAbout(angles.hour),
-  });
+  /**
+   * A hand drawn twice — once wider, in `var(--card)`, beneath the coloured line — so it stays
+   * legible over anything drawn on the face rather than just the flat background it has today.
+   * Returns the halo first so the caller can mount it underneath.
+   */
+  function handWithHalo(
+    testId: string,
+    y1: number,
+    y2: number,
+    width: number,
+    color: string,
+    angle: number
+  ) {
+    const transform = rotateAbout(angle);
+    const halo = svg("line", {
+      "data-testid": `${testId}-halo`,
+      x1: cx,
+      y1,
+      x2: cx,
+      y2,
+      stroke: "var(--card)",
+      "stroke-width": roundCoord(width + 2 * faceRadius * HAND_HALO_RATIO),
+      "stroke-linecap": "round",
+      transform,
+    });
+    const line = svg("line", {
+      "data-testid": testId,
+      x1: cx,
+      y1,
+      x2: cx,
+      y2,
+      stroke: color,
+      "stroke-width": roundCoord(width),
+      "stroke-linecap": "round",
+      transform,
+    });
+    return [halo, line] as const;
+  }
 
-  const minuteHand = svg("line", {
-    "data-testid": "minute-hand",
-    x1: cx,
-    y1: cy,
-    x2: cx,
-    y2: roundCoord(cy - faceRadius * RADIUS.minuteHand),
-    stroke: "var(--card-foreground)",
-    "stroke-width": roundCoord(faceRadius * SCALE.minuteHandWidth),
-    "stroke-linecap": "round",
-    transform: rotateAbout(angles.minute),
-  });
+  const [hourHalo, hourHand] = handWithHalo(
+    "hour-hand",
+    cy,
+    roundCoord(cy - faceRadius * RADIUS.hourHand),
+    faceRadius * SCALE.hourHandWidth,
+    "var(--card-foreground)",
+    angles.hour
+  );
+
+  const [minuteHalo, minuteHand] = handWithHalo(
+    "minute-hand",
+    cy,
+    roundCoord(cy - faceRadius * RADIUS.minuteHand),
+    faceRadius * SCALE.minuteHandWidth,
+    "var(--card-foreground)",
+    angles.minute
+  );
 
   // Accent-coloured so it stays distinct from the hands against any face/foreground pairing.
-  const secondHand = showSeconds
-    ? svg("line", {
-        "data-testid": "second-hand",
-        x1: cx,
-        y1: roundCoord(cy + faceRadius * RADIUS.secondHandTail),
-        x2: cx,
-        y2: roundCoord(cy - faceRadius * RADIUS.secondHand),
-        stroke: "var(--destructive)",
-        "stroke-width": stroke(STROKE.secondHand),
-        "stroke-linecap": "round",
-        transform: rotateAbout(angles.second),
-      })
-    : undefined;
+  const [secondHalo, secondHand] = showSeconds
+    ? handWithHalo(
+        "second-hand",
+        roundCoord(cy + faceRadius * RADIUS.secondHandTail),
+        roundCoord(cy - faceRadius * RADIUS.secondHand),
+        faceRadius * STROKE.secondHand,
+        "var(--destructive)",
+        angles.second
+      )
+    : [undefined, undefined];
 
-  element.append(periodIndicator, hourHand, minuteHand);
+  // Halos all mount before any hand's own line: the hour and minute hands are collinear at the
+  // top of every hour, and a per-hand pairing would let the minute halo — wider than the hour
+  // hand's own line — paint over and thin it. Painting every halo first keeps each hand's colour
+  // on top regardless of which other hand shares its angle.
+  element.append(periodIndicator, hourHalo, minuteHalo);
+  if (secondHalo) element.append(secondHalo);
+  element.append(hourHand, minuteHand);
   if (secondHand) element.append(secondHand);
 
   element.append(
@@ -262,8 +308,11 @@ export function clockFace({
     element,
     setTime(next: Date): void {
       const updated = handAngles(next);
+      hourHalo.setAttribute("transform", rotateAbout(updated.hour));
       hourHand.setAttribute("transform", rotateAbout(updated.hour));
+      minuteHalo.setAttribute("transform", rotateAbout(updated.minute));
       minuteHand.setAttribute("transform", rotateAbout(updated.minute));
+      secondHalo?.setAttribute("transform", rotateAbout(updated.second));
       secondHand?.setAttribute("transform", rotateAbout(updated.second));
       periodIndicator.textContent = next.getHours() >= 12 ? "PM" : "AM";
     },
