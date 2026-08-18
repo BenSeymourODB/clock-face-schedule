@@ -906,6 +906,81 @@ describe("eventArc once the event has ended", () => {
 });
 
 /**
+ * #67: the outline is sized from the whole band, deliberately, so its weight does not thin with
+ * overlap depth (#26) — while the text is sized from this arc's own ring, equally deliberately. Both
+ * rules are right and on a thin ring they disagree, so the two have to be compared somewhere.
+ *
+ * Asserted on rendered attributes rather than on the layout, because that is where the two meet: the
+ * `d` of each baseline against the `stroke-width` the outline actually carries. A test computing
+ * both from the same constants would encode the assumption that put the text on the stroke.
+ */
+describe("eventArc's title against what is stroked on its ring", () => {
+  const BAND = OUTER * 0.26;
+  const RING_GAP = Math.max(2, BAND * 0.06);
+
+  /** The outermost ring of a `depth`-deep cluster, as the dial divides the band. */
+  function ring(depth: number) {
+    const gap = depth > 1 ? RING_GAP : 0;
+    const thickness = (BAND - (depth - 1) * gap) / depth;
+    return { innerRadius: OUTER - thickness, outerRadius: OUTER, bandThickness: BAND };
+  }
+
+  /**
+   * A four-deep ring's font is small, so its character budget is large: this needs to be past 63
+   * visual units to wrap at all, and inside 126 to still fit two lines. Both are asserted below, so
+   * the case fails loudly rather than quietly testing a one-line title.
+   */
+  const WRAPPING_TITLE = "Parent Teacher Conference Planning Committee Meeting Notes and Actions";
+
+  function measure(depth: number, cleanTitle = WRAPPING_TITLE, arcSpan = 30) {
+    const shape = ring(depth);
+    const group = eventArc({
+      event: makeEvent({ cleanTitle, startAngle: 0, endAngle: arcSpan }),
+      cx: CX,
+      cy: CY,
+      isElapsed: true,
+      ...shape,
+    });
+
+    const radii = [...group.querySelectorAll("defs > path")].map((node) =>
+      arcRadius(node.getAttribute("d") ?? "")
+    );
+    const fontSize = Number(
+      group.querySelector('[data-testid="event-title-e1"] text')?.getAttribute("font-size")
+    );
+    const strokeWidth = Number(
+      group.querySelector('[data-arc-part="outline"]')?.getAttribute("stroke-width")
+    );
+
+    // A stroke straddles its path, so it reaches half its width back into the ring from each edge.
+    return {
+      radii,
+      fontSize,
+      outward: shape.outerRadius - strokeWidth / 2 - (Math.max(...radii) + fontSize / 2),
+      inward: Math.min(...radii) - fontSize / 2 - (shape.innerRadius + strokeWidth / 2),
+    };
+  }
+
+  it.each([[1], [2], [3], [4]])("clears both edges %i deep", (depth) => {
+    const { radii, outward, inward } = measure(depth);
+
+    expect(radii).toHaveLength(2);
+    expect(outward).toBeGreaterThanOrEqual(1);
+    expect(inward).toBeGreaterThanOrEqual(1);
+  });
+
+  it("is the four-deep ring that binds, and it yields only the text", () => {
+    // Where the fix shows: four deep the stack wanted 4.58 units of half-height in the 4.13 the
+    // outline leaves, so the font gives up 10%. The outline is untouched — it *is* the arc once the
+    // fill is gone, and capping it by the ring is the inversion #26's band-sizing exists to prevent.
+    const arcHeight = ring(4).outerRadius - ring(4).innerRadius;
+
+    expect(measure(4).fontSize).toBeLessThan(arcHeight * 0.28);
+    expect(measure(3).fontSize).toBeCloseTo((ring(3).outerRadius - ring(3).innerRadius) * 0.28, 2);
+  });
+});
+
+/**
  * #28: a still-running event splits at "now" rather than flipping straight from live to elapsed —
  * the spent portion reads like #26's hollow outline, the rest keeps its fill.
  */

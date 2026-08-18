@@ -6,11 +6,11 @@
  * judging it on the smart board, and waiting for the viewer's real day to contain a useful overlap
  * is not a plan.
  *
- * Chosen to exercise what is hardest to judge from a specification — three-deep overlap, a title
- * too long for its arc, an event short enough to need the minimum-width floor, an event crossing
- * each end of the rolling window (#25), a floating label washed with a colour the palette itself
- * fails contrast for once filled (⚫, #26/#27), and a card whose duration line is wider than its
- * title (#35).
+ * Chosen to exercise what is hardest to judge from a specification — three-deep overlap, a two-line
+ * title *inside* that cluster (#67), a title too long for its arc, an event short enough to need
+ * the minimum-width floor, an event crossing each end of the rolling window (#25), a floating label
+ * washed with a colour the palette itself fails contrast for once filled (⚫, #26/#27), and a card
+ * whose duration line is wider than its title (#35).
  *
  * Anchored to `windowStart` — the rolling window's own leading edge — rather than a fixed
  * `periodStart`, so the whole fixture lands inside whatever window is live the moment demo mode
@@ -34,7 +34,12 @@ export function sampleEvents(windowStart: Date): ClockEventInput[] {
     // Three deep between 01:00 and 02:00.
     { id: "a", title: "🟢 🎮 Game Time", startDate: at(0, 30), endDate: at(2, 0), isAllDay: false, fallbackColor },
     { id: "b", title: "🔴 Deadline", startDate: at(1, 0), endDate: at(3, 0), isAllDay: false, fallbackColor },
-    { id: "c", title: "🟣 Study", startDate: at(1, 30), endDate: at(2, 30), isAllDay: false, fallbackColor },
+    // Innermost of the three, and the fixture's only **two-line title on a stacked ring** — every
+    // other wrapping title here is on a lone arc, so nothing exercised text sized from a divided
+    // band against the outline sized from the whole of it (#67). 36 visual units against the
+    // 31-character budget its ring gives, so it wraps; well inside the 62 two lines can carry, so it
+    // stays on the arc rather than overflowing to a card.
+    { id: "c", title: "🟣 Study Skills and Exam Revision Group", startDate: at(1, 30), endDate: at(2, 30), isAllDay: false, fallbackColor },
     // Overlaps nothing — should keep the whole band despite the cluster above. Ends 55 minutes
     // before "j" starts, deliberately, so the stretch between them is empty *and inside* the
     // window — the one stress case the window-track (#25) exists to distinguish from the gap.

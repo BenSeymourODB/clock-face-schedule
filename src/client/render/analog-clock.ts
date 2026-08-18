@@ -22,7 +22,7 @@ import {
 } from "../../shared/clock";
 import { svg } from "../svg";
 import { clockFace } from "./clock-face";
-import { eventArc } from "./event-arc";
+import { arcEdgeStrokeWidth, eventArc } from "./event-arc";
 import {
   type FloatingLabelParams,
   floatingLabel,
@@ -250,11 +250,18 @@ export function analogClock({
 
       // Computed once and shared with the label below: two independent derivations of
       // didOverflow could disagree and render a title twice, or not at all.
+      //
+      // The stroke is the elapsed outline the arc will draw on this ring's own edges — the thing a
+      // two-line title has to stay clear of (#67). Derived from the thickness the arc is *drawn*
+      // with rather than the nominal one, since the innermost ring can be clipped by the band's own
+      // inner edge, and passed whether or not the event has elapsed: text that shifted at the moment
+      // an event finished would twitch on the wall.
       const layout = computeArcTitleLayout({
         title: displayTitle,
         arcSpan,
         innerRadius: ringInnerRadius,
         outerRadius: ringOuterRadius,
+        edgeStrokeWidth: arcEdgeStrokeWidth(ringOuterRadius - ringInnerRadius, arcThickness),
       });
       const isOverflow = layout.fit.didOverflow && arcSpan >= EMOJI_MIN_SPAN_DEGREES;
 
