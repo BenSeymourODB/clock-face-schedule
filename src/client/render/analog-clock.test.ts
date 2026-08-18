@@ -33,8 +33,14 @@ function input(
   endHour: number,
   overrides: Partial<ClockEventInput> = {}
 ): ClockEventInput {
-  const stamp = (hour: number) =>
-    new Date(2026, 7, 15, Math.floor(hour), Math.round((hour % 1) * 60)).toISOString();
+  // Via total minutes, not `Math.floor(hour)` + `(hour % 1) * 60` separately — those don't
+  // compose for a negative non-integer hour (both round toward more-negative independently,
+  // silently swapping start and end for something like stamp(-0.5)).
+  const stamp = (hour: number) => {
+    const totalMinutes = Math.round(hour * 60);
+    const wholeHours = Math.floor(totalMinutes / 60);
+    return new Date(2026, 7, 15, wholeHours, totalMinutes - wholeHours * 60).toISOString();
+  };
 
   return {
     id,
@@ -65,6 +71,13 @@ function arcRadii(arc: Element): { outer: number; inner: number } {
 
   return { outer: found[0], inner: found[1] };
 }
+
+describe("input (test helper)", () => {
+  it("orders start before end for a negative non-integer hour", () => {
+    const event = input("x", -1, -0.5);
+    expect(new Date(event.startDate).getTime()).toBeLessThan(new Date(event.endDate).getTime());
+  });
+});
 
 function testIds(nodes: Iterable<Element>): (string | null)[] {
   return [...nodes].map((node) => node.getAttribute("data-testid"));

@@ -88,8 +88,8 @@ window's lookbehind opens, and add the window-gap visual treatment the issue's o
    Screenshotted and looked. **First look found a real gap in the fixture, not in the geometry**: the
    demo's events packed almost the entire window solid, leaving no stretch that was empty *and
    in-window* — exactly the one case the track exists to distinguish from the true gap — so its own
-   purpose was invisible in the render. Fixed by shortening "Lunch" (`sample-events.ts`) by 40
-   minutes, opening an 80-minute empty-but-in-window stretch before "Reading and Snacks". Re-rendered
+   purpose was invisible in the render. Fixed by shortening "Lunch" (`sample-events.ts`) from 120
+   to 50 minutes, opening an 80-minute empty-but-in-window stretch before "Reading and Snacks". Re-rendered
    and confirmed: a faint hairline now bridges that stretch, and the true 30° gap (between the
    look-behind's last event and the look-ahead cluster) shows nothing at all, as intended.
 

@@ -132,10 +132,12 @@ export function getRollingWindow(
  * - The dial only ever draws `getRollingWindow(time)` — `marginHours` covers the gap between
  *   polls, since the window keeps moving continuously and `main.ts` only refetches every 5
  *   minutes.
- * - `getDayStart(time)` anchors the window's start no later than today's midnight regardless of
- *   the rolling window's own start, because #36 (the agenda panel epic)'s first sub-issue is
- *   fetching the *whole day* — including the morning a rolling 3-hour lookbehind would miss —
- *   and there is no dial-only reason to narrow back to less than #37 already guaranteed.
+ * - `getDayStart(time)`/today's midnight bound the window to at least the whole calendar day
+ *   regardless of the rolling window's own bounds, because #36 (the agenda panel epic)'s first
+ *   sub-issue is fetching the *whole day* — including hours the rolling window itself would
+ *   never reach on its own (the morning, on a lookbehind that only reaches 3 hours back; the
+ *   evening, on a lookahead that only reaches 8 hours forward) — and there is no dial-only reason
+ *   to narrow back to less than #37 already guaranteed at either end.
  */
 export function getFetchWindow(
   time: Date,
@@ -143,11 +145,13 @@ export function getFetchWindow(
 ): { windowStart: Date; windowEnd: Date } {
   const { windowStart: rollingStart, windowEnd: rollingEnd } = getRollingWindow(time);
   const marginMs = marginHours * 60 * 60 * 1000;
-  // The margin only buffers the rolling bound against poll drift — the day-start floor is a fixed
-  // boundary that does not move between polls, so it takes no margin of its own.
+  const dayStart = getDayStart(time);
+  const dayEnd = new Date(dayStart.getTime() + 24 * 60 * 60 * 1000);
+  // The margin only buffers the rolling bound against poll drift — the day floor/ceiling is a
+  // fixed boundary that does not move between polls, so it takes no margin of its own.
   return {
-    windowStart: new Date(Math.min(getDayStart(time).getTime(), rollingStart.getTime() - marginMs)),
-    windowEnd: new Date(rollingEnd.getTime() + marginMs)
+    windowStart: new Date(Math.min(dayStart.getTime(), rollingStart.getTime() - marginMs)),
+    windowEnd: new Date(Math.max(dayEnd.getTime(), rollingEnd.getTime() + marginMs))
   };
 }
 

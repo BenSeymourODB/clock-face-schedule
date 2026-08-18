@@ -235,11 +235,27 @@ describe('getFetchWindow', () => {
     expect(windowStart.getDate()).toBe(11);
   });
 
-  it('extends the end past the rolling window\'s own look-ahead by the margin', () => {
-    const now = new Date(2026, 3, 12, 9, 0, 0);
-    const { windowEnd } = getFetchWindow(now, 1);
-    const rolling = getRollingWindow(now);
+  // The symmetric case at the other end: in the morning, the rolling look-ahead (8h + margin)
+  // falls well short of tonight's midnight, which a rolling-only end would still clip — the same
+  // class of regression #37 fixed for the start, mirrored at the end.
+  it('covers the whole day even when the rolling look-ahead alone would not reach midnight', () => {
+    const morning = new Date(2026, 3, 12, 9, 0, 0);
+    const { windowEnd } = getFetchWindow(morning, 1);
+    const rolling = getRollingWindow(morning);
+    expect(windowEnd.getTime()).toBeGreaterThan(rolling.windowEnd.getTime() + 60 * 60 * 1000);
+    expect(windowEnd.getDate()).toBe(13);
+    expect(windowEnd.getHours()).toBe(0);
+  });
+
+  // Late enough in the evening, the rolling look-ahead reaches *past* tomorrow's midnight, at
+  // which point the margin — not the day boundary — is the binding constraint.
+  it('extends past today\'s midnight when the rolling look-ahead reaches into tomorrow', () => {
+    const evening = new Date(2026, 3, 12, 20, 0, 0);
+    const { windowEnd } = getFetchWindow(evening, 1);
+    const rolling = getRollingWindow(evening);
     expect(windowEnd.getTime()).toBe(rolling.windowEnd.getTime() + 60 * 60 * 1000);
+    expect(windowEnd.getDate()).toBe(13);
+    expect(windowEnd.getHours()).toBe(5);
   });
 
   // Regression guard for #37's original failure, restated for the rolling window: whatever the
@@ -248,9 +264,11 @@ describe('getFetchWindow', () => {
     const now = new Date(2026, 3, 12, 14, 30, 0);
     const { windowStart, windowEnd } = getFetchWindow(now, 1);
     const rolling = getRollingWindow(now);
+    const dayEnd = new Date(getDayStart(now).getTime() + 24 * 60 * 60 * 1000);
     expect(windowStart.getTime()).toBeLessThanOrEqual(rolling.windowStart.getTime());
     expect(windowStart.getTime()).toBeLessThanOrEqual(getDayStart(now).getTime());
     expect(windowEnd.getTime()).toBeGreaterThanOrEqual(rolling.windowEnd.getTime());
+    expect(windowEnd.getTime()).toBeGreaterThanOrEqual(dayEnd.getTime());
   });
 
   it('never starts the window after the fetch time', () => {
