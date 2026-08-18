@@ -66,6 +66,35 @@ describe("parseClockPin", () => {
     expect(parseClockPin(raw, null, REFERENCE)).toBeNull();
   });
 
+  // The rollover guard rejects dates the Date constructor would silently move — so it has to be
+  // checked in the other direction too, or a real calendar date near a month boundary is refused
+  // and the pin quietly falls back to the real clock.
+  it.each(["2028-02-29T10:00", "2026-01-31T10:00", "2026-04-30T00:00", "2026-12-31T23:59"])(
+    "accepts %s",
+    (raw) => {
+      expect(parseClockPin(raw, null, REFERENCE)).not.toBeNull();
+    }
+  );
+
+  it("refuses 29 February in a year that has no 29 February", () => {
+    expect(parseClockPin("2026-02-29T10:00", null, REFERENCE)).toBeNull();
+  });
+
+  /**
+   * A wall time inside a spring-forward gap does not exist, and the constructor resolves it to the
+   * hour after. That is the right answer for a pin — the reviewer wanted an instant, not a string —
+   * but it must not come back as an Invalid Date, and it must not trip the rollover guard, since
+   * the resolved time is on the same calendar day. Asserted without naming a zone, so it holds
+   * wherever the suite runs.
+   */
+  it("resolves a nonexistent wall time to a real instant rather than rejecting it", () => {
+    const pin = parseClockPin("2026-03-08T02:30", null, REFERENCE);
+
+    expect(pin).not.toBeNull();
+    expect(Number.isNaN(pin!.origin.getTime())).toBe(false);
+    expect(pin!.origin.getDate()).toBe(8);
+  });
+
   it("freezes at the reference when freeze is given alone", () => {
     const pin = parseClockPin(null, "1", REFERENCE);
 

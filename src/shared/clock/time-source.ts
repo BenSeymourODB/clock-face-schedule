@@ -83,7 +83,9 @@ function parseInstant(raw: string, reference: Date): Date | null {
   }
 
   const local = new Date(year, month - 1, day, hours, minutes, seconds, 0);
-  // Rejects the dates the constructor would silently roll over — 2026-02-30 becoming 3 March.
+  // Rejects the dates the constructor would silently roll over — 2026-02-30 becoming 3 March. On
+  // the day rather than the hour, deliberately: a wall time inside a spring-forward gap does not
+  // exist, and letting the constructor resolve it to the hour after is the answer a pin wants.
   const rolled =
     local.getFullYear() !== year || local.getMonth() !== month - 1 || local.getDate() !== day;
 
