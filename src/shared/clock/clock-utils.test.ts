@@ -222,6 +222,76 @@ describe('calculateArcAngles', () => {
     expect(angles.endAngle).toBe(360);
     expect(angles.endAngle - angles.startAngle).toBeCloseTo(7.5);
   });
+
+  describe('against an explicit window', () => {
+    it('clamps to the window rather than the whole period', () => {
+      const angles = calculateArcAngles(
+        new Date(2026, 3, 12, 1, 0, 0),
+        new Date(2026, 3, 12, 5, 0, 0),
+        periodStart,
+        new Date(2026, 3, 12, 2, 0, 0),
+        new Date(2026, 3, 12, 4, 0, 0)
+      );
+      expect(angles.startAngle).toBeCloseTo(60);
+      expect(angles.endAngle).toBeCloseTo(120);
+    });
+
+    it('produces an angle past 360° for a window reaching past the period', () => {
+      // A rolling window can extend past periodStart + 720min; the event drawn there must not
+      // be wrapped back to a small angle, or it would sort before events earlier in the window.
+      const angles = calculateArcAngles(
+        new Date(2026, 3, 12, 13, 0, 0),
+        new Date(2026, 3, 12, 13, 30, 0),
+        periodStart,
+        periodStart,
+        new Date(2026, 3, 12, 14, 0, 0)
+      );
+      expect(angles.startAngle).toBeCloseTo(390);
+      expect(angles.endAngle).toBeCloseTo(405);
+    });
+
+    it('produces a negative angle for a window starting before the period', () => {
+      const angles = calculateArcAngles(
+        new Date(2026, 3, 11, 22, 0, 0),
+        new Date(2026, 3, 11, 22, 30, 0),
+        periodStart,
+        new Date(2026, 3, 11, 21, 0, 0),
+        periodStart
+      );
+      expect(angles.startAngle).toBeCloseTo(-60);
+      expect(angles.endAngle).toBeCloseTo(-45);
+    });
+
+    it('widens a short event against the window end rather than 360°', () => {
+      // The window ends at 60° (2:00), well short of the period's own 360°. Widening this
+      // 5-minute event must stop at the window's edge, not sail past it toward midnight.
+      const angles = calculateArcAngles(
+        new Date(2026, 3, 12, 1, 55, 0),
+        new Date(2026, 3, 12, 2, 0, 0),
+        periodStart,
+        periodStart,
+        new Date(2026, 3, 12, 2, 0, 0)
+      );
+      expect(angles.endAngle).toBeCloseTo(60);
+      expect(angles.endAngle - angles.startAngle).toBeCloseTo(7.5);
+    });
+
+    it('pulls a widened start back to the window start rather than 0°', () => {
+      // A 2°-wide window (0:56–1:00), narrower than MIN_ARC_DEGREES itself. Widening this
+      // 1-minute event forward hits the window's own end and must pull the start back only to
+      // the window's own start (28°) — pulling back to 0° would draw the arc into the previous
+      // hour, well outside the window it was clamped to.
+      const angles = calculateArcAngles(
+        new Date(2026, 3, 12, 0, 58, 0),
+        new Date(2026, 3, 12, 0, 59, 0),
+        periodStart,
+        new Date(2026, 3, 12, 0, 56, 0),
+        new Date(2026, 3, 12, 1, 0, 0)
+      );
+      expect(angles.startAngle).toBeCloseTo(28);
+      expect(angles.endAngle).toBeCloseTo(30);
+    });
+  });
 });
 
 describe('calculateTrueArcAngles', () => {
@@ -241,6 +311,20 @@ describe('calculateTrueArcAngles', () => {
     );
     expect(angles.continuesBefore).toBe(before);
     expect(angles.continuesAfter).toBe(after);
+  });
+
+  it('reports continuesBefore/After against the window, not the period', () => {
+    // The event runs 1:00–5:00, wholly inside the period, but the window is narrower than the
+    // period — so relative to the window (not the period) both ends are cut off.
+    const angles = calculateTrueArcAngles(
+      new Date(2026, 3, 12, 1, 0, 0),
+      new Date(2026, 3, 12, 5, 0, 0),
+      periodStart,
+      new Date(2026, 3, 12, 2, 0, 0),
+      new Date(2026, 3, 12, 4, 0, 0)
+    );
+    expect(angles.continuesBefore).toBe(true);
+    expect(angles.continuesAfter).toBe(true);
   });
 });
 
@@ -334,6 +418,24 @@ describe('eventsToClockEvents', () => {
     );
     expect(result.continuesBefore).toBe(true);
     expect(result.continuesAfter).toBe(true);
+  });
+
+  it('draws against an explicit window past the period, keeping periodStart as the angle origin', () => {
+    // A rolling window reaching into the next period must not have its angle wrapped back
+    // toward 0° — position still has to mean the same clock time as the unrolled period would.
+    const [result] = eventsToClockEvents(
+      [
+        makeEvent({
+          startDate: new Date(2026, 3, 12, 13, 0, 0).toISOString(),
+          endDate: new Date(2026, 3, 12, 13, 30, 0).toISOString()
+        })
+      ],
+      periodStart,
+      periodStart,
+      new Date(2026, 3, 12, 14, 0, 0)
+    );
+    expect(result.startAngle).toBeCloseTo(390);
+    expect(result.endAngle).toBeCloseTo(405);
   });
 });
 

@@ -100,4 +100,44 @@ describe('assignRings', () => {
       expect(depthsOf([arc('a', 0, 30), arc('b', 10, 40), arc('c', 40, 70)])).toEqual([2, 2, 1]);
     });
   });
+
+  describe('a window that does not start at 0°', () => {
+    // `calculateTrueArcAngles` never reduces an angle modulo 360 (see clock-utils.ts) — an event
+    // clamped to a window starting before `periodStart`, or ending after `periodStart + 720min`,
+    // is reported with a negative angle or one past 360° rather than one wrapped back into
+    // [0, 360). These cases feed exactly that shape of input to `assignRings`.
+
+    it('yields the same cluster depths whether or not the window origin falls inside a cluster', () => {
+      // Three events, all clamped to a window opening at -30° (30° before periodStart) and
+      // mutually overlapping through to 20°: `a` was already running when the window opened.
+      const events = [arc('a', -30, 20), arc('b', -20, 20), arc('c', -10, 20)];
+
+      // Same depths whether the caller passes the window's own start, the harmless default, or
+      // any other point outside the cluster's own span — the ordering these unnormalised angles
+      // carry does not depend on where the rotation origin falls.
+      for (const windowStartAngle of [-90, -30, 0]) {
+        const assigned = assignRings(events, windowStartAngle);
+        for (const event of events) {
+          expect(assigned.get(event.id)?.clusterDepth).toBe(3);
+        }
+      }
+    });
+
+    it('still stacks a genuine overlap that straddles the window start', () => {
+      // `a` was already running when the window opened at -30° (clamped there); `b` starts 20°
+      // later and overlaps it — the same shape as the depth-2 case above, moved across the seam.
+      const events = [arc('a', -30, 20), arc('b', -10, 40)];
+
+      const assigned = assignRings(events, -30);
+      expect(assigned.get('a')?.ringIndex).toBe(0);
+      expect(assigned.get('b')?.ringIndex).toBe(1);
+      expect(assigned.get('a')?.clusterDepth).toBe(2);
+      expect(assigned.get('b')?.clusterDepth).toBe(2);
+    });
+
+    it('defaults to 0, leaving angles already in [0, 360) untouched', () => {
+      const events = [arc('a', 0, 60), arc('b', 30, 90)];
+      expect(assignRings(events)).toEqual(assignRings(events, 0));
+    });
+  });
 });

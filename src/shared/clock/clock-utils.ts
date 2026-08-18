@@ -107,19 +107,33 @@ export function filterEventsForPeriod(
   });
 }
 
+/** Default window end: exactly one 12-hour period after `periodStart`. */
+function defaultWindowEnd(periodStart: Date): Date {
+  return new Date(periodStart.getTime() + PERIOD_MINUTES * 60 * 1000);
+}
+
 /**
  * Resolve events into drawable arcs: parse each title's emoji prefixes and compute
  * arc angles against `periodStart`.
  *
- * Does not filter — pass through `filterEventsForPeriod` first for the current period.
+ * `windowStart`/`windowEnd` default to the period itself. A caller drawing a window that is not
+ * period-aligned (a rolling look-ahead, a 1-hour scale) passes its own bounds; `periodStart` stays
+ * the angle origin regardless, since it is the hour hand's own zero.
+ *
+ * Does not filter — pass through `filterEventsForPeriod` first for the events in view.
  */
-export function eventsToClockEvents(events: ClockEventInput[], periodStart: Date): ClockEvent[] {
+export function eventsToClockEvents(
+  events: ClockEventInput[],
+  periodStart: Date,
+  windowStart: Date = periodStart,
+  windowEnd: Date = defaultWindowEnd(periodStart)
+): ClockEvent[] {
   return events.map((event) => {
     const parsed = parseEventTitle(event.title, event.fallbackColor);
     const start = new Date(event.startDate);
     const end = new Date(event.endDate);
-    const drawn = calculateArcAngles(start, end, periodStart);
-    const actual = calculateTrueArcAngles(start, end, periodStart);
+    const drawn = calculateArcAngles(start, end, periodStart, windowStart, windowEnd);
+    const actual = calculateTrueArcAngles(start, end, periodStart, windowStart, windowEnd);
 
     return {
       id: event.id,
@@ -139,14 +153,16 @@ export function eventsToClockEvents(events: ClockEventInput[], periodStart: Date
 }
 
 /**
- * Map an event's times onto arc angles within a 12-hour period, where 0° is
- * 12 o'clock and 90°/180°/270° are 3, 6, and 9 o'clock.
+ * The event's actual extent within a window, in degrees against the fixed `periodStart` origin —
+ * clamped to the window but **not** widened to the minimum visible width.
  *
- * Events are clamped to the period; a floor of MIN_ARC_DEGREES keeps short events visible.
- */
-/**
- * The event's actual extent within the period, in degrees — clamped to the period but **not**
- * widened to the minimum visible width.
+ * `periodStart` is the angle origin (0° = 12 o'clock) and never moves: it is the hour hand's own
+ * zero, so an event is always drawn where the hand will point at its time, before and after. The
+ * window (`windowStart`/`windowEnd`, defaulting to the period itself) is what the event is clamped
+ * to, and the two need not agree — a rolling look-ahead or a 1-hour scale clamps to a window that
+ * does not start at 0°. Angles are **not** reduced modulo 360: a window that reaches past
+ * `periodStart + 720min`, or starts before `periodStart`, produces angles past 360° or below 0°
+ * rather than wrapping, so downstream ordering (`assignRings`) stays meaningful.
  *
  * This is what ring stacking should read. Widened angles describe where the arc is *painted*,
  * which is a drawing concern and not evidence that two events clash.
@@ -157,12 +173,12 @@ export function eventsToClockEvents(events: ClockEventInput[], periodStart: Date
 export function calculateTrueArcAngles(
   eventStart: Date,
   eventEnd: Date,
-  periodStart: Date
+  periodStart: Date,
+  windowStart: Date = periodStart,
+  windowEnd: Date = defaultWindowEnd(periodStart)
 ): ClampedArcAngles {
-  const periodEndMs = periodStart.getTime() + PERIOD_MINUTES * 60 * 1000;
-
-  const clampedStart = Math.max(eventStart.getTime(), periodStart.getTime());
-  const clampedEnd = Math.min(eventEnd.getTime(), periodEndMs);
+  const clampedStart = Math.max(eventStart.getTime(), windowStart.getTime());
+  const clampedEnd = Math.min(eventEnd.getTime(), windowEnd.getTime());
 
   const startMinutes = (clampedStart - periodStart.getTime()) / (60 * 1000);
   const endMinutes = (clampedEnd - periodStart.getTime()) / (60 * 1000);
@@ -170,20 +186,41 @@ export function calculateTrueArcAngles(
   return {
     startAngle: (startMinutes / PERIOD_MINUTES) * 360,
     endAngle: (endMinutes / PERIOD_MINUTES) * 360,
-    continuesBefore: eventStart.getTime() < periodStart.getTime(),
-    continuesAfter: eventEnd.getTime() > periodEndMs,
+    continuesBefore: eventStart.getTime() < windowStart.getTime(),
+    continuesAfter: eventEnd.getTime() > windowEnd.getTime(),
   };
 }
 
-export function calculateArcAngles(eventStart: Date, eventEnd: Date, periodStart: Date): ArcAngles {
-  let { startAngle, endAngle } = calculateTrueArcAngles(eventStart, eventEnd, periodStart);
+/**
+ * Map an event's times onto drawable arc angles, widening anything under MIN_ARC_DEGREES so short
+ * events stay visible. See `calculateTrueArcAngles` for the window/origin split.
+ */
+export function calculateArcAngles(
+  eventStart: Date,
+  eventEnd: Date,
+  periodStart: Date,
+  windowStart: Date = periodStart,
+  windowEnd: Date = defaultWindowEnd(periodStart)
+): ArcAngles {
+  let { startAngle, endAngle } = calculateTrueArcAngles(
+    eventStart,
+    eventEnd,
+    periodStart,
+    windowStart,
+    windowEnd
+  );
 
   if (endAngle - startAngle < MIN_ARC_DEGREES) {
+    const windowStartAngle =
+      ((windowStart.getTime() - periodStart.getTime()) / (60 * 1000) / PERIOD_MINUTES) * 360;
+    const windowEndAngle =
+      ((windowEnd.getTime() - periodStart.getTime()) / (60 * 1000) / PERIOD_MINUTES) * 360;
+
     endAngle = startAngle + MIN_ARC_DEGREES;
-    // Widening past 12 o'clock would wrap the arc, so pull the start back instead.
-    if (endAngle > 360) {
-      endAngle = 360;
-      startAngle = Math.max(0, endAngle - MIN_ARC_DEGREES);
+    // Widening past the window's own end would wrap the arc, so pull the start back instead.
+    if (endAngle > windowEndAngle) {
+      endAngle = windowEndAngle;
+      startAngle = Math.max(windowStartAngle, endAngle - MIN_ARC_DEGREES);
     }
   }
 
