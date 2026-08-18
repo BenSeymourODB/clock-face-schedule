@@ -5,7 +5,7 @@
  * the scaffold survive behind `?check=1` — a smart board still has to be checked for a colour
  * emoji font and a working bridge, and that check has to happen on the device.
  */
-import { type ClockEventInput, getPeriodBounds, getPeriodStart } from "../shared/clock";
+import { type ClockEventInput, getFetchWindow, getPeriodBounds, getPeriodStart } from "../shared/clock";
 import { analogClock } from "./render/analog-clock";
 import { sampleEvents } from "./sample-events";
 import { type ScheduleStatus, describeStatus, nextStatus } from "./schedule-status";
@@ -14,11 +14,11 @@ const TICK_INTERVAL_MS = 1_000;
 const POLL_INTERVAL_MS = 5 * 60 * 1_000;
 
 /**
- * Events are fetched for 24 hours from the current period's start, not the 12 the dial shows.
- *
- * The dial filters to its own period, so covering the next one too means a rollover at noon or
- * midnight already has its data and needs no refetch. Without it the dial would sit empty for up
- * to a poll interval at exactly the moment the day changes over.
+ * Events are fetched for the whole calendar day, not the 12 hours the dial shows — plus enough
+ * beyond the current period's own start that a rollover at noon or midnight already has its next
+ * period's data cached and needs no refetch. Without that margin the dial would sit empty for up
+ * to a poll interval at exactly the moment the day changes over. See `getFetchWindow` (#37): an
+ * anchor on the period alone used to miss the whole morning once the period reached noon.
  */
 const WINDOW_HOURS = 24;
 
@@ -41,13 +41,12 @@ function callServer<T>(name: string, ...args: unknown[]): Promise<T> {
 }
 
 function fetchWindow(): Promise<ClockEventInput[]> {
-  const periodStart = getPeriodStart(new Date());
-  const timeMax = new Date(periodStart.getTime() + WINDOW_HOURS * 60 * 60 * 1_000);
+  const { windowStart, windowEnd } = getFetchWindow(new Date(), WINDOW_HOURS);
 
   return callServer<ClockEventInput[]>(
     "getEvents",
-    periodStart.toISOString(),
-    timeMax.toISOString()
+    windowStart.toISOString(),
+    windowEnd.toISOString()
   );
 }
 

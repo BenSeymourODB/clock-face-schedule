@@ -7,6 +7,8 @@ import {
   elapsedEventIds,
   eventsToClockEvents,
   filterEventsForPeriod,
+  getDayStart,
+  getFetchWindow,
   getPeriodBounds,
   getPeriodStart,
   parseEventTitle,
@@ -173,6 +175,65 @@ describe('getPeriodBounds', () => {
   it('agrees with getPeriodStart', () => {
     const time = new Date(2026, 3, 12, 7, 0, 0);
     expect(getPeriodBounds(time).periodStart.getTime()).toBe(getPeriodStart(time).getTime());
+  });
+});
+
+describe('getDayStart', () => {
+  it.each([
+    [0, 0],
+    [9, 30],
+    [11, 59],
+    [12, 0],
+    [23, 59]
+  ])('puts %i:%i at midnight of the same day', (hour, minute) => {
+    const time = new Date(2026, 3, 12, hour, minute, 0);
+    const dayStart = getDayStart(time);
+    expect(dayStart.getFullYear()).toBe(2026);
+    expect(dayStart.getMonth()).toBe(3);
+    expect(dayStart.getDate()).toBe(12);
+    expect(dayStart.getHours()).toBe(0);
+    expect(dayStart.getMinutes()).toBe(0);
+    expect(dayStart.getSeconds()).toBe(0);
+    expect(dayStart.getMilliseconds()).toBe(0);
+  });
+});
+
+describe('getFetchWindow', () => {
+  // Regression case for #37: a naive `[periodStart, periodStart + windowHours)` window anchors
+  // its start to the *period*, not the day, so an afternoon fetch used to omit the whole morning.
+  it('covers the whole morning when fetched from the afternoon', () => {
+    const afternoon = new Date(2026, 3, 12, 14, 30, 0);
+    const { windowStart } = getFetchWindow(afternoon, 24);
+    expect(windowStart.getDate()).toBe(12);
+    expect(windowStart.getHours()).toBe(0);
+    expect(windowStart.getTime()).toBeLessThanOrEqual(afternoon.getTime());
+  });
+
+  it('matches the old periodStart-anchored window when fetched from the morning', () => {
+    const morning = new Date(2026, 3, 12, 9, 30, 0);
+    const { windowStart, windowEnd } = getFetchWindow(morning, 24);
+    expect(windowStart.getTime()).toBe(getPeriodStart(morning).getTime());
+    expect(windowEnd.getTime()).toBe(getPeriodStart(morning).getTime() + 24 * 60 * 60 * 1000);
+  });
+
+  it('keeps the same forward look-ahead past the period start regardless of the day-start widening', () => {
+    const morning = new Date(2026, 3, 12, 9, 30, 0);
+    const afternoon = new Date(2026, 3, 12, 14, 30, 0);
+    const morningWindow = getFetchWindow(morning, 24);
+    const afternoonWindow = getFetchWindow(afternoon, 24);
+
+    expect(morningWindow.windowEnd.getTime() - getPeriodStart(morning).getTime()).toBe(
+      24 * 60 * 60 * 1000
+    );
+    expect(afternoonWindow.windowEnd.getTime() - getPeriodStart(afternoon).getTime()).toBe(
+      24 * 60 * 60 * 1000
+    );
+  });
+
+  it('never starts the window after the fetch time', () => {
+    const time = new Date(2026, 3, 12, 0, 0, 0);
+    const { windowStart } = getFetchWindow(time, 24);
+    expect(windowStart.getTime()).toBeLessThanOrEqual(time.getTime());
   });
 });
 

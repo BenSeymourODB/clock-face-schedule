@@ -121,6 +121,62 @@ describe("clockFace", () => {
     });
   });
 
+  describe("hand halos", () => {
+    // Guards #44: a hand crossing a filled background (a future timer band) needs a contrasting
+    // outline to stay legible, since it otherwise shares its colour with `--card-foreground`.
+    it.each(["hour-hand", "minute-hand"])("draws a %s halo wider than the hand, in --card", (id) => {
+      const { element } = build(at(6, 30));
+      const halo = find(element, `${id}-halo`);
+      const hand = find(element, id);
+
+      expect(halo?.getAttribute("stroke")).toBe("var(--card)");
+      expect(Number(halo?.getAttribute("stroke-width"))).toBeGreaterThan(
+        Number(hand?.getAttribute("stroke-width"))
+      );
+    });
+
+    it("gives the second hand a halo only when the hand itself is drawn", () => {
+      expect(find(build(at(1, 1, 30)).element, "second-hand-halo")).toBeNull();
+
+      const { element } = build(at(1, 1, 30), true);
+      expect(find(element, "second-hand-halo")?.getAttribute("stroke")).toBe("var(--card)");
+    });
+
+    it("mounts every halo before every hand, so no hand's colour is ever overpainted", () => {
+      // Guards a real regression: the hour and minute hands are collinear at the top of every
+      // hour, and mounting each halo right next to its own hand let the wider minute halo paint
+      // over — and visibly thin — the narrower hour hand for the whole of that minute.
+      const { element } = build(at(6, 30), true);
+      const children = Array.from(element.children);
+      const indexOf = (testId: string) => children.indexOf(find(element, testId) as Element);
+
+      const haloIndices = ["hour-hand-halo", "minute-hand-halo", "second-hand-halo"].map(indexOf);
+      const handIndices = ["hour-hand", "minute-hand", "second-hand"].map(indexOf);
+
+      expect(Math.max(...haloIndices)).toBeLessThan(Math.min(...handIndices));
+    });
+
+    it("shares geometry and angle with its hand, and follows it on setTime", () => {
+      const { element, setTime } = build(at(3, 0), true);
+
+      for (const id of ["hour-hand", "minute-hand", "second-hand"]) {
+        const halo = find(element, `${id}-halo`);
+        const hand = find(element, id);
+        for (const attr of ["x1", "y1", "x2", "y2", "transform"]) {
+          expect(halo?.getAttribute(attr)).toBe(hand?.getAttribute(attr));
+        }
+      }
+
+      setTime(at(9, 45, 30));
+
+      for (const id of ["hour-hand", "minute-hand", "second-hand"]) {
+        expect(find(element, `${id}-halo`)?.getAttribute("transform")).toBe(
+          find(element, id)?.getAttribute("transform")
+        );
+      }
+    });
+  });
+
   describe("period indicator", () => {
     it.each([
       [at(0, 0), "AM"],

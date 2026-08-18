@@ -145,7 +145,7 @@ The durable fix is the same horizontal room this panel wants. Deciding the layou
 deciding it for labels too — how much of the width the panel takes determines whether labels get
 their margin back or stay on the band.
 
-**The server fetch needs widening, once.** `main.ts` requests `[periodStart, periodStart + 12h)`.
+**The server fetch needs widening, once.** `main.ts` requests `[periodStart, periodStart + 24h)`.
 The panel needs the whole day. Widen that single request and let `filterEventsForPeriod` narrow it
 for the dial — one round trip, one cache key, and the key already includes the window so nothing
 goes stale. Two separate calls would double the `google.script.run` latency for no benefit.

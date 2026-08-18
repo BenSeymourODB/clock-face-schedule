@@ -92,6 +92,36 @@ export function getPeriodBounds(time: Date): { periodStart: Date; periodEnd: Dat
   return { periodStart, periodEnd };
 }
 
+/** Start of the calendar day containing `time` — midnight, local time. */
+export function getDayStart(time: Date): Date {
+  const dayStart = new Date(time);
+  dayStart.setHours(0, 0, 0, 0);
+  return dayStart;
+}
+
+/**
+ * The window the client should fetch from the server: the whole calendar day, extended to
+ * `windowHours` past the current 12-hour period's own start.
+ *
+ * The end stays anchored to the period rather than the day so a period rollover always finds its
+ * next period already cached — `getPeriodStart` is midnight or noon, so ending at
+ * `periodStart + windowHours` guarantees at least one full period of look-ahead past whichever
+ * rollover is coming next, exactly as a plain `periodStart + windowHours` window always has.
+ *
+ * The start moves earlier, to the day's own midnight, so an afternoon fetch — where
+ * `periodStart` is noon — no longer misses the morning that already happened today. Since
+ * `dayStart` is never later than `periodStart`, this can only widen the window, never narrow the
+ * look-ahead the old computation relied on.
+ */
+export function getFetchWindow(
+  time: Date,
+  windowHours: number
+): { windowStart: Date; windowEnd: Date } {
+  const windowStart = getDayStart(time);
+  const windowEnd = new Date(getPeriodStart(time).getTime() + windowHours * 60 * 60 * 1000);
+  return { windowStart, windowEnd };
+}
+
 /**
  * Narrow events to those overlapping a 12-hour period. All-day events are dropped —
  * they have no start or end angle, so they belong in a separate list beside the dial.
