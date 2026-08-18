@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { createTimeSource, describeClockPin, parseClockPin } from "./time-source";
+import {
+  createTimeSource,
+  describeClockPin,
+  describePinnedInstant,
+  parseClockPin,
+} from "./time-source";
 
 /** A Tuesday, mid-afternoon, in whatever zone the test runner is in. */
 const REFERENCE = new Date(2026, 7, 18, 14, 37, 12, 450);
@@ -175,5 +180,37 @@ describe("describeClockPin", () => {
 
     expect(describeClockPin({ origin, frozen: true })).toContain("frozen at");
     expect(describeClockPin({ origin, frozen: true })).not.toContain("pinned to");
+  });
+});
+
+describe("describePinnedInstant", () => {
+  const origin = new Date(2026, 7, 18, 4, 15, 0);
+  const pin = { origin, frozen: true };
+
+  /**
+   * The defect a render caught: the `?check=1` row reused the status line's wording, which named
+   * the time twice and ran to three lines. That row sits directly under "browser time" and is
+   * there to be compared with it, so it has to carry the same full instant in the same format.
+   */
+  it("matches the format of the browser-time row it is read against", () => {
+    expect(describePinnedInstant(pin, origin)).toContain(origin.toString());
+  });
+
+  it("does not restate the time in the status line's words", () => {
+    const row = describePinnedInstant(pin, origin);
+
+    expect(row).not.toContain("not the real time");
+    expect(row).not.toContain(describeClockPin(pin));
+  });
+
+  it("reports the resolved instant, not the authored origin", () => {
+    const later = new Date(2026, 7, 18, 4, 20, 0);
+
+    expect(describePinnedInstant({ origin, frozen: false }, later)).toContain(later.toString());
+  });
+
+  it("says whether the clock is still running", () => {
+    expect(describePinnedInstant({ origin, frozen: true }, origin)).toContain("frozen");
+    expect(describePinnedInstant({ origin, frozen: false }, origin)).toContain("running");
   });
 });

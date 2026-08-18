@@ -138,3 +138,15 @@ export function describeClockPin(pin: ClockPin): string {
   const verb = pin.frozen ? "frozen at" : "pinned to";
   return `Clock ${verb} ${pin.origin.toLocaleTimeString()} — not the real time`;
 }
+
+/**
+ * The same fact for the `?check=1` panel, which wants a different thing from the status line.
+ *
+ * That panel exists to catch a display whose own clock is wrong, so its pin row has to be readable
+ * *against* the browser-time row above it — same full-instant format, and the resolved time rather
+ * than the authored one. Reusing the status line's wording here named the time twice and ran the
+ * row to three lines, which is what looking at it showed.
+ */
+export function describePinnedInstant(pin: ClockPin, now: Date): string {
+  return `${now.toString()} — ${pin.frozen ? "frozen" : "running"}`;
+}

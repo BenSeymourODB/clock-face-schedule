@@ -73,6 +73,7 @@ export { describeTextArc } from './text-arc';
 export {
   createTimeSource,
   describeClockPin,
+  describePinnedInstant,
   parseClockPin,
   type ClockPin,
   type TimeSource

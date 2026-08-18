@@ -9,6 +9,7 @@ import {
   type ClockEventInput,
   createTimeSource,
   describeClockPin,
+  describePinnedInstant,
   getFetchWindow,
   getPeriodBounds,
 } from "../shared/clock";
@@ -181,9 +182,14 @@ async function renderDiagnostics(list: Element): Promise<void> {
   }
 
   // The device's own clock, deliberately not the dial's: this panel exists to find a display whose
-  // clock is wrong, and a pin would mask exactly that. The pin gets its own row instead.
+  // clock is wrong, and a pin would mask exactly that. The pin gets its own row instead, in the
+  // same format as the row above so the two can be read against each other. The status line's
+  // wording is not reused here — it names the time a second time, and the row label already says
+  // what this is.
   addRow(list, "browser time", new Date().toString(), "ok");
-  if (clockPin) addRow(list, "clock pin", `${describeClockPin(clockPin)} — dial reads ${now()}`, "note");
+  if (clockPin) {
+    addRow(list, "clock pin", describePinnedInstant(clockPin, now()), "note");
+  }
 
   const { periodStart, periodEnd } = getPeriodBounds(now());
   try {
