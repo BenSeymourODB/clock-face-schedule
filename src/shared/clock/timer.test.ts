@@ -7,9 +7,11 @@ import {
   remainingBandCount,
   remainingSeconds,
   resumeTimer,
+  shouldPlayCompletionCue,
   startTimer,
   stopTimer,
-  tick
+  tick,
+  type TimerState
 } from './timer';
 
 function at(hour: number, minute: number, second: number, ms = 0): Date {
@@ -167,6 +169,60 @@ describe('pauseTimer / resumeTimer / stopTimer', () => {
     expect(stopped.status).toBe('finished');
     expect(stopped.segmentStartedAt).toBeNull();
     expect(elapsedSeconds(stopped, new Date(now.getTime() + 999_000))).toBe(25);
+  });
+});
+
+describe('completionReason', () => {
+  it('is null while running or paused', () => {
+    const start = at(14, 0, 0);
+    const running = startTimer(60, start);
+    expect(running.completionReason).toBeNull();
+
+    const paused = pauseTimer(running, new Date(start.getTime() + 10_000));
+    expect(paused.completionReason).toBeNull();
+  });
+
+  it('is "expired" once tick carries a timer past its duration', () => {
+    const start = at(14, 0, 0);
+    const state = startTimer(60, start);
+    const finished = tick(state, new Date(start.getTime() + 60_000));
+    expect(finished.completionReason).toBe('expired');
+  });
+
+  it('is "stopped" when stopTimer ends a still-running timer', () => {
+    const start = at(14, 0, 0);
+    const state = startTimer(60, start);
+    const stopped = stopTimer(state, new Date(start.getTime() + 25_000));
+    expect(stopped.completionReason).toBe('stopped');
+  });
+
+  it('stopTimer cannot overwrite an already-expired reason with "stopped"', () => {
+    const start = at(14, 0, 0);
+    const state = startTimer(60, start);
+    const expired = tick(state, new Date(start.getTime() + 60_000));
+    const stoppedAfterExpiry = stopTimer(expired, new Date(start.getTime() + 90_000));
+    expect(stoppedAfterExpiry).toEqual(expired);
+  });
+});
+
+describe('shouldPlayCompletionCue', () => {
+  const start = at(14, 0, 0);
+  const running = startTimer(60, start);
+  const paused = pauseTimer(running, new Date(start.getTime() + 10_000));
+  const expired = tick(running, new Date(start.getTime() + 60_000));
+  const stopped = stopTimer(running, new Date(start.getTime() + 25_000));
+  const expiredAgain = tick(expired, new Date(start.getTime() + 61_000));
+
+  it.each([
+    ['fresh mount, no timer yet', undefined, running, false],
+    ['still running', running, running, false],
+    ['running -> expired: the edge to fire on', running, expired, true],
+    ['running -> stopped: cancelled, not completed', running, stopped, false],
+    ['already-expired -> still expired: do not refire every tick', expired, expiredAgain, false],
+    ['mounting directly into an already-expired state does not fire retroactively', undefined, expired, false],
+    ['paused stays silent', paused, paused, false]
+  ] as Array<[string, TimerState | undefined, TimerState, boolean]>)('%s', (_label, previous, next, expected) => {
+    expect(shouldPlayCompletionCue(previous, next)).toBe(expected);
   });
 });
 
