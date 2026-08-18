@@ -15,15 +15,15 @@ import {
   faceClearanceLimit,
   fitLabelToWidth,
   labelCardHeight,
-  labelLineOffsets,
   labelWidthLimit,
   polarToCartesian,
   rectEdgeIntersection,
   roundCoord,
 } from "../../shared/clock";
+import { cardStrokeWidth, eventCardNodes, RECT_PADDING_X, RECT_PADDING_Y } from "./event-card";
 import { svg } from "../svg";
 
-const FONT_STACK = "system-ui, -apple-system, sans-serif";
+const ID_PREFIX = "floating-label";
 
 /**
  * Lines a card may grow to before its text is cut instead.
@@ -36,43 +36,7 @@ const FONT_STACK = "system-ui, -apple-system, sans-serif";
  */
 const MAX_LINES = 3;
 
-const RECT_PADDING_X = 6;
-const RECT_PADDING_Y = 3;
-const RECT_CORNER_RADIUS = 3;
-const RECT_BORDER_OPACITY = 0.4;
 const CONNECTOR_OPACITY = 0.6;
-
-/**
- * Opacity of the colour wash laid over the card's field, tying it to its arc without recomputing
- * the chip's colour (#29). Composited over `var(--card-foreground)`, not computed to a hex — so it
- * is correct in any theme with no token lookup here.
- *
- * 20% leaves wide headroom rather than sitting on the ceiling: `compositeOver` against every
- * palette colour, including the two that fail #26/#27's contrast check outright, puts the worst
- * case (⚫ `#1F2937`) at 10.9:1 on `var(--card)` text — nowhere near the 4.5:1 floor that would force
- * `readableTextColor` back into play. Measured, not assumed; see contrast.test.ts.
- */
-const WASH_OPACITY = 0.2;
-
-/** Attributes shared by the card's three stacked rects — same rounded rectangle, different paint. */
-function cardRect(x: number, y: number, width: number, height: number) {
-  return {
-    x: roundCoord(x),
-    y: roundCoord(y),
-    width: roundCoord(width),
-    height: roundCoord(height),
-    rx: RECT_CORNER_RADIUS,
-    ry: RECT_CORNER_RADIUS,
-  };
-}
-
-/**
- * Connector and card border, as a fraction of the label's font size with an absolute floor. The
- * label already scales with the band it belongs to, so its linework should too — a fixed 1-unit
- * hairline disappeared as the dial grew.
- */
-const STROKE_RATIO = 0.08;
-const STROKE_MIN = 1;
 
 const DEFAULT_FONT_SIZE = 14;
 
@@ -137,12 +101,10 @@ export function floatingLabel({
 
   // Stop the connector at the card's edge rather than letting it run underneath the fill.
   const connectorEnd = rectEdgeIntersection(centre, width, height, anchor);
-  const strokeWidth = roundCoord(Math.max(STROKE_MIN, fontSize * STROKE_RATIO));
 
   const group = svg("g", { "data-testid": `floating-label-${id}` });
   const left = centre.x - width / 2;
   const top = centre.y - height / 2;
-  const geometry = cardRect(left, top, width, height);
 
   group.append(
     svg("line", {
@@ -153,53 +115,19 @@ export function floatingLabel({
       y2: roundCoord(connectorEnd.y),
       stroke: color,
       "stroke-opacity": CONNECTOR_OPACITY,
-      "stroke-width": strokeWidth,
+      "stroke-width": cardStrokeWidth(fontSize),
     }),
-    // The card deliberately inverts the face tokens — a light chip carrying dark text, sitting
-    // off the dial. NDWC hard-coded white and #1f2937 for this; using the tokens gives the same
-    // result on this palette while staying tunable, and keeps ADR 0007's set at five.
-    //
-    // Three stacked rects, not one: a wash tinting the field needs a plain surface under it to
-    // blend against, and the border wants to sit above the wash so it reads at full strength
-    // rather than through it. Splitting fill from stroke is what makes that order possible.
-    // Sharing one `geometry` object, rather than recomputing it per rect, is what makes it
-    // structurally impossible for the three to drift apart.
-    svg("rect", {
-      "data-testid": `floating-label-rect-${id}`,
-      ...geometry,
-      fill: "var(--card-foreground)",
-    }),
-    svg("rect", {
-      "data-testid": `floating-label-wash-${id}`,
-      ...geometry,
-      fill: color,
-      "fill-opacity": WASH_OPACITY,
-    }),
-    svg("rect", {
-      "data-testid": `floating-label-border-${id}`,
-      ...geometry,
-      fill: "none",
-      stroke: color,
-      "stroke-opacity": RECT_BORDER_OPACITY,
-      "stroke-width": strokeWidth,
-    }),
-    // One <text> per line, as the arc does for its curved lines — no tspan baseline arithmetic.
-    ...labelLineOffsets(lines.length, fontSize).map((offset, index) =>
-      svg(
-        "text",
-        {
-          "data-testid": `floating-label-text-${id}-${index}`,
-          x: roundCoord(centre.x),
-          y: roundCoord(centre.y + offset),
-          "text-anchor": "middle",
-          "dominant-baseline": "central",
-          "font-size": fontSize,
-          "font-family": FONT_STACK,
-          fill: "var(--card)",
-        },
-        [lines[index]]
-      )
-    )
+    ...eventCardNodes({
+      idPrefix: ID_PREFIX,
+      id,
+      x: left,
+      y: top,
+      width,
+      height,
+      color,
+      lines,
+      fontSize,
+    })
   );
 
   return group;
