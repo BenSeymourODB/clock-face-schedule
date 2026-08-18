@@ -49,6 +49,10 @@ export const TITLE_LINE_OFFSET_RATIO = 0.55;
  *
  * One unit, matching the separator's own floor: below that the two are not distinguishable as
  * separate marks anyway, so there is nothing left to protect.
+ *
+ * Measured to the glyph *em box*, as every radial gate on this band is. Real ink reaches past it —
+ * 0.54 units per side at a 3.93 font — so a clearance of one unit is nearer half that of actual gap;
+ * #78 carries the correction, which touches every one of those gates rather than this constant alone.
  */
 export const TITLE_EDGE_CLEARANCE = 1;
 

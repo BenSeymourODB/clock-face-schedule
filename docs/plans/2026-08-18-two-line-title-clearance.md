@@ -104,10 +104,15 @@ stack four deep at size 600, or three deep on a small dial.
 ### What the guarantee is measured to
 
 The glyph **em box** — `fontSize / 2` either side of each baseline — which is the model
-`fitDurationLine` and the rest of this band already use. Real ink from ascenders and descenders
-reaches slightly further, and the rendered before/after shows the uncapped stack's ascenders grazing
-the outline at a modelled 0.55. Changing the model is a separate question from tying the two
-quantities together, which is this issue's.
+`fitDurationLine` and the rest of this band already use. Real ink from ascenders and descenders reaches
+further: measured with `getBBox()` at the sizes the dial renders, **0.54 units per side at 3.93** and
+1.87 at 21.26, so the 1.00 this cap holds to is nearer 0.46 of actual gap. That is why the uncapped
+render's ascenders are *touching* the outline at a modelled 0.55 rather than 0.55 clear of it.
+
+Correcting the model is #78 and deliberately not folded in here: it changes every radial gate on the
+band at once, including `TITLE_LINE_OFFSET_RATIO`'s separation between the two lines, and it is a
+different question from tying the text's radii to the stroke beside them — which nothing did at all
+before this.
 
 ## Phases
 
