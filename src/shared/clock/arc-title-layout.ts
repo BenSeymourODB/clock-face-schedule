@@ -8,7 +8,9 @@
  * an event would show its title twice or not at all.
  */
 import { roundCoord } from './clock-utils';
-import { type FitTitleResult, fitTitleToArc } from './fit-title';
+import { formatEventDuration } from './duration';
+import { visualWidth } from './emoji';
+import { arcCharBudget, type FitTitleResult, fitTitleToArc } from './fit-title';
 
 /** Arc span below which a title stays on one line. */
 export const TWO_LINE_MIN_SPAN_DEGREES = 30;
@@ -56,4 +58,27 @@ export function computeArcTitleLayout(params: {
   const maxLines: 1 | 2 = arcSpan >= TWO_LINE_MIN_SPAN_DEGREES ? 2 : 1;
   const fit = fitTitleToArc(title, arcSpan, titleRadius, titleFontSize, maxLines);
   return { titleRadius, titleFontSize, maxLines, fit };
+}
+
+/**
+ * The duration text for an arc's second line, or `undefined` when it will not fit there (#35).
+ *
+ * `radius` is the radius the line is actually drawn at, not the title's — the two straddle the band's
+ * centre, and a curved line's budget is a function of the radius it curves along.
+ *
+ * There is deliberately no span threshold and no compact fallback. The budget is derived from arc
+ * length, so it gates itself; and a dial mixing "2 hr 25" on one arc with "2h25" on the next is the
+ * second-glance failure the whole premise rules out. An arc too narrow for the one format shows
+ * nothing, and its floating label carries the duration instead.
+ */
+export function fitDurationLine(params: {
+  durationMinutes: number;
+  arcSpan: number;
+  radius: number;
+  fontSize: number;
+}): string | undefined {
+  const { durationMinutes, arcSpan, radius, fontSize } = params;
+  const text = formatEventDuration(durationMinutes);
+  if (text.length === 0) return undefined;
+  return visualWidth(text) <= arcCharBudget(arcSpan, radius, fontSize) ? text : undefined;
 }

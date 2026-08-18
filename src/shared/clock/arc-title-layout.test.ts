@@ -3,8 +3,10 @@ import {
   TITLE_FONT_SIZE_RATIO,
   TITLE_RADIUS_RATIO,
   TWO_LINE_MIN_SPAN_DEGREES,
-  computeArcTitleLayout
+  computeArcTitleLayout,
+  fitDurationLine
 } from './arc-title-layout';
+import { arcCharBudget } from './fit-title';
 
 const baseInput = {
   title: 'Family Game Night',
@@ -108,5 +110,43 @@ describe('computeArcTitleLayout', () => {
     const a = computeArcTitleLayout({ ...baseInput, arcSpan: 45 });
     const b = computeArcTitleLayout({ ...baseInput, arcSpan: 45 });
     expect(a).toEqual(b);
+  });
+});
+
+describe('fitDurationLine', () => {
+  // A lone arc on the 600-unit dial: band 75.92, title font 21.26, second line at 254.04 ± 11.69.
+  const loneArc = { radius: 242.35, fontSize: 21.26 };
+
+  it('returns the formatted duration when the arc can carry it', () => {
+    expect(fitDurationLine({ ...loneArc, durationMinutes: 120, arcSpan: 60 })).toBe('2 hr');
+    expect(fitDurationLine({ ...loneArc, durationMinutes: 145, arcSpan: 60 })).toBe('2 hr 25');
+  });
+
+  it('returns nothing when the string exceeds the budget at its own radius', () => {
+    // 7 units of "2 hr 25" against a 10° arc, whose budget at this radius is 3.
+    expect(arcCharBudget(10, loneArc.radius, loneArc.fontSize)).toBeLessThan(7);
+    expect(fitDurationLine({ ...loneArc, durationMinutes: 145, arcSpan: 10 })).toBeUndefined();
+  });
+
+  // The two title radii straddle the band's centre, so the *same* string on the same arc can fit
+  // one line and not the other. Budgeting at the title's radius rather than the line's would
+  // silently overrun the inner one.
+  it('budgets against the radius the line is drawn at, not the title\'s', () => {
+    const arcSpan = 21;
+    const fontSize = 21.26;
+    const inner = fitDurationLine({ durationMinutes: 145, arcSpan, radius: 200, fontSize });
+    const outer = fitDurationLine({ durationMinutes: 145, arcSpan, radius: 265.73, fontSize });
+    expect(inner).toBeUndefined();
+    expect(outer).toBe('2 hr 25');
+  });
+
+  it.each([[0], [0.2], [-30]])('returns nothing for a %s-minute event', (durationMinutes) => {
+    expect(fitDurationLine({ ...loneArc, durationMinutes, arcSpan: 60 })).toBeUndefined();
+  });
+
+  // No compact fallback by design: one format across the whole dial, or nothing on this arc.
+  it('never abbreviates to fit', () => {
+    const tight = fitDurationLine({ ...loneArc, durationMinutes: 145, arcSpan: 12 });
+    expect(tight).toBeUndefined();
   });
 });

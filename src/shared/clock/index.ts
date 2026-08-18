@@ -3,6 +3,7 @@ export {
   TITLE_RADIUS_RATIO,
   TWO_LINE_MIN_SPAN_DEGREES,
   computeArcTitleLayout,
+  fitDurationLine,
   type ArcTitleLayout
 } from './arc-title-layout';
 export {
@@ -29,6 +30,7 @@ export {
   roundCoord
 } from './clock-utils';
 export { compositeOver, readableTextColor, relativeLuminance } from './contrast';
+export { formatEventDuration } from './duration';
 // `emoji.ts` is deliberately absent. Its consumers — `clock-utils`, `pack-lines`, `fit-label` —
 // are all inside this directory and import it directly, and re-exporting the pattern here put a
 // top-level `new RegExp` in the barrel that esbuild would not tree-shake, carrying the whole
@@ -48,7 +50,7 @@ export {
   labelLineOffsets,
   type LabelLayout
 } from './fit-label';
-export { fitTitleToArc, type FitTitleResult } from './fit-title';
+export { arcCharBudget, fitTitleToArc, type FitTitleResult } from './fit-title';
 export {
   CHAR_WIDTH_RATIO,
   charBudget,

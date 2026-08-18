@@ -532,6 +532,68 @@ describe('eventsToClockEvents', () => {
     expect(result.startAngle).toBeCloseTo(390);
     expect(result.endAngle).toBeCloseTo(405);
   });
+
+  describe('durationMinutes', () => {
+    it.each([
+      [[3, 0], [3, 10], 10],
+      [[3, 0], [3, 30], 30],
+      [[3, 0], [4, 0], 60],
+      [[3, 0], [5, 25], 145]
+    ])('reports %s → %s as %i minutes', (start, end, expected) => {
+      const [result] = eventsToClockEvents(
+        [
+          makeEvent({
+            startDate: new Date(2026, 3, 12, start[0], start[1], 0).toISOString(),
+            endDate: new Date(2026, 3, 12, end[0], end[1], 0).toISOString()
+          })
+        ],
+        periodStart
+      );
+      expect(result.durationMinutes).toBe(expected);
+    });
+
+    // The whole reason #35 states duration as text is that no angle on the dial carries it. A
+    // 70-minute event that the window catches 20 minutes of is drawn at 10°, and both angle pairs
+    // agree with the drawing rather than with the event.
+    it('reports the event\'s own length, not the extent the window left visible', () => {
+      const [result] = eventsToClockEvents(
+        [
+          makeEvent({
+            startDate: new Date(2026, 3, 11, 23, 10, 0).toISOString(),
+            endDate: new Date(2026, 3, 12, 0, 20, 0).toISOString()
+          })
+        ],
+        periodStart
+      );
+
+      expect(result.durationMinutes).toBe(70);
+      expect(result.trueEndAngle - result.trueStartAngle).toBeCloseTo(10);
+    });
+
+    // MIN_ARC_DEGREES draws everything under fifteen minutes at 7.5°, so the drawn angles cannot
+    // tell a five-minute event from a fifteen-minute one. This field is what does.
+    it('distinguishes two events the minimum-width floor draws identically', () => {
+      const [five, fifteen] = eventsToClockEvents(
+        [
+          makeEvent({
+            id: 'five',
+            startDate: new Date(2026, 3, 12, 3, 0, 0).toISOString(),
+            endDate: new Date(2026, 3, 12, 3, 5, 0).toISOString()
+          }),
+          makeEvent({
+            id: 'fifteen',
+            startDate: new Date(2026, 3, 12, 5, 0, 0).toISOString(),
+            endDate: new Date(2026, 3, 12, 5, 15, 0).toISOString()
+          })
+        ],
+        periodStart
+      );
+
+      expect(five.endAngle - five.startAngle).toBeCloseTo(fifteen.endAngle - fifteen.startAngle);
+      expect(five.durationMinutes).toBe(5);
+      expect(fifteen.durationMinutes).toBe(15);
+    });
+  });
 });
 
 describe('roundCoord', () => {

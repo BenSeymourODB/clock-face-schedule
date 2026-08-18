@@ -28,6 +28,9 @@ function makeEvent(overrides: Partial<ClockEvent> = {}): ClockEvent {
     trueEndAngle: endAngle,
     continuesBefore: false,
     continuesAfter: false,
+    // 0.5° per minute on a 12-hour dial, so an event's default duration is the one its span is
+    // drawn at. A case about the two disagreeing overrides this.
+    durationMinutes: (endAngle - startAngle) * 2,
     color: "#22c55e",
     isAllDay: false,
     ...overrides,
