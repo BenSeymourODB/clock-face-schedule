@@ -63,9 +63,9 @@ export interface ArcTitleLayout {
   /**
    * Half the radial gap between two stacked baselines, in the same units as the radii.
    *
-   * Part of the layout rather than left to the renderer because the font size is capped by the room
-   * the ring's own strokes leave (#67), and an offset re-derived from the *uncapped* size would put
-   * the lines straight back where the cap moved them from.
+   * Stated here rather than left to the renderer to restate the ratio: the clearance guarantee below
+   * is about where these lines land, so one place should decide it. Equal to
+   * `titleFontSize × TITLE_LINE_OFFSET_RATIO` by construction.
    */
   lineOffset: number;
   /** Lines the title may occupy on this arc. */
@@ -78,9 +78,14 @@ export interface ArcTitleLayout {
  * How far the outermost line's glyph band reaches from the centre of the stack, per unit of font
  * size. `central` dominant-baseline puts a glyph band at ±fontSize/2 around its own baseline, and a
  * stacked line's baseline sits `TITLE_LINE_OFFSET_RATIO` further out again.
+ *
+ * Keyed on the lines a title *actually takes*, not on the two the span allows: charging two-line room
+ * to a one-line title cost 10% of its size four deep on a 600-unit dial and 33% on a 300-unit one,
+ * where a single line had radial room to spare. Small text on a crowded ring is #70's whole subject,
+ * so there is nothing to spend there for a line that is not drawn.
  */
-function stackReachRatio(maxLines: 1 | 2): number {
-  return maxLines === 2 ? TITLE_LINE_OFFSET_RATIO + 0.5 : 0.5;
+function stackReachRatio(lines: number): number {
+  return lines >= 2 ? TITLE_LINE_OFFSET_RATIO + 0.5 : 0.5;
 }
 
 export function computeArcTitleLayout(params: {
@@ -110,18 +115,29 @@ export function computeArcTitleLayout(params: {
     arcHeight / 2 - (edgeStrokeWidth / 2 + TITLE_EDGE_CLEARANCE)
   );
 
-  // Sized from the ring, then held to what the ring's own strokes leave. Not the absolute 18-unit
-  // ceiling #35's comment records removing: that one meant widening the band bought a thicker arc
-  // carrying the same small text, whereas this limit scales with the band exactly as the ratio does.
-  // It binds only where the stroke genuinely takes the space — four deep on a 600-unit dial, three
-  // deep on a 300-unit one — and truncates to `roundCoord`'s own precision rather than rounding,
-  // since rounding a *limit* upward is how a ten-thousandth of an overlap gets back in.
+  // The word-pack runs at the size the *ring* gives, before any of the above. That keeps the
+  // character budget — and so `didOverflow`, and so which titles the dial routes to a floating label
+  // — exactly what it was: a capped font is a *larger* budget, and letting the cap widen it would
+  // quietly move borderline titles off a legible 17.52-unit card onto arc text a quarter that size,
+  // which is the trade #70 exists to question rather than one to make in passing. Lines packed for a
+  // larger font and drawn at a smaller one can only leave angular slack, never overrun.
   const preferred = roundCoord(arcHeight * TITLE_FONT_SIZE_RATIO);
-  const ceiling = Math.floor(usableHalf / stackReachRatio(maxLines) * 1e4) / 1e4;
+  const fit = fitTitleToArc(title, arcSpan, titleRadius, preferred, maxLines);
+
+  // Then held to what the ring's own strokes leave. Not the absolute 18-unit ceiling #35's comment
+  // records removing: that one meant widening the band bought a thicker arc carrying the same small
+  // text, whereas this limit scales with the band exactly as the ratio does. It binds only where the
+  // stroke genuinely takes the space — a two-line stack four deep on a 600-unit dial, three deep on a
+  // 300-unit one — and truncates to `roundCoord`'s own precision rather than rounding, since rounding
+  // a *limit* upward is how a ten-thousandth of an overlap gets back in.
+  //
+  // `fitDurationLine` can add a second line under a one-line title (#35), which this has not budgeted
+  // for. Deliberately: that function applies this same clearance to this same font size and declines
+  // where the pair would not fit, so the stack stays bounded whichever line asked for it.
+  const ceiling = Math.floor((usableHalf / stackReachRatio(fit.lines.length)) * 1e4) / 1e4;
   const titleFontSize = Math.min(preferred, ceiling);
 
   const lineOffset = titleFontSize * TITLE_LINE_OFFSET_RATIO;
-  const fit = fitTitleToArc(title, arcSpan, titleRadius, titleFontSize, maxLines);
   return { titleRadius, titleFontSize, lineOffset, maxLines, fit };
 }
 
@@ -144,10 +160,13 @@ export function computeArcTitleLayout(params: {
  * elapsed arc's outline is sized from the whole *band* (#26, deliberately, so its weight does not
  * thin with overlap depth) while the text is sized from this arc's *ring*. On the 600-unit dial that
  * leaves 12.98 units of clearance on a lone arc, 4.69 two deep, **1.93** three deep and **0.55**
- * four deep. The legibility gate happens to cover every one of those cases today, but this is the
- * check that is actually about not drawing text on a stroke, and the two move independently:
- * before #27 retired the neutral halo the same stroke was 0.12 of the band rather than 0.07, and
- * three deep measured **0.03**. `edgeStrokeWidth` is what the caller draws there, since the elapsed
+ * four deep — and #67 now holds the title's own stack to the same clearance, from the other side. The
+ * legibility gate happens to cover every one of those cases today, but this is the check that is
+ * actually about not drawing text on a stroke, and the two move independently: before #27 retired the
+ * neutral halo the same stroke was 0.12 of the band rather than 0.07, which left **0.13** three deep
+ * and **0.09** four deep. Those are the halo *as drawn* — `stroke()` capped it at 0.4 of the ring, so
+ * 8.91 and 6.23 rather than the 9.11 the ratio asks for; an earlier revision of this comment quoted
+ * 0.03 from the uncapped figure. `edgeStrokeWidth` is what the caller draws there, since the elapsed
  * treatment is the renderer's business, not this layout's.
  *
  * The gate is checked against that stroke whether or not the event has elapsed yet: a duration that

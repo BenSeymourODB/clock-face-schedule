@@ -132,20 +132,38 @@ describe('computeArcTitleLayout', () => {
       };
     }
 
+    /**
+     * A title that really wraps onto two lines on this ring, and really fits — two words that each
+     * fit a line alone and cannot share one.
+     *
+     * Derived rather than written out because the budget moves with the ring: a fixed string is a
+     * two-line case on a thin ring and a truncated one-line case on a thick one, and a truncated
+     * title is a configuration the dial never draws on the arc (it routes to a floating label).
+     */
+    function wrappingTitle(shape: ReturnType<typeof ring>, arcSpan: number): string {
+      const probe = computeArcTitleLayout({ ...shape, title: 'x', arcSpan });
+      const budget = arcCharBudget(arcSpan, probe.titleRadius, probe.titleFontSize);
+      const word = 'a'.repeat(Math.max(1, Math.floor(budget / 2) + 1));
+
+      return `${word} ${word}`;
+    }
+
     /** How far the outward and inward lines fall short of the stroke's near edge. */
     function clearances(shape: ReturnType<typeof ring>, title: string, arcSpan: number) {
-      const { titleRadius, titleFontSize, lineOffset, maxLines } = computeArcTitleLayout({
+      const { titleRadius, titleFontSize, lineOffset, fit } = computeArcTitleLayout({
         ...shape,
         title,
         arcSpan
       });
-      const reach = (maxLines === 2 ? lineOffset : 0) + titleFontSize / 2;
+      // Keyed on the lines drawn, which is what the cap is keyed on too.
+      const reach = (fit.lines.length >= 2 ? lineOffset : 0) + titleFontSize / 2;
       const strokeReach = shape.edgeStrokeWidth / 2;
 
       return {
         outward: shape.outerRadius - strokeReach - (titleRadius + reach),
         inward: titleRadius - reach - (shape.innerRadius + strokeReach),
-        titleFontSize
+        titleFontSize,
+        fit
       };
     }
 
@@ -153,20 +171,35 @@ describe('computeArcTitleLayout', () => {
     const sizes = [300, 600, 900];
     const cases = sizes.flatMap((size) => depths.map((depth): [number, number] => [size, depth]));
 
-    it.each(cases)('at size %i, %i deep', (size, depth) => {
-      const { outward, inward } = clearances(ring(size, depth), 'Study Skills and Revision', 60);
+    it.each(cases)('at size %i, %i deep, a two-line title clears both edges', (size, depth) => {
+      const shape = ring(size, depth);
+      const { outward, inward, fit } = clearances(shape, wrappingTitle(shape, 60), 60);
+
+      // The premise: two lines that fit, not a truncated one-liner.
+      expect(fit.lines).toHaveLength(2);
+      expect(fit.didOverflow).toBe(false);
 
       expect(outward).toBeGreaterThanOrEqual(TITLE_EDGE_CLEARANCE);
       expect(inward).toBeGreaterThanOrEqual(TITLE_EDGE_CLEARANCE);
     });
 
-    it('holds under the 0.12 halo #27 retired, which the ratio alone did not', () => {
-      // The stroke is the caller's to choose and has been half again this wide inside this repo's
-      // own history, so the guarantee has to survive a change to it rather than depend on one.
-      const shape = ring(600, 3);
-      const halo = { ...shape, edgeStrokeWidth: (shape.outerRadius * 0.26) * 0.12 };
+    it.each(cases)('at size %i, %i deep, a one-line title clears both edges', (size, depth) => {
+      const { outward, inward, fit } = clearances(ring(size, depth), 'Lunch', 60);
 
-      expect(clearances(halo, 'Study Skills and Revision', 60).outward).toBeGreaterThanOrEqual(
+      expect(fit.lines).toHaveLength(1);
+      expect(outward).toBeGreaterThanOrEqual(TITLE_EDGE_CLEARANCE);
+      expect(inward).toBeGreaterThanOrEqual(TITLE_EDGE_CLEARANCE);
+    });
+
+    it('holds for a stroke wider than the renderer would draw today', () => {
+      // The stroke is the caller's to choose and has been half again this wide inside this repo's own
+      // history (#26's halo, 0.12 of the band), so the guarantee has to survive a change to it rather
+      // than depend on one. 9.11 units on a 22.27 ring is past what `ELAPSED_STROKE_MAX_RATIO` would
+      // permit, which makes it a fat-stroke case rather than a replay of that halo.
+      const shape = ring(600, 3);
+      const fat = { ...shape, edgeStrokeWidth: shape.outerRadius * 0.26 * 0.12 };
+
+      expect(clearances(fat, wrappingTitle(fat, 60), 60).outward).toBeGreaterThanOrEqual(
         TITLE_EDGE_CLEARANCE
       );
     });
@@ -180,35 +213,79 @@ describe('computeArcTitleLayout', () => {
     });
 
     it.each([[1], [2], [3]])(
-      'leaves the font at the ring ratio where the stroke leaves room (%i deep)',
+      'leaves a two-line font at the ring ratio where the stroke leaves room (%i deep)',
       (depth) => {
         const shape = ring(600, depth);
         const arcHeight = shape.outerRadius - shape.innerRadius;
 
-        expect(clearances(shape, 'Study Skills and Revision', 60).titleFontSize).toBeCloseTo(
+        expect(clearances(shape, wrappingTitle(shape, 60), 60).titleFontSize).toBeCloseTo(
           arcHeight * TITLE_FONT_SIZE_RATIO,
           2
         );
       }
     );
 
-    it('takes the font no lower than the stroke demands', () => {
-      // Four deep at size 600 is the case that binds: 4.13 units of usable half-height against a
+    it('takes a two-line font no lower than the stroke demands', () => {
+      // Four deep at size 600 is the case that binds: 4.12 units of usable half-height against a
       // stack wanting 4.58. Yielding more than that would cost legibility for nothing.
       const shape = ring(600, 4);
       const arcHeight = shape.outerRadius - shape.innerRadius;
       const usableHalf = arcHeight / 2 - (shape.edgeStrokeWidth / 2 + TITLE_EDGE_CLEARANCE);
-      const { titleFontSize } = clearances(shape, 'Study Skills and Revision', 60);
+      const { titleFontSize } = clearances(shape, wrappingTitle(shape, 60), 60);
 
       expect(titleFontSize).toBeLessThan(arcHeight * TITLE_FONT_SIZE_RATIO);
       expect(titleFontSize).toBeCloseTo(usableHalf / (TITLE_LINE_OFFSET_RATIO + 0.5), 1);
     });
 
-    it('keeps lineOffset at TITLE_LINE_OFFSET_RATIO of whatever font it resolved', () => {
-      // The renderer draws the stack at this offset, so a font the cap moved and an offset derived
-      // from the uncapped one would put the lines back where they started.
+    /**
+     * The room a line that is not drawn does not get to take. Charging the two-line reach to every
+     * arc wider than `TWO_LINE_MIN_SPAN_DEGREES` cost a one-line title 10% of its size four deep at
+     * size 600 and 33% at size 300, on the rings that can least afford it (#70).
+     */
+    it.each([
+      [600, 4],
+      [300, 3],
+      [300, 4]
+    ])('does not shrink a one-line title at size %i, %i deep', (size, depth) => {
+      const shape = ring(size, depth);
+      const arcHeight = shape.outerRadius - shape.innerRadius;
+      const single = computeArcTitleLayout({ ...shape, title: 'Lunch', arcSpan: 60 });
+      const stacked = computeArcTitleLayout({
+        ...shape,
+        title: wrappingTitle(shape, 60),
+        arcSpan: 60
+      });
+
+      expect(single.fit.lines).toHaveLength(1);
+      expect(single.titleFontSize).toBeCloseTo(arcHeight * TITLE_FONT_SIZE_RATIO, 2);
+      // …and the two-line case on the same ring is the one that yields.
+      expect(stacked.titleFontSize).toBeLessThan(single.titleFontSize);
+    });
+
+    /**
+     * Overflow routing is the dial's decision about whether a title goes on the band at 3.93 units or
+     * onto a floating card at 17.52, and the cap must not move it: a smaller font is a *larger*
+     * character budget, so packing against the capped size would quietly keep borderline titles on
+     * the band. Whether cluster titles belong there at all is #70's question, not this one's.
+     */
+    it('packs against the ring font, so the cap cannot change what overflows', () => {
       const shape = ring(600, 4);
-      const layout = computeArcTitleLayout({ ...shape, title: 'Study Skills', arcSpan: 60 });
+      const title = wrappingTitle(shape, 60);
+      const withStroke = computeArcTitleLayout({ ...shape, title, arcSpan: 60 });
+      const withNone = computeArcTitleLayout({ ...shape, edgeStrokeWidth: 0, title, arcSpan: 60 });
+
+      // Same lines, same didOverflow — the stroke moves how large the text is drawn, never what fits.
+      expect(withStroke.fit).toEqual(withNone.fit);
+      expect(withStroke.titleFontSize).toBeLessThan(withNone.titleFontSize);
+    });
+
+    it('keeps lineOffset at TITLE_LINE_OFFSET_RATIO of whatever font it resolved', () => {
+      const shape = ring(600, 4);
+      const layout = computeArcTitleLayout({
+        ...shape,
+        title: wrappingTitle(shape, 60),
+        arcSpan: 60
+      });
 
       expect(layout.lineOffset).toBeCloseTo(layout.titleFontSize * TITLE_LINE_OFFSET_RATIO, 6);
     });
@@ -216,9 +293,14 @@ describe('computeArcTitleLayout', () => {
     it('is a no-op when nothing is stroked on the edges', () => {
       const shape = ring(600, 4);
       const arcHeight = shape.outerRadius - shape.innerRadius;
-      const bare = computeArcTitleLayout({ ...shape, edgeStrokeWidth: 0, title: 'x', arcSpan: 60 });
+      const bare = { ...shape, edgeStrokeWidth: 0 };
+      const layout = computeArcTitleLayout({
+        ...bare,
+        title: wrappingTitle(bare, 60),
+        arcSpan: 60
+      });
 
-      expect(bare.titleFontSize).toBeCloseTo(arcHeight * TITLE_FONT_SIZE_RATIO, 2);
+      expect(layout.titleFontSize).toBeCloseTo(arcHeight * TITLE_FONT_SIZE_RATIO, 2);
     });
   });
 

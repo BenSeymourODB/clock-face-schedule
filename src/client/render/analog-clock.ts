@@ -44,7 +44,7 @@ const EDGE_MARGIN = 8;
  * which is the right trade for a dial read across a classroom: the arcs are the content, the face
  * is the reference.
  */
-const ARC_BAND_RATIO = 0.26;
+export const ARC_BAND_RATIO = 0.26;
 const FACE_GAP_RATIO = 0.04;
 
 /**
@@ -65,9 +65,16 @@ const MIN_RING_THICKNESS_RATIO = 0.16;
  */
 const EMOJI_MIN_SPAN_DEGREES = 10;
 
-/** Gap between concentric rings, as a fraction of the band, with an absolute floor. */
-const RING_GAP_RATIO = 0.06;
-const RING_GAP_MIN = 2;
+/**
+ * Gap between concentric rings, as a fraction of the band, with an absolute floor.
+ *
+ * Exported, with `ARC_BAND_RATIO`, so that `event-arc.test.ts` can model the ring the dial actually
+ * divides rather than restating these numbers: an arc's title has to clear what that arc strokes on
+ * its own edges (#67), and a suite carrying its own copy of the band would stay green while asserting
+ * about a ring the dial no longer draws.
+ */
+export const RING_GAP_RATIO = 0.06;
+export const RING_GAP_MIN = 2;
 
 /**
  * Floating labels sit this far beyond the band, as a fraction of the dial's radius.

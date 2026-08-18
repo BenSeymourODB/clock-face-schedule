@@ -414,7 +414,7 @@ export function eventArc({
       innerRadius,
       outerRadius,
       // Standalone rendering: the dial passes a layout that already accounts for this.
-      edgeStrokeWidth
+      edgeStrokeWidth,
     });
   const showTitle = !forceHideTitle && arcSpan >= TITLE_MIN_SPAN_DEGREES;
   const titleRendersOnArc = showTitle && resolved.fit.lines.length > 0;
