@@ -11,6 +11,7 @@ import {
   type ArcTitleLayout,
   type ClockEvent,
   type FeatherSpan,
+  combineTitleWithEmoji,
   computeArcFeathers,
   computeArcTitleLayout,
   describeArc,
@@ -240,6 +241,7 @@ export function eventArc({
   bandThickness,
 }: EventArcParams): SVGGElement {
   const { id, cleanTitle, color, eventEmoji, startAngle, endAngle } = event;
+  const displayTitle = combineTitleWithEmoji(cleanTitle, eventEmoji);
 
   const arcSpan = endAngle - startAngle;
   const midAngle = (startAngle + endAngle) / 2;
@@ -248,8 +250,7 @@ export function eventArc({
   const group = svg("g", {
     "data-testid": `event-arc-group-${id}`,
     role: "img",
-    // No trailing comma when there is no emoji — a screen reader vocalises it.
-    "aria-label": eventEmoji ? `Event: ${cleanTitle}, ${eventEmoji}` : `Event: ${cleanTitle}`,
+    "aria-label": `Event: ${displayTitle}`,
   });
 
   const defs = svg("defs");
@@ -325,7 +326,21 @@ export function eventArc({
     );
   }
 
-  if (eventEmoji && arcSpan >= EMOJI_MIN_SPAN_DEGREES) {
+  const resolved =
+    layout ?? computeArcTitleLayout({ title: displayTitle, arcSpan, innerRadius, outerRadius });
+  const showTitle = !forceHideTitle && arcSpan >= TITLE_MIN_SPAN_DEGREES;
+  const titleRendersOnArc = showTitle && resolved.fit.lines.length > 0;
+
+  // The emoji is inline with the title wherever the title renders — on the arc, or on the floating
+  // label that took it over. This glyph is the fallback for the one case neither covers: an arc too
+  // narrow to carry a title at all, where nothing else would say what the event is.
+  //
+  // Drawing it alongside a floating label instead collides with it. Measured on the fixture's
+  // conference event, the glyph landed at x∈[91,122] y∈[166,188] against a card whose last line
+  // spanned x∈[-1,99] y∈[156,173] — overlapping text, for a cue the label already carries inline.
+  const showStandaloneGlyph = !forceHideTitle && !titleRendersOnArc;
+
+  if (eventEmoji && showStandaloneGlyph && arcSpan >= EMOJI_MIN_SPAN_DEGREES) {
     const position = polarToCartesian(
       cx,
       cy,
@@ -352,11 +367,7 @@ export function eventArc({
     );
   }
 
-  const resolved =
-    layout ?? computeArcTitleLayout({ cleanTitle, arcSpan, innerRadius, outerRadius });
-  const showTitle = !forceHideTitle && arcSpan >= TITLE_MIN_SPAN_DEGREES;
-
-  if (showTitle && resolved.fit.lines.length > 0) {
+  if (titleRendersOnArc) {
     const { titleRadius, titleFontSize, fit } = resolved;
     const lineOffset = titleFontSize * TITLE_LINE_OFFSET_RATIO;
 

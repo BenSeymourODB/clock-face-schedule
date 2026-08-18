@@ -7,7 +7,7 @@ import {
 } from './arc-title-layout';
 
 const baseInput = {
-  cleanTitle: 'Family Game Night',
+  title: 'Family Game Night',
   innerRadius: 244,
   outerRadius: 292
 };
@@ -31,13 +31,13 @@ describe('computeArcTitleLayout', () => {
 
     it('scales linearly with the arc band thickness', () => {
       const thin = computeArcTitleLayout({
-        cleanTitle: 'x',
+        title: 'x',
         innerRadius: 200,
         outerRadius: 220,
         arcSpan: 60
       });
       const thick = computeArcTitleLayout({
-        cleanTitle: 'x',
+        title: 'x',
         innerRadius: 200,
         outerRadius: 280,
         arcSpan: 60
@@ -58,7 +58,7 @@ describe('computeArcTitleLayout', () => {
       // There used to be a cap of 18 here. It meant widening the band — the entire response to
       // "it cannot be read from there" — bought a thicker arc carrying the same small text.
       const result = computeArcTitleLayout({
-        cleanTitle: 'x',
+        title: 'x',
         innerRadius: 100,
         outerRadius: 600,
         arcSpan: 60
@@ -71,7 +71,7 @@ describe('computeArcTitleLayout', () => {
   describe('didOverflow', () => {
     it('is false for a title that fits the arc budget', () => {
       const result = computeArcTitleLayout({
-        cleanTitle: 'Lunch',
+        title: 'Lunch',
         innerRadius: 244,
         outerRadius: 292,
         arcSpan: 60
@@ -81,7 +81,7 @@ describe('computeArcTitleLayout', () => {
 
     it('is true for a title that exceeds even the two-line budget', () => {
       const result = computeArcTitleLayout({
-        cleanTitle: 'the quick brown fox jumps over the lazy dog',
+        title: 'the quick brown fox jumps over the lazy dog',
         innerRadius: 244,
         outerRadius: 292,
         arcSpan: 30
@@ -91,7 +91,7 @@ describe('computeArcTitleLayout', () => {
 
     it('is true for a narrow arc where the title cannot fit its single line', () => {
       const result = computeArcTitleLayout({
-        cleanTitle: 'Team Standup',
+        title: 'Team Standup',
         innerRadius: 244,
         outerRadius: 292,
         arcSpan: 15

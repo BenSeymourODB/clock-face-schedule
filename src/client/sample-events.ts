@@ -36,10 +36,23 @@ export function sampleEvents(periodStart: Date): ClockEventInput[] {
     { id: "w", title: "⚫ Staff Debrief and Planning", startDate: at(4, 0), endDate: at(4, 30), isAllDay: false, fallbackColor },
     // Ten minutes, held open by the minimum-span floor.
     { id: "e", title: "📚 Reading", startDate: at(8, 0), endDate: at(8, 10), isAllDay: false, fallbackColor },
-    // Long enough to be promoted to a floating label.
-    { id: "f", title: "🔵 Parent Teacher Conference Planning Committee", startDate: at(9, 30), endDate: at(10, 40), isAllDay: false, fallbackColor },
-    // Title wraps to two lines *and* carries an emoji — the tightest radial case there is.
+    // 24 minutes is 12°: past the emoji floor, short of the title floor, and its title is the emoji
+    // alone — the one shape that still draws a standalone radial glyph rather than inlining it.
+    { id: "i", title: "🟤 ⚽", startDate: at(4, 2), endDate: at(4, 26), isAllDay: false, fallbackColor },
+    // Long enough to be promoted to a floating label, and its emoji travels with the title rather
+    // than staying on the arc — a glyph left behind overlapped this very card. Its 👩‍🏫 is also a ZWJ
+    // sequence: one glyph across several code points, which must be charged as one emoji's width
+    // and never sliced apart.
+    { id: "f", title: "🔵 👩‍🏫 Parent Teacher Conference Planning Committee", startDate: at(9, 30), endDate: at(10, 40), isAllDay: false, fallbackColor },
+    // Title wraps to two lines *and* carries an emoji — inline, so the wrap has to place the
+    // glyph as part of the text rather than on its own radial line.
     { id: "g", title: "🟠 🎂 Reading and Snacks", startDate: at(6, 40), endDate: at(7, 55), isAllDay: false, fallbackColor },
+    // A run of emoji, which must wrap as one token rather than scattering a glyph per line. Sited
+    // in the clear gap between "Reading" and the conference so it does not deepen the cluster above.
+    // The run is space-free after the first glyph, which is the worst case for the width heuristic:
+    // only the *leading* emoji is stripped, so 🪀🎈 stay adjacent inside cleanTitle, and a line of
+    // pure emoji gets none of the slack that over-charged plain characters usually provide.
+    { id: "h", title: "🟣 🧸 🪀🎈 Free Play", startDate: at(8, 20), endDate: at(9, 25), isAllDay: false, fallbackColor },
     // Runs on past the period's end, so the dial must not claim it finishes there.
     { id: "y", title: "🟢 Aftercare", startDate: at(11, 5), endDate: at(13, 30), isAllDay: false, fallbackColor },
   ];

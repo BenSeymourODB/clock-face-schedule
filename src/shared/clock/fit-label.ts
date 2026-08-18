@@ -6,6 +6,7 @@
  * title needed 561 of the viewBox's 600 units, and the only position satisfying that lay across
  * the numerals and the hands.
  */
+import { visualWidth } from './emoji';
 import { type FitTextResult, charBudget, normaliseText, packLines, textWidth } from './pack-lines';
 
 /** Line spacing, as a multiple of font size. */
@@ -39,7 +40,7 @@ export function fitLabelToWidth(
   const budget = charBudget(maxWidth - padding.x * 2, fontSize);
   const fit = packLines(normaliseText(text), budget, maxLines);
 
-  const widest = fit.lines.reduce((longest, line) => Math.max(longest, line.length), 0);
+  const widest = fit.lines.reduce((longest, line) => Math.max(longest, visualWidth(line)), 0);
 
   return {
     ...fit,

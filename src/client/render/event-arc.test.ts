@@ -89,9 +89,9 @@ describe("eventArc", () => {
       expect(render().getAttribute("aria-label")).toBe("Event: Team Meeting");
     });
 
-    it("appends the emoji when there is one", () => {
+    it("puts the emoji inline, ahead of the title", () => {
       expect(render({ eventEmoji: "🎮" }).getAttribute("aria-label")).toBe(
-        "Event: Team Meeting, 🎮"
+        "Event: 🎮 Team Meeting"
       );
     });
 
@@ -107,8 +107,10 @@ describe("eventArc", () => {
     it.each([
       [9, false],
       [10, true],
-      [45, true],
-    ])("at %i° the emoji is rendered: %s", (degrees, expected) => {
+      // At 45° the default title fits and renders inline with the emoji, so the standalone
+      // glyph — the fallback for when nothing else on the arc names the event — stands down.
+      [45, false],
+    ])("at %i° the standalone emoji is rendered: %s", (degrees, expected) => {
       const group = spanning(degrees, { eventEmoji: "🎮" });
 
       expect(group.querySelector('[data-testid="event-emoji-e1"]') !== null).toBe(expected);
@@ -124,7 +126,10 @@ describe("eventArc", () => {
       expect(group.querySelector('[data-testid="event-title-e1"]') !== null).toBe(expected);
     });
 
-    it("suppresses only the title when the label has taken it over", () => {
+    it("takes the emoji with the title when the label has taken it over", () => {
+      // The glyph used to stay behind here. It now goes with the text, because the label renders
+      // the emoji inline and a glyph left on the arc collides with the card — measured on the
+      // fixture's conference event as an overlap with the card's last line of text.
       const group = eventArc({
         event: makeEvent({ eventEmoji: "🎮" }),
         cx: CX,
@@ -135,23 +140,40 @@ describe("eventArc", () => {
       });
 
       expect(group.querySelector('[data-testid="event-title-e1"]')).toBeNull();
+      expect(group.querySelector('[data-testid="event-emoji-e1"]')).toBeNull();
+    });
+
+    it("keeps the glyph on an arc too narrow for a title, where nothing else names the event", () => {
+      // Between the emoji floor and the title floor there is no title to carry the emoji inline,
+      // and no label either, so the standalone glyph is the only cue the arc has a category.
+      const group = spanning(15, { eventEmoji: "🎮" });
+
+      expect(group.querySelector('[data-testid="event-title-e1"]')).toBeNull();
       expect(group.querySelector('[data-testid="event-emoji-e1"]')).not.toBeNull();
     });
   });
 
   describe("emoji placement", () => {
+    // 15° spans, so each arc is under the title floor and the glyph renders standalone. A wider
+    // arc would carry the emoji inline in its title instead, and there would be no glyph to place.
+    const NARROW = 7.5;
+
     it.each([
       // Above the horizontal, the glyph already reads upright and is left alone.
-      ["one-thirty", 30, 60, 45],
-      ["eleven o'clock", 300, 360, 330],
+      ["one-thirty", 45, 45],
+      ["eleven o'clock", 330, 330],
       // Below it, an un-rotated glyph would be upside down, so it is turned a half-turn.
-      ["four-thirty", 120, 150, 315],
+      ["four-thirty", 135, 315],
       // Angles are never normalised, so the lower half can exceed a full turn. Harmless —
       // SVG takes any rotation — but it is why these read 360 and 390 rather than 0 and 30.
-      ["six o'clock", 150, 210, 360],
-      ["seven o'clock", 180, 240, 390],
-    ])("rotates the %s glyph to %i°", (_label, startAngle, endAngle, expected) => {
-      const group = render({ startAngle, endAngle, eventEmoji: "🎮" });
+      ["six o'clock", 180, 360],
+      ["seven o'clock", 210, 390],
+    ])("rotates the %s glyph upright", (_label, midAngle, expected) => {
+      const group = render({
+        startAngle: midAngle - NARROW,
+        endAngle: midAngle + NARROW,
+        eventEmoji: "🎮",
+      });
 
       expect(
         group.querySelector('[data-testid="event-emoji-e1"]')?.getAttribute("transform")
@@ -165,7 +187,7 @@ describe("eventArc", () => {
       // arc renders whatever it was handed, rather than re-deriving the packing here.
       const event = makeEvent();
       const layout = computeArcTitleLayout({
-        cleanTitle: event.cleanTitle,
+        title: event.cleanTitle,
         arcSpan: event.endAngle - event.startAngle,
         innerRadius: INNER,
         outerRadius: OUTER,
@@ -194,7 +216,7 @@ describe("eventArc", () => {
     it("straddles the title radius when the title takes two lines", () => {
       const cleanTitle = "Parent Teacher Conference Planning Session Extra Words Here To Wrap";
       const layout = computeArcTitleLayout({
-        cleanTitle,
+        title: cleanTitle,
         arcSpan: 60,
         innerRadius: INNER,
         outerRadius: OUTER,
@@ -231,7 +253,7 @@ describe("eventArc", () => {
       // Further from the centre is higher on screen at the top of the dial and lower at the
       // bottom, so a fixed outer-first order made lower-half titles read bottom-up.
       const base = computeArcTitleLayout({
-        cleanTitle: "Reading and Snacks",
+        title: "Reading and Snacks",
         arcSpan: endAngle - startAngle,
         innerRadius: INNER,
         outerRadius: OUTER,
@@ -252,19 +274,19 @@ describe("eventArc", () => {
       expect(radii[0]).toBe(first === "outer" ? Math.max(...radii) : Math.min(...radii));
     });
 
-    it("keeps the emoji clear of a two-line title", () => {
-      // These stack radially, and at the inherited ratios they needed 1.03 of the ring between
-      // them — a measured 8.7-unit collision on a full-width band, invisible until the dial was
-      // scaled up for distance.
+    it("shows the emoji inline in a two-line title instead of stacking a standalone glyph", () => {
+      // Retires the collision this used to guard: the emoji and a two-line title used to stack
+      // radially and could overlap. Inlining the emoji into the title text (#23) means there is
+      // no second element competing for room any more.
       const base = computeArcTitleLayout({
-        cleanTitle: "Reading and Snacks",
+        title: "🎂 Reading and Snacks",
         arcSpan: 60,
         innerRadius: INNER,
         outerRadius: OUTER,
       });
       const twoLines = {
         ...base,
-        fit: { lines: ["Reading and", "Snacks"], didOverflow: false },
+        fit: { lines: ["🎂 Reading and", "Snacks"], didOverflow: false },
       };
 
       const group = eventArc({
@@ -276,29 +298,23 @@ describe("eventArc", () => {
         layout: twoLines,
       });
 
-      const emoji = group.querySelector('[data-testid="event-emoji-e1"]')!;
-      const emojiRadius = Math.hypot(
-        Number(emoji.getAttribute("x")) - CX,
-        Number(emoji.getAttribute("y")) - CY
-      );
-      const emojiTop = emojiRadius + Number(emoji.getAttribute("font-size")) / 2;
+      expect(group.querySelector('[data-testid="event-emoji-e1"]')).toBeNull();
 
+      // Both lines stay inside the ring they belong to. This travelled with the collision test
+      // that used to live here, and is worth keeping on its own: an inline emoji makes a title
+      // wider, and radial containment is the property that would fail if lines were re-spaced.
       const baselines = [...group.querySelectorAll("defs path")].map((node) =>
         arcRadius(node.getAttribute("d") ?? "")
       );
-      const titleBottom = Math.min(...baselines) - twoLines.titleFontSize / 2;
+      const half = twoLines.titleFontSize / 2;
 
-      expect(emojiTop).toBeLessThan(titleBottom);
-      // And both stay inside the ring they belong to.
-      expect(emojiRadius - Number(emoji.getAttribute("font-size")) / 2).toBeGreaterThanOrEqual(
-        INNER
-      );
-      expect(Math.max(...baselines) + twoLines.titleFontSize / 2).toBeLessThanOrEqual(OUTER);
+      expect(Math.min(...baselines) - half).toBeGreaterThanOrEqual(INNER);
+      expect(Math.max(...baselines) + half).toBeLessThanOrEqual(OUTER);
     });
 
     it("uses the layout it is given rather than recomputing one", () => {
       const layout = computeArcTitleLayout({
-        cleanTitle: "Team Meeting",
+        title: "Team Meeting",
         arcSpan: 60,
         innerRadius: INNER,
         outerRadius: OUTER,
