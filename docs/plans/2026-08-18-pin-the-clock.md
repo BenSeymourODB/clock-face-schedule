@@ -117,4 +117,17 @@ stripped template yields no pin.
 
 ## The times table
 
-Written in phase 3 from measurement, and kept in `README.md` where a contributor looks for it.
+Lives in `README.md`, where a contributor looks for it, and was written from rendering rather than
+from the offsets. What the render confirmed:
+
+- `?now=03:00` reproduces the unpinned picture exactly — same thirteen arcs, same four elapsed,
+  nothing draining — so the "two rules coincide at 03:00" claim holds in the output, not just on
+  paper.
+- `?now=01:30`, `04:15`, `08:30` and `11:00` each put a different part of the fixture mid-drain,
+  including the three-deep cluster and the two palette colours that fail contrast on the dial.
+- `?freeze=1` genuinely stops the second hand; without it the same pin ticks on.
+- An unreadable `?now=` renders the real time with no label, as intended.
+
+**It also produced the first look at #71 through a supported entry point.** At `01:30` the spent
+side of 🎮 Game Time and 🔴 Deadline is still filled rather than hidden — the defect PR #73 fixes,
+visible in a screenshot for the first time rather than reasoned about.
