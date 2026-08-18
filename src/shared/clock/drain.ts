@@ -13,7 +13,7 @@ export interface DrainMasks {
   boundaryAngle: number;
   /** Reveals the fill moving away from the boundary toward what's left. */
   fillSpan: FeatherSpan;
-  /** The mirror image: reveals the elapsed halo and outline moving toward what's spent. */
+  /** The mirror image: reveals the elapsed outline moving toward what's spent. */
   spentSpan: FeatherSpan;
 }
 

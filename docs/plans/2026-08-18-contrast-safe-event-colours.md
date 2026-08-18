@@ -1,5 +1,5 @@
-**Status:** in progress
-**Issue:** #27
+**Status:** in review
+**Issue:** #27, #64 (halo retirement, folded in)
 **Docs:** #26 (elapsed outlines — the load-bearing case), #15 (visibility must not depend on a
 calendar-chosen colour), ADR 0007 (theme tokens), `docs/DESIGN.md`
 
@@ -35,13 +35,24 @@ Deferred, tracked separately:
   computed adjustment for that one palette.
 - **The light-theme variant** ADR 0007 leaves available — `adjustForContrast` is written
   theme-general (verified darkening on a white ground) so it is ready, but no light theme is wired.
-- **Retiring the neutral halo.** #26's `var(--border)` halo is kept here (belt-and-suspenders): the
-  outline now carries its own contrast against the *dial*, but the halo also gives each outline a
-  neutral moat against *adjacent arcs* in a stacked elapsed cluster. Retiring it is viable now but
-  wants a look at a 3-deep elapsed cluster first.
+- ~~Retiring the neutral halo.~~ **Folded in (#64).** Rendering the fixture with the halos removed
+  showed the coloured outlines read cleanly — the ring gaps already separate a 3-deep elapsed
+  cluster, so #26's "could be very noisy" worry does not materialise once the colours themselves are
+  legible. The `var(--border)` halo, `ELAPSED_HALO_RATIO` and the `halo` part are gone; the outline
+  now draws the arc alone.
+
+  **The outline's weight did not grow into the width the halo vacated**, though that was tried first.
+  At `ELAPSED_BORDER_RATIO = 0.12` (the halo's old ratio) `ELAPSED_STROKE_MAX_RATIO` clamps the
+  stroke on a 3-deep ring (8.91 against a lone arc's 9.11) and a 4-deep one (6.23) — handing the most
+  crowded arcs the thinnest outline, the exact inversion band-sizing exists to prevent. The existing
+  "keeps its outline weight when stacking thins the ring" spec caught it. 0.082 is the widest ratio
+  that stays uniform at the 4-ring cap, so there is no room worth taking and 0.07 stands.
 - **Filled live arcs are left unchanged** (per the issue's "scope to strokes" decision):
-  `readableTextColor` already guarantees their text, and adjusting fills would restyle the dial today
-  for no legibility gain.
+  `readableTextColor` already guarantees their text, and adjusting fills would restyle the dial today.
+  Rendering did show the limit of that reasoning — a filled ⚫ arc composites to `#1e2633`, **1.17:1**
+  against the dial, so its *body* is invisible and only its title and the `var(--card)` separator
+  reveal it. That is about an arc's readable extent rather than its text, it predates this change, and
+  fixing it flips `readableTextColor`'s choice too, so it is filed as #66 rather than patched here.
 
 ## The helper
 
