@@ -244,9 +244,10 @@ describe("analogClock", () => {
   });
 
   describe("ticking", () => {
-    it("re-points the hands without rebuilding the arcs", () => {
+    it("re-points the hands without rebuilding the arcs when nothing is in progress", () => {
       // The tick runs every second; rebuilding the tree that often would be 86,400 needless
-      // reconstructions a day on a device meant to run untouched for weeks.
+      // reconstructions a day on a device meant to run untouched for weeks. Both ticks here land
+      // after the event's own end, so nothing is draining and nothing should rebuild.
       const clock = build([input("a", 2, 4)]);
       const arc = clock.element.querySelector('path[data-testid="event-arc-a"]');
       const hand = clock.element.querySelector('[data-testid="minute-hand"]');
@@ -267,21 +268,28 @@ describe("analogClock", () => {
       expect(testIds(arcs(clock.element))).toEqual(["event-arc-afternoon"]);
     });
 
-    it("rebuilds the arcs the moment an event finishes", () => {
-      // Elapsed arcs are drawn hollow (#26), so the tick can no longer assume nothing about an
-      // arc changes between rollovers — but it must still not rebuild on every second.
+    it("rebuilds every tick while an event drains, then again once it fully elapses", () => {
+      // #28: a still-running event is no longer a static state between rollovers — the boundary
+      // moves every second, so the tick can no longer assume nothing changes mid-event either.
       const clock = build([input("lesson", 9.5, 10)]);
       const before = clock.element.querySelector('path[data-arc-part="fill"]');
       expect(before?.getAttribute("fill-opacity")).toBe("0.85");
+      expect(clock.element.querySelector('[data-arc-part="halo"]')).toBeNull();
 
       clock.setTime(new Date(2026, 7, 15, 9, 45, 0));
-      expect(clock.element.querySelector('path[data-arc-part="fill"]')).toBe(before);
+      const draining = clock.element.querySelector('path[data-arc-part="fill"]');
+      expect(draining).not.toBe(before);
+      expect(draining?.getAttribute("fill-opacity")).toBe("0.85");
+      expect(clock.element.querySelector('[data-arc-part="halo"]')).not.toBeNull();
+
+      clock.setTime(new Date(2026, 7, 15, 9, 50, 0));
+      expect(clock.element.querySelector('path[data-arc-part="fill"]')).not.toBe(draining);
 
       clock.setTime(new Date(2026, 7, 15, 10, 15, 0));
       const after = clock.element.querySelector('path[data-arc-part="fill"]');
 
-      expect(after).not.toBe(before);
       expect(after?.getAttribute("fill-opacity")).toBe("0");
+      expect(clock.element.querySelector('[data-arc-part="separator"]')).toBeNull();
       expect(clock.element.querySelector('[data-arc-part="outline"]')).not.toBeNull();
     });
 

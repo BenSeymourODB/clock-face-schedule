@@ -5,12 +5,14 @@
 import {
   type ClockEventInput,
   assignRings,
+  calculateTrueArcAngles,
   computeArcTitleLayout,
   elapsedEventIds,
   eventsToClockEvents,
   filterEventsForPeriod,
   getPeriodBounds,
   getPeriodStart,
+  hasEventInProgress,
   roundCoord,
 } from "../../shared/clock";
 import { svg } from "../svg";
@@ -181,6 +183,9 @@ export function analogClock({
     const elapsed = elapsedEventIds(currentEvents, currentTime);
     elapsedCount = elapsed.size;
 
+    // Same angle space as every event's own start/end: a zero-width "event" sitting at `now`.
+    const nowAngle = calculateTrueArcAngles(currentTime, currentTime, periodStart).startAngle;
+
     // True angles, not drawn ones: a five-minute event widened to the 7.5° minimum must not
     // appear to clash with a neighbour six minutes later, or every arc on the dial pays for a
     // phantom that is not there.
@@ -232,6 +237,7 @@ export function analogClock({
           forceHideTitle: isOverflow,
           isElapsed: elapsed.has(event.id),
           bandThickness: arcThickness,
+          nowAngle,
         })
       );
 
@@ -271,10 +277,14 @@ export function analogClock({
       face.setTime(next);
 
       // Arcs used to be rebuilt only on period rollover, since nothing else about them changed
-      // with the clock. An elapsed arc is drawn differently, so they now also rebuild the moment
-      // an event finishes — a handful of times a day rather than once a second.
+      // with the clock. An elapsed arc is drawn differently, so they also rebuild the moment an
+      // event finishes — a handful of times a day rather than once a second. A still-running
+      // event now drains continuously (#28), so on top of those two, rebuild every tick for as
+      // long as anything is actually in progress — the same rebuild the codebase already accepts
+      // at rollover and elapsed crossings, just while there is something for it to keep drawing.
       const rolledOver = getPeriodStart(next).getTime() !== periodStart.getTime();
-      if (rolledOver || elapsedEventIds(currentEvents, next).size !== elapsedCount) {
+      const elapsedChanged = elapsedEventIds(currentEvents, next).size !== elapsedCount;
+      if (rolledOver || elapsedChanged || hasEventInProgress(currentEvents, next)) {
         renderEvents();
       }
       describe();

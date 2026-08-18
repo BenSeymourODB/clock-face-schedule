@@ -13,6 +13,8 @@ import {
   type FeatherSpan,
   computeArcFeathers,
   computeArcTitleLayout,
+  computeDrainFraction,
+  computeDrainMasks,
   describeArc,
   describeTextArc,
   polarToCartesian,
@@ -100,9 +102,7 @@ const ELAPSED_HALO_RATIO = 0.12;
  */
 const ELAPSED_STROKE_MAX_RATIO = 0.4;
 
-interface FeatherMaskParams {
-  id: string;
-  feathers: ArcFeathers;
+interface FadeMaskGeometry {
   cx: number;
   cy: number;
   innerRadius: number;
@@ -110,8 +110,22 @@ interface FeatherMaskParams {
   separatorWidth: number;
 }
 
+interface NamedSpan {
+  key: string;
+  span: FeatherSpan;
+}
+
+/** The window-edge feathers, as the flat span list `buildFadeMask` takes. */
+function feathersToSpans(feathers: ArcFeathers): NamedSpan[] {
+  return [
+    { key: "start", span: feathers.start },
+    { key: "end", span: feathers.end },
+  ].filter((entry): entry is NamedSpan => entry.span !== undefined);
+}
+
 /**
- * A luminance mask that fades the arc out where the period, not the event, ended it.
+ * A luminance mask that fades the arc out across whichever spans it is given — a window edge
+ * (#22), a drain boundary (#28), or both at once.
  *
  * Masks the whole path rather than tinting its fill, because the separator stroke traces the arc's
  * closed outline — leave it alone and a crisp line still caps the boundary, which is the very
@@ -122,20 +136,11 @@ interface FeatherMaskParams {
  * painted onto a wedge rather than the whole box so that `pad` spread cannot reach the far side of
  * an arc that curves back around past 180°.
  */
-function featherMask({
-  id,
-  feathers,
-  cx,
-  cy,
-  innerRadius,
-  outerRadius,
-  separatorWidth,
-}: FeatherMaskParams): SVGMaskElement | undefined {
-  const spans = [
-    { key: "start", span: feathers.start },
-    { key: "end", span: feathers.end },
-  ].filter((entry): entry is { key: string; span: FeatherSpan } => entry.span !== undefined);
-
+function buildFadeMask(
+  maskId: string,
+  spans: NamedSpan[],
+  { cx, cy, innerRadius, outerRadius, separatorWidth }: FadeMaskGeometry
+): SVGMaskElement | undefined {
   if (spans.length === 0) return undefined;
 
   // The wedge has to swallow the stroke, which straddles the path by half its width in every
@@ -152,7 +157,7 @@ function featherMask({
   const midRadius = (innerRadius + outerRadius) / 2;
 
   const mask = svg("mask", {
-    id: `arc-fade-${id}`,
+    id: maskId,
     maskUnits: "userSpaceOnUse",
     x: box.x,
     y: box.y,
@@ -165,7 +170,7 @@ function featherMask({
   );
 
   for (const { key, span } of spans) {
-    const gradientId = `arc-fade-${id}-${key}`;
+    const gradientId = `${maskId}-${key}`;
     const boundary = polarToCartesian(cx, cy, midRadius, span.fromAngle);
     const resumes = polarToCartesian(cx, cy, midRadius, span.toAngle);
 
@@ -226,6 +231,13 @@ export interface EventArcParams {
    * not shrink with overlap depth. Defaults to this arc's own ring, for standalone rendering.
    */
   bandThickness?: number;
+  /**
+   * The current time, in the same angle space as the event's own angles. Ignored once `isElapsed`
+   * is true — a finished event has nothing left to drain. Otherwise, when this falls strictly
+   * inside the event's true span, the arc splits at the boundary (#28): the elapsed portion reads
+   * as #26's hollow outline, the rest keeps its fill, and a short gradient marks the seam.
+   */
+  nowAngle?: number;
 }
 
 export function eventArc({
@@ -238,6 +250,7 @@ export function eventArc({
   forceHideTitle = false,
   isElapsed = false,
   bandThickness,
+  nowAngle,
 }: EventArcParams): SVGGElement {
   const { id, cleanTitle, color, eventEmoji, startAngle, endAngle } = event;
 
@@ -258,22 +271,50 @@ export function eventArc({
   const separatorWidth = roundCoord(
     Math.max(ARC_SEPARATOR_MIN, arcHeight * ARC_SEPARATOR_RATIO)
   );
-  const mask = featherMask({
-    id,
-    feathers: computeArcFeathers(event),
-    cx,
-    cy,
-    innerRadius,
-    outerRadius,
-    separatorWidth,
-  });
-  if (mask) defs.append(mask);
+  const geometry: FadeMaskGeometry = { cx, cy, innerRadius, outerRadius, separatorWidth };
+  const featherSpans = feathersToSpans(computeArcFeathers(event));
+
+  // A still-running event drains continuously (#28) rather than flipping straight from live to
+  // elapsed. Computed from the *true* angles so MIN_ARC_DEGREES widening a short event never
+  // distorts how far "into it" the boundary reads; `computeDrainMasks` below maps the resulting
+  // fraction back onto the drawn geometry this arc actually paints.
+  const drainFraction =
+    !isElapsed && nowAngle !== undefined
+      ? computeDrainFraction(event.trueStartAngle, event.trueEndAngle, nowAngle)
+      : undefined;
+  const isDraining = drainFraction !== undefined;
+
+  // Not draining: fill and every border layer share one mask, exactly as before #28. Draining:
+  // the fill needs to fade toward what's left while the halo/outline fade the opposite way toward
+  // what's spent, so they need two masks meeting at the same boundary.
+  let fillMask: SVGMaskElement | undefined;
+  let spentMask: SVGMaskElement | undefined;
+  if (isDraining) {
+    const { fillSpan, spentSpan } = computeDrainMasks(startAngle, endAngle, drainFraction);
+    fillMask = buildFadeMask(
+      `arc-fade-${id}`,
+      [...featherSpans, { key: "drain", span: fillSpan }],
+      geometry
+    );
+    spentMask = buildFadeMask(
+      `arc-drain-${id}`,
+      [...featherSpans, { key: "drain", span: spentSpan }],
+      geometry
+    );
+  } else {
+    fillMask = buildFadeMask(`arc-fade-${id}`, featherSpans, geometry);
+    spentMask = fillMask;
+  }
+  if (fillMask) defs.append(fillMask);
+  if (spentMask && spentMask !== fillMask) defs.append(spentMask);
+
+  const fillFade = fillMask && `url(#${fillMask.id})`;
+  const spentFade = spentMask && `url(#${spentMask.id})`;
 
   // Fill and outline are separate paths because an elapsed arc needs them treated differently —
   // the fill goes and the outline stays. Sharing one path, as this did, forces the two to move
-  // together. Both carry the fade mask, so a clamped arc still fades whole.
+  // together.
   const d = describeArc(cx, cy, outerRadius, innerRadius, startAngle, endAngle);
-  const fade = mask ? `url(#arc-fade-${id})` : undefined;
   // Sized from the band, capped by the ring: uniform weight wherever there is room for it, and
   // narrower only where the ring genuinely cannot carry it.
   const band = bandThickness ?? arcHeight;
@@ -289,30 +330,45 @@ export function eventArc({
     svg("path", {
       "data-testid": `event-arc-${id}`,
       // Which layer of the arc this is. `data-testid` says which event; this says which part,
-      // so a caller can find the fill alone — which is what a drain mask (#28) needs.
+      // so a caller can find the fill alone.
       "data-arc-part": "fill",
       d,
       fill: color,
       "fill-opacity": isElapsed ? ELAPSED_FILL_OPACITY : ARC_FILL_OPACITY,
       stroke: "none",
-      mask: fade,
-    }),
-    svg("path", {
-      "data-testid": `event-arc-border-${id}`,
-      "data-arc-part": "separator",
-      d,
-      fill: "none",
-      // Live, this is the separator between adjacent arcs and between the arcs and the face, so it
-      // tracks whatever sits behind them. Elapsed, it is the guaranteed-visible band that keeps a
-      // low-contrast event from disappearing along with its fill.
-      stroke: isElapsed ? "var(--border)" : "var(--card)",
-      "stroke-width": isElapsed ? stroke(ELAPSED_HALO_RATIO) : separatorWidth,
-      mask: fade,
+      mask: fillFade,
     })
   );
 
-  if (isElapsed) {
+  // The live separator between adjacent arcs: present whenever any part of this arc is still
+  // live — the pure-live case, or a draining event's not-yet-spent remainder.
+  if (!isElapsed) {
     group.append(
+      svg("path", {
+        "data-testid": `event-arc-border-${id}`,
+        "data-arc-part": "separator",
+        d,
+        fill: "none",
+        stroke: "var(--card)",
+        "stroke-width": separatorWidth,
+        mask: fillFade,
+      })
+    );
+  }
+
+  // The elapsed treatment — a neutral halo backing a coloured outline (#26) — whenever any part
+  // of this arc has already happened: the pure-elapsed case, or a draining event's spent portion.
+  if (isElapsed || isDraining) {
+    group.append(
+      svg("path", {
+        "data-testid": `event-arc-halo-${id}`,
+        "data-arc-part": "halo",
+        d,
+        fill: "none",
+        stroke: "var(--border)",
+        "stroke-width": stroke(ELAPSED_HALO_RATIO),
+        mask: spentFade,
+      }),
       svg("path", {
         "data-testid": `event-arc-outline-${id}`,
         "data-arc-part": "outline",
@@ -320,7 +376,7 @@ export function eventArc({
         fill: "none",
         stroke: color,
         "stroke-width": stroke(ELAPSED_BORDER_RATIO),
-        mask: fade,
+        mask: spentFade,
       })
     );
   }
