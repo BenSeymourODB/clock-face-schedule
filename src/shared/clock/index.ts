@@ -71,6 +71,13 @@ export { rectEdgeIntersection } from './rect-edge';
 export { assignRings, type RingAssignment, type RingCandidate } from './ring-layout';
 export { describeTextArc } from './text-arc';
 export {
+  createTimeSource,
+  describeClockPin,
+  parseClockPin,
+  type ClockPin,
+  type TimeSource
+} from './time-source';
+export {
   drainEdgeDegrees,
   effectiveShowSeconds,
   elapsedSeconds,

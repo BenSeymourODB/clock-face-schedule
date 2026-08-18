@@ -7,10 +7,12 @@
  */
 import {
   type ClockEventInput,
+  createTimeSource,
+  describeClockPin,
   getFetchWindow,
   getPeriodBounds,
-  getRollingWindow,
 } from "../shared/clock";
+import { fixtureAnchor, readClockPin } from "./clock-pin";
 import { analogClock } from "./render/analog-clock";
 import { sampleEvents } from "./sample-events";
 import { type ScheduleStatus, describeStatus, nextStatus } from "./schedule-status";
@@ -25,6 +27,19 @@ const POLL_INTERVAL_MS = 5 * 60 * 1_000;
  * by however long it has been since. See `getFetchWindow`.
  */
 const FETCH_MARGIN_HOURS = 1;
+
+const mount = document.querySelector("#dial");
+
+/**
+ * The dial's notion of "now", read through one seam so `?now` / `?freeze` have one place to apply
+ * and every time-dependent state is reachable on purpose rather than by luck (#72).
+ */
+const clockPin = readClockPin(
+  mount instanceof HTMLElement ? mount : null,
+  window.location.search,
+  new Date()
+);
+const now = createTimeSource(clockPin);
 
 /** google.script.run is callback-based; everything downstream wants to await. */
 function callServer<T>(name: string, ...args: unknown[]): Promise<T> {
@@ -45,7 +60,7 @@ function callServer<T>(name: string, ...args: unknown[]): Promise<T> {
 }
 
 function fetchWindow(): Promise<ClockEventInput[]> {
-  const { windowStart, windowEnd } = getFetchWindow(new Date(), FETCH_MARGIN_HOURS);
+  const { windowStart, windowEnd } = getFetchWindow(now(), FETCH_MARGIN_HOURS);
 
   return callServer<ClockEventInput[]>(
     "getEvents",
@@ -55,21 +70,28 @@ function fetchWindow(): Promise<ClockEventInput[]> {
 }
 
 function startDisplay(): void {
-  const mount = document.querySelector("#dial");
   const statusLine = document.querySelector("#status");
   if (!mount) return;
 
-  const clock = analogClock({ events: [], showSeconds: true, time: new Date() });
+  const clock = analogClock({ events: [], showSeconds: true, time: now() });
   mount.append(clock.element);
 
   // Hands before data. A google.script.run round trip runs 0.5–2s and the server cache does not
   // help a cold start, so the wall shows a working clock rather than an empty panel.
-  window.setInterval(() => clock.setTime(new Date()), TICK_INTERVAL_MS);
+  window.setInterval(() => clock.setTime(now()), TICK_INTERVAL_MS);
+
+  /**
+   * Standing notices, ahead of whatever the schedule has to say. A pinned clock has to announce
+   * itself for the reason demo mode does: a wall showing a time that is not the time is worse than
+   * one showing invented events, and worse still if it looks ordinary.
+   */
+  const notices = clockPin ? [describeClockPin(clockPin)] : [];
 
   function setStatusText(text: string | null): void {
     if (!statusLine) return;
-    statusLine.textContent = text ?? "";
-    statusLine.toggleAttribute("hidden", text === null);
+    const parts = text === null ? notices : notices.concat([text]);
+    statusLine.textContent = parts.join(" · ");
+    statusLine.toggleAttribute("hidden", parts.length === 0);
   }
 
   /**
@@ -80,9 +102,7 @@ function startDisplay(): void {
    * real schedule, and the whole point of the mode is that someone is standing in front of it.
    */
   if (mount instanceof HTMLElement && mount.dataset["demo"] === "1") {
-    // Anchored to the rolling window's own start, not periodStart, so the fixture lands inside
-    // whatever window is live at load time regardless of the hour — see sample-events.ts.
-    clock.setEvents(sampleEvents(getRollingWindow(new Date()).windowStart));
+    clock.setEvents(sampleEvents(fixtureAnchor(clockPin, now())));
     setStatusText("Sample events — not a real calendar");
     return;
   }
@@ -96,7 +116,7 @@ function startDisplay(): void {
   async function refresh(): Promise<void> {
     try {
       clock.setEvents(await fetchWindow());
-      status = nextStatus(status, { ok: true, at: new Date() });
+      status = nextStatus(status, { ok: true, at: now() });
     } catch (error) {
       // Deliberately does not touch the dial: whatever it is showing stays up, marked old.
       status = nextStatus(status, { ok: false, reason: (error as Error).message });
@@ -160,9 +180,12 @@ async function renderDiagnostics(list: Element): Promise<void> {
     addRow(list, "browser timezone", localZone, "ok");
   }
 
+  // The device's own clock, deliberately not the dial's: this panel exists to find a display whose
+  // clock is wrong, and a pin would mask exactly that. The pin gets its own row instead.
   addRow(list, "browser time", new Date().toString(), "ok");
+  if (clockPin) addRow(list, "clock pin", `${describeClockPin(clockPin)} — dial reads ${now()}`, "note");
 
-  const { periodStart, periodEnd } = getPeriodBounds(new Date());
+  const { periodStart, periodEnd } = getPeriodBounds(now());
   try {
     const events = await callServer<ClockEventInput[]>(
       "getEvents",
