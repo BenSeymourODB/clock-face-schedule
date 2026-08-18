@@ -53,9 +53,10 @@ line: it has spent its text budget.
 ### 2. Which arcs get it
 
 Not a new span gate. The duration line renders when **the title renders on the arc and fits on one
-line**, the formatted string fits the character budget *at its own radius*, and **both lines clear
-whatever is stroked on the ring's edges** (the gate the render forced; see below). All three are
-derived from geometry the dial already computes, so no threshold has to be guessed.
+line**, **both strings fit the character budget at the radius this line displaces the title onto**,
+and **both lines clear whatever is stroked on the ring's edges** (the last two forced by the render
+and the self-review; see below). All three are derived from geometry the dial already computes, so no
+threshold has to be guessed.
 
 The awkwardness #35 flagged is real and is answered on the other surface: the arcs whose duration is
 least legible are the slivers, and a sliver's title has already overflowed onto a floating label,
@@ -156,6 +157,13 @@ four-deep ring sits at the same radii and so has the same 0.03/−1.35 clearance
 available: dropping a line of a title is worse than a near-touch, and the fix belongs with the
 band-versus-ring sizing rather than with duration text. Filed separately.
 
+**A third gate came out of self-reviewing the diff.** This line displaces the title off the band's
+centre onto one of the two-line radii, and *which* one flips with the half of the dial — so on the
+lower half a title fitted at the centre is moved **inward**, onto a budget 4.6% smaller (242.35 against
+254.04 on a lone arc), and a title that just fitted could overrun the arc it was measured against.
+Both strings are now measured against the inner radius. That also makes an arc and its mirror image
+agree, rather than the same event carrying a duration in the morning and losing it in the afternoon.
+
 **One addition beyond the issue.** The arc's `aria-label` now carries the duration too. A listener has
 no angular extent to read duration off at all, so unlike the drawn line this is announced whatever
 the radial and angular budgets allow.
@@ -170,18 +178,17 @@ Nothing overlaps, but the change makes #30 materially more likely and is noted o
   measurement above. Recovering it needs radial room the band does not have — which is #32's own
   subject, not something to force here.
 - **Arcs carrying no text at all** — 📚 Reading at 7.5° is below `TITLE_MIN_SPAN_DEGREES` and below
-  the 10° floor that routes an overflow to a label, so it shows a bare emoji and nothing else. It is
-  also the event `MIN_ARC_DEGREES` lies about most. Routing sub-10° events to a label is a change to
-  overflow policy, not to duration encoding.
-- **Emoji-only arcs** (⚽) render a standalone glyph at the ring's centre; a duration line beneath it
-  is a different layout question from the title case.
+  the 10° floor that routes an overflow to a label, so it shows a bare emoji and nothing else, and
+  the emoji-only ⚽ at 12° is the neighbouring case. They are the events `MIN_ARC_DEGREES` lies about
+  most and the ones with no text channel to say so. Filed as #69: it is a change to overflow policy,
+  not to duration encoding.
 - **Stacked rings.** 🎮/🔴/🟣 sit on a 22.3-unit ring where the radial gate excludes the duration
   line. Their *titles* are still drawn at font 6.24, which the render shows to be a smudge at any
-  realistic viewing distance — but that is a finding about arc titles in clusters generally, and it is
-  #32's own subject rather than something duration text can fix.
-- **The same collision under a two-line title**, which has no gate available: at three and four deep
-  it sits on the elapsed outline exactly as the duration line would have. Filed separately, because
-  the fix is to the band-versus-ring sizing rather than to anything here.
+  realistic viewing distance — a finding about arc titles in clusters generally rather than about
+  duration text, filed as #70 with the depth-by-depth measurements.
+- **The same collision under a two-line title** (#67), which has no gate available: at three and four
+  deep it sits on the elapsed outline exactly as the duration line would have. The fix is to the
+  band-versus-ring sizing rather than to anything here.
 - **Card collisions (#30).** A card is a line taller now, and the fixture's two closest cards went
   from 28.7 units apart to 4.36. Cards still have no collision avoidance; this makes the existing
   failure more likely rather than introducing a new one.
