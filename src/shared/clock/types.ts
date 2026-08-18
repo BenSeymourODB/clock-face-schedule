@@ -71,6 +71,16 @@ export interface ClockEvent {
    */
   continuesBefore: boolean;
   continuesAfter: boolean;
+  /**
+   * The event's own length in minutes — from its real start and end, not from the extent the window
+   * left visible.
+   *
+   * Deliberately not derivable from the angles above. `startAngle`/`endAngle` are widened by
+   * `MIN_ARC_DEGREES`, and even the true pair is clamped to the window, so both under-report a
+   * 70-minute event that the window catches 20 minutes of. Duration is the one thing the geometry
+   * structurally cannot carry, which is the whole reason #35 states it as text.
+   */
+  durationMinutes: number;
   color: string;
   eventEmoji?: string;
   isAllDay: boolean;

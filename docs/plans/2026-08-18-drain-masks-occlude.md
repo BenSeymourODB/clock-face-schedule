@@ -214,3 +214,15 @@ Two things it raised are recorded rather than fixed:
 - **No fixture event reaches the 10° ramp cap.** `n`'s short remaining side caps its depth at 2.45°,
   so the fixture shows a narrow seam. The capped case is covered by unit tests and by the measurement
   in §3, not by the rendered fixture.
+
+## Merged with #35
+
+#35 (duration on the arc) landed on `main` first and touches the same title code: it puts a duration
+line on the second baseline when the title is one line. The two compose without argument — the
+duration line sits on the same two grounds as the name above it, so it takes the same two copies,
+with #35's own 400 weight and its `event-duration-*` id on each. Verified by rendering and asserted
+directly, since neither change's tests would have caught the other's absence.
+
+`n` itself carries no duration line — its title is too long for the second baseline to survive
+`fitDurationLine`'s gating — so the *drained duration line* is covered by a unit test rather than by
+the fixture, alongside the two gaps above.

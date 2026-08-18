@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { ClockEventInput } from "../../shared/clock";
+import { type ClockEventInput, rectsOverlap } from "../../shared/clock";
 import { type AnalogClockParams, analogClock } from "./analog-clock";
 
 const SIZE = 600;
@@ -299,6 +299,99 @@ describe("analogClock", () => {
       expect(
         testIds(element.querySelectorAll('[data-testid="floating-labels-layer"] > g'))
       ).toEqual(["floating-label-early", "floating-label-late"]);
+    });
+  });
+
+  /**
+   * #35: the dial hands each surface the event's own duration as text, since angular extent is the
+   * only channel carrying it and `MIN_ARC_DEGREES` flattens everything under fifteen minutes into
+   * the same 7.5°.
+   */
+  describe("duration", () => {
+    function labelLines(element: SVGSVGElement, id: string): string[] {
+      return [...element.querySelectorAll(`[data-testid^="floating-label-text-${id}-"]`)].map(
+        (node) => node.textContent ?? ""
+      );
+    }
+
+    it("states an arc's duration on the line its title left free", () => {
+      const { element } = build([input("a", 2, 5)]);
+
+      expect(
+        element.querySelector('[data-testid="event-duration-a"] textPath')?.textContent
+      ).toBe("3 hr");
+    });
+
+    it("states it on the card instead when the title overflowed", () => {
+      const { element } = build([input("a", 2, 2.5, { title: LONG_TITLE })]);
+
+      expect(element.querySelector('[data-testid="event-duration-a"]')).toBeNull();
+      expect(labelLines(element, "a").slice(-1)).toEqual(["30 min"]);
+    });
+
+    /**
+     * A duration line makes a card 40% taller, and cards have no collision avoidance (#30). On the
+     * fixture that turned a 9.5-unit gap into a 15-unit overlap — which hides a title that is on a
+     * card *because* it did not fit its arc. The line is optional, so it goes rather than the title.
+     */
+    describe('rather than covering a card already placed', () => {
+      function cardRects(element: SVGSVGElement) {
+        return [...element.querySelectorAll('[data-testid^="floating-label-rect-"]')].map((node) => {
+          const at = (name: string) => Number(node.getAttribute(name));
+          return {
+            id: node.getAttribute("data-testid")?.replace("floating-label-rect-", "") ?? "",
+            x: at("x"),
+            y: at("y"),
+            width: at("width"),
+            height: at("height"),
+          };
+        });
+      }
+
+      // Two overflowing events 45 minutes apart — routine on a school day, per #30's own numbers.
+      const adjacent = [
+        input("first", 2, 2.75, { title: LONG_TITLE }),
+        input("second", 2.75, 3.25, { title: LONG_TITLE }),
+      ];
+
+      it("keeps every card clear of every other", () => {
+        const rects = cardRects(build(adjacent).element);
+
+        expect(rects).toHaveLength(2);
+        expect(rectsOverlap(rects[0], rects[1])).toBe(false);
+      });
+
+      it("keeps the durations where the cards are far enough apart", () => {
+        const spread = [
+          input("morning", 2, 3, { title: LONG_TITLE }),
+          input("evening", 8, 9, { title: LONG_TITLE }),
+        ];
+        const { element } = build(spread);
+
+        for (const id of ["morning", "evening"]) {
+          expect(labelLines(element, id).slice(-1)).toEqual(["1 hr"]);
+        }
+      });
+
+      it("drops the later card's duration, not its title", () => {
+        // Clockwise order decides which one yields, matching the order a reader scans the dial.
+        const { element } = build(adjacent);
+
+        expect(labelLines(element, "first").slice(-1)).toEqual(["45 min"]);
+        expect(labelLines(element, "second").slice(-1)).not.toEqual(["30 min"]);
+        expect(labelLines(element, "second").length).toBeGreaterThan(0);
+      });
+    });
+
+    // The arc runs 10:00 to noon and stops at the period's edge; the event runs to 13:00. Deriving
+    // the text from the drawn angles would make it agree with the drawing and say "2 hr", which is
+    // the one thing this channel exists not to do.
+    it("states the event's own length where the period cut the arc short", () => {
+      const { element } = build([input("a", 10, 13)]);
+
+      expect(
+        element.querySelector('[data-testid="event-duration-a"] textPath')?.textContent
+      ).toBe("3 hr");
     });
   });
 

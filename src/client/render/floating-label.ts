@@ -11,6 +11,7 @@
  */
 import {
   type ClockBox,
+  type Rect,
   clampLabelPosition,
   faceClearanceLimit,
   fitLabelToWidth,
@@ -60,22 +61,42 @@ export interface FloatingLabelParams {
   /** Radius of the clock face, which the card must not reach. */
   faceRadius: number;
   fontSize?: number;
+  /**
+   * The event's duration as text (#35), placed on a line of its own below the title.
+   *
+   * This card is where the redundant channel earns most: a label exists because the arc was too
+   * narrow for its title, and a narrow arc is exactly where `MIN_ARC_DEGREES` has already flattened
+   * ten minutes and fifteen into the same 7.5°.
+   */
+  duration?: string;
 }
 
-export function floatingLabel({
-  id,
+/** Everything about where a card lands, without building any of it. */
+export interface FloatingLabelGeometry {
+  /** The card's own box, for a caller comparing it with another card's (#35, via `rectsOverlap`). */
+  rect: Rect;
+  /** Wrapped text plus any trailing duration line, outermost first. */
+  lines: string[];
+}
+
+/**
+ * Lay a card out without rendering it, so the dial can compare two candidate cards before choosing
+ * one. `floatingLabel` is this plus the drawing.
+ */
+export function floatingLabelGeometry({
   text,
   anchorAngle,
-  anchorRadius,
   labelRadius,
-  color,
   cx,
   cy,
   clockBox,
   faceRadius,
   fontSize = DEFAULT_FONT_SIZE,
-}: FloatingLabelParams): SVGGElement {
-  const anchor = polarToCartesian(cx, cy, anchorRadius, anchorAngle);
+  duration,
+}: FloatingLabelParams): FloatingLabelGeometry {
+  // A duration line is one more line the card may grow by, and the clearance below is sized from
+  // the tallest the card may become — so it has to be counted there, not just where it is drawn.
+  const maxCardLines = duration === undefined ? MAX_LINES : MAX_LINES + 1;
 
   // Where the label wants to be, before any clamping — and therefore how much width is available
   // there. Sizing the card to that room is what keeps the clamp from having to pull a too-wide
@@ -89,22 +110,47 @@ export function floatingLabel({
       cx,
       cy,
       faceRadius,
-      labelCardHeight(MAX_LINES, fontSize, RECT_PADDING_Y)
+      labelCardHeight(maxCardLines, fontSize, RECT_PADDING_Y)
     )
   );
-  const { lines, width, height } = fitLabelToWidth(text, maxWidth, fontSize, MAX_LINES, {
-    x: RECT_PADDING_X,
-    y: RECT_PADDING_Y,
-  });
+  const { lines, width, height } = fitLabelToWidth(
+    text,
+    maxWidth,
+    fontSize,
+    MAX_LINES,
+    { x: RECT_PADDING_X, y: RECT_PADDING_Y },
+    duration
+  );
 
   const centre = clampLabelPosition(natural, clockBox, width / 2);
+
+  return {
+    rect: { x: centre.x - width / 2, y: centre.y - height / 2, width, height },
+    lines,
+  };
+}
+
+export function floatingLabel(params: FloatingLabelParams): SVGGElement {
+  const {
+    id,
+    anchorAngle,
+    anchorRadius,
+    color,
+    cx,
+    cy,
+    fontSize = DEFAULT_FONT_SIZE,
+  } = params;
+  const anchor = polarToCartesian(cx, cy, anchorRadius, anchorAngle);
+  const {
+    rect: { x: left, y: top, width, height },
+    lines,
+  } = floatingLabelGeometry(params);
+  const centre = { x: left + width / 2, y: top + height / 2 };
 
   // Stop the connector at the card's edge rather than letting it run underneath the fill.
   const connectorEnd = rectEdgeIntersection(centre, width, height, anchor);
 
   const group = svg("g", { "data-testid": `floating-label-${id}` });
-  const left = centre.x - width / 2;
-  const top = centre.y - height / 2;
 
   group.append(
     svg("line", {
