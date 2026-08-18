@@ -11,6 +11,7 @@ import {
   type ArcTitleLayout,
   type ClockEvent,
   type FeatherSpan,
+  adjustForContrast,
   combineTitleWithEmoji,
   computeArcFeathers,
   computeArcTitleLayout,
@@ -25,6 +26,22 @@ import {
 import { svg } from "../svg";
 
 const FONT_STACK = "system-ui, -apple-system, sans-serif";
+
+/**
+ * The dial's own background, as a hex `contrast.ts` can measure against — the value `--card` holds
+ * in `Styles.html`, duplicated here because the renderer knows only the token name (ADR 0007).
+ * Keep the two in sync; `Styles.html` carries a comment pointing back.
+ */
+const DIAL_BACKGROUND = "#16181d";
+
+/**
+ * Contrast floor for an elapsed outline's own colour, against the dial (#27).
+ *
+ * Outlined, an event colour is the foreground rather than the fill, so it has to clear a threshold
+ * it never had to when filled — and ⚫ (1.21:1) and 🟤 (2.50:1) fail it outright. 4.5:1 is WCAG AA
+ * for text rather than the 3:1 graphical-object floor, because this dial is read across a room.
+ */
+const OUTLINE_MIN_CONTRAST = 4.5;
 
 /** Below this span there is not enough arc to render an emoji legibly. */
 const EMOJI_MIN_SPAN_DEGREES = 10;
@@ -373,7 +390,10 @@ export function eventArc({
         "data-arc-part": "outline",
         d,
         fill: "none",
-        stroke: color,
+        // The outline carries the event's identity, so it must clear contrast against the dial on
+        // its own (#27) rather than leaning on the neutral halo beneath it. Preserves hue, so a
+        // ⚫ or 🟤 event stays recognisably itself while becoming visible.
+        stroke: adjustForContrast(color, DIAL_BACKGROUND, OUTLINE_MIN_CONTRAST),
         "stroke-width": stroke(ELAPSED_BORDER_RATIO),
         mask: spentFade,
       })

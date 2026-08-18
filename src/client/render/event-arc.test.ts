@@ -2,10 +2,14 @@ import { describe, expect, it } from "vitest";
 import {
   FEATHER_DEGREES,
   type ClockEvent,
+  adjustForContrast,
   computeArcTitleLayout,
   polarToCartesian,
 } from "../../shared/clock";
 import { eventArc } from "./event-arc";
+
+/** The dial background the outline's colour is made legible against — `--card`, per event-arc.ts. */
+const DIAL_BACKGROUND = "#16181d";
 
 const CX = 300;
 const CY = 300;
@@ -547,8 +551,21 @@ describe("eventArc once the event has ended", () => {
   it("outlines in the event colour, so identity survives losing the fill", () => {
     const { outline } = parts();
 
+    // Green clears the floor, so the contrast pass returns it untouched and the outline is the
+    // event's own colour.
     expect(outline?.getAttribute("stroke")).toBe("#22c55e");
     expect(outline?.getAttribute("fill")).toBe("none");
+  });
+
+  it("makes the outline colour contrast-safe against the dial, not the raw event colour (#27)", () => {
+    // ⚫ gray-800 is invisible on the dial as a raw outline (1.21:1). The renderer must hand the
+    // colour through adjustForContrast against the dial background — the specific defect #26 left
+    // and this issue closes. Whether the *result* clears the floor is proven in contrast.test.ts.
+    const color = "#1F2937";
+    const { outline } = parts({ color });
+
+    expect(outline?.getAttribute("stroke")).toBe(adjustForContrast(color, DIAL_BACKGROUND, 4.5));
+    expect(outline?.getAttribute("stroke")).not.toBe(color);
   });
 
   it("draws no outline layer while the event is still to come", () => {
