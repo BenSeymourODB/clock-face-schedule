@@ -118,8 +118,8 @@ describe('fitDurationLine', () => {
   const OUTER = 292;
   const BAND = OUTER * 0.26;
   const RING_GAP = Math.max(2, BAND * 0.06);
-  /** The halo, the widest stroke the renderer draws on an arc's outline — sized from the band. */
-  const HALO = BAND * 0.12;
+  /** The elapsed outline, the widest stroke the renderer draws on an arc's own outline. */
+  const OUTLINE = BAND * 0.07;
 
   /** One ring of a `depth`-deep cluster on the 600-unit dial, outermost first. */
   function ring(depth: number) {
@@ -130,11 +130,18 @@ describe('fitDurationLine', () => {
     return {
       innerRadius,
       outerRadius: OUTER,
+      bandThickness: BAND,
       titleRadius: innerRadius + thickness * TITLE_RADIUS_RATIO,
       fontSize: thickness * TITLE_FONT_SIZE_RATIO,
-      edgeStrokeWidth: HALO,
+      edgeStrokeWidth: OUTLINE,
       titleLine: 'Lunch'
     };
+  }
+
+  /** The same ring, with the band pretended down to it, so only the radial gate is in play. */
+  function ringAlone(depth: number) {
+    const shape = ring(depth);
+    return { ...shape, bandThickness: shape.outerRadius - shape.innerRadius };
   }
 
   const loneArc = ring(1);
@@ -190,28 +197,68 @@ describe('fitDurationLine', () => {
   });
 
   /**
-   * The radial gate, and the reason it exists. An elapsed arc's outline is sized from the whole
-   * *band* so its weight does not thin with overlap depth (#26); the text is sized from this arc's
-   * own *ring*. Pushing a one-line title onto the two-line radii closes the gap between them, and
-   * on a crowded cluster it closes it completely — 0.03 units at three deep, and −1.35 at four.
-   * Rendering the fixture at 04:15 is what found this: "🎮 Game Time / 1 hr 30" sat on the elapsed
-   * outline of its own arc.
+   * The legibility gate. Title text is `TITLE_FONT_SIZE_RATIO` of the *ring*, so dividing the band
+   * by overlap depth takes it below the size the dial deliberately chooses for text a room has to
+   * read (a floating label's 17.52 units): 21.26 on a lone arc, 9.99 two deep, 6.24 three deep. The
+   * title is drawn small anyway because a name is worth having; a redundant channel is not, and
+   * rendering the fixture's three-deep cluster showed 6.24-unit text to be a smear rather than words.
    */
-  describe('clearing what is stroked on the ring edges', () => {
+  describe('needing the band to itself', () => {
     it.each([
       [1, '2 hr'],
-      [2, '2 hr'],
+      [2, undefined],
       [3, undefined],
       [4, undefined]
     ])('at %i deep → %s', (depth, expected) => {
       expect(fitDurationLine({ ...ring(depth), durationMinutes: 120, arcSpan: 60 })).toBe(expected);
     });
 
-    it('admits a three-deep ring once nothing is stroked on its edges', () => {
-      // Proves the gate is about the stroke and not about the ring being thin: the same ring with
-      // no outline on it has room for both lines.
+    it.each([[2], [3]])('at %i deep the title itself is still well under the label font', (depth) => {
+      // The measurement the gate rests on, pinned so a change to either ratio has to face it.
+      expect(ring(depth).fontSize).toBeLessThan(292 * 0.06);
+      expect(ring(1).fontSize).toBeGreaterThan(292 * 0.06);
+    });
+  });
+
+  /**
+   * The radial gate, which is about not drawing text on a stroke and moves independently of the
+   * legibility one. An elapsed arc's outline is sized from the whole *band* so its weight does not
+   * thin with overlap depth (#26); the text is sized from this arc's own *ring*. Pushing a one-line
+   * title onto the two-line radii closes the gap between them — to 1.93 units three deep and 0.55
+   * four deep at today's 0.07 outline, and to **0.03** three deep at the 0.12 the neutral halo used
+   * before #27 retired it. Rendering the fixture at 04:15 with that halo still in place is what found
+   * it: "🎮 Game Time / 1 hr 30" sat on the elapsed outline of its own arc.
+   */
+  describe('clearing what is stroked on the ring edges', () => {
+    it.each([
+      [1, '2 hr'],
+      [2, '2 hr'],
+      [3, '2 hr'],
+      [4, undefined]
+    ])('at %i deep, band aside → %s', (depth, expected) => {
+      expect(fitDurationLine({ ...ringAlone(depth), durationMinutes: 120, arcSpan: 60 })).toBe(
+        expected
+      );
+    });
+
+    it('would have refused a three-deep ring under the halo #27 retired', () => {
+      // The regression this gate was written for, kept as a case because the stroke it measures is
+      // the caller's to choose and could widen again.
       expect(
-        fitDurationLine({ ...ring(3), edgeStrokeWidth: 0, durationMinutes: 120, arcSpan: 60 })
+        fitDurationLine({
+          ...ringAlone(3),
+          edgeStrokeWidth: BAND * 0.12,
+          durationMinutes: 120,
+          arcSpan: 60
+        })
+      ).toBeUndefined();
+    });
+
+    it('is about the stroke, not about the ring being thin', () => {
+      // The same four-deep ring that fails above passes with nothing stroked on its edges.
+      expect(fitDurationLine({ ...ringAlone(4), durationMinutes: 120, arcSpan: 60 })).toBeUndefined();
+      expect(
+        fitDurationLine({ ...ringAlone(4), edgeStrokeWidth: 0, durationMinutes: 120, arcSpan: 60 })
       ).toBe('2 hr');
     });
 

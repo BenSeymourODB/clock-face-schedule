@@ -48,6 +48,9 @@ export const TITLE_LINE_OFFSET_RATIO = 0.55;
  */
 const EDGE_CLEARANCE = 1;
 
+/** Slack when comparing a ring's thickness with the band's, since the one is derived from the other. */
+const RING_EQUALITY_TOLERANCE = 1e-6;
+
 export interface ArcTitleLayout {
   /** Curved-text baseline radius. */
   titleRadius: number;
@@ -76,18 +79,29 @@ export function computeArcTitleLayout(params: {
 }
 
 /**
- * The duration text for an arc's second line, or `undefined` when the line will not fit there (#35).
+ * The duration text for an arc's second line, or `undefined` when the line does not belong there
+ * (#35).
  *
- * Two gates, both derived rather than chosen:
+ * Three gates, all derived rather than chosen:
+ *
+ * **Legibility.** The arc must have the whole band to itself. Title text is `TITLE_FONT_SIZE_RATIO`
+ * of the *ring*, so any division of the band by overlap depth takes it below the size the dial uses
+ * for text it means a room to read: on the 600-unit dial a lone arc's title is 21.26 units against
+ * the floating label's deliberately-chosen 17.52, but two deep it is 9.99 and three deep 6.24. The
+ * title is drawn at that size regardless, because a name is worth having small — a *redundant*
+ * channel is not, and rendering the fixture's three-deep cluster showed 6.24-unit text to be a
+ * smear along the band rather than words. Stacked-ring titles are #70's subject.
  *
  * **Radial.** Adding the line moves the title outward onto the two-line radii, so both lines and
  * whatever is stroked on the ring's edges have to fit inside the ring. They do not always: an
  * elapsed arc's outline is sized from the whole *band* (#26, deliberately, so its weight does not
  * thin with overlap depth) while the text is sized from this arc's *ring*. On the 600-unit dial that
- * leaves 11.08 units of clearance on a lone arc, 2.80 on a two-deep ring, **0.03** on a three-deep
- * one and **−1.35** on a four-deep one — so on a crowded cluster the outward line lands on the
- * outline. `edgeStrokeWidth` is what the caller draws there, since the elapsed treatment is the
- * renderer's business, not this layout's.
+ * leaves 12.98 units of clearance on a lone arc, 4.69 two deep, **1.93** three deep and **0.55**
+ * four deep. The legibility gate happens to cover every one of those cases today, but this is the
+ * check that is actually about not drawing text on a stroke, and the two move independently:
+ * before #27 retired the neutral halo the same stroke was 0.12 of the band rather than 0.07, and
+ * three deep measured **0.03**. `edgeStrokeWidth` is what the caller draws there, since the elapsed
+ * treatment is the renderer's business, not this layout's.
  *
  * The gate is checked against that stroke whether or not the event has elapsed yet: a duration that
  * appeared and vanished as an event crossed into elapsed would flicker on the wall.
@@ -115,6 +129,8 @@ export function fitDurationLine(params: {
   /** This arc's own ring, which both lines have to sit inside. */
   innerRadius: number;
   outerRadius: number;
+  /** The whole arc band. A ring narrower than it means this arc is sharing with an overlap. */
+  bandThickness: number;
   /** Width of the widest stroke the caller draws on the ring's own outline. */
   edgeStrokeWidth: number;
 }): string | undefined {
@@ -126,11 +142,16 @@ export function fitDurationLine(params: {
     fontSize,
     innerRadius,
     outerRadius,
+    bandThickness,
     edgeStrokeWidth
   } = params;
 
   const text = formatEventDuration(durationMinutes);
   if (text.length === 0) return undefined;
+
+  // Tolerance rather than equality: a ring is derived by dividing the band, so a lone arc's own
+  // thickness comes back through floating-point arithmetic rather than as the band verbatim.
+  if (outerRadius - innerRadius < bandThickness - RING_EQUALITY_TOLERANCE) return undefined;
 
   // A stroke straddles its path, so it reaches half its width into the ring from either edge.
   const reach = edgeStrokeWidth / 2 + EDGE_CLEARANCE;

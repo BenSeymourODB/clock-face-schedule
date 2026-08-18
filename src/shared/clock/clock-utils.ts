@@ -99,43 +99,78 @@ export function getDayStart(time: Date): Date {
   return dayStart;
 }
 
+/** Hours the rolling window looks behind the current time (#25). */
+export const ROLLING_WINDOW_LOOKBEHIND_HOURS = 3;
+
+/** Hours the rolling window looks ahead of the current time (#25). */
+export const ROLLING_WINDOW_LOOKAHEAD_HOURS = 8;
+
 /**
- * The window the client should fetch from the server: the whole calendar day, extended to
- * `windowHours` past the current 12-hour period's own start.
+ * The dial's drawn window: `lookbehindHours` behind `time`, `lookaheadHours` ahead of it.
  *
- * The end stays anchored to the period rather than the day so a period rollover always finds its
- * next period already cached — `getPeriodStart` is midnight or noon, so ending at
- * `periodStart + windowHours` guarantees at least one full period of look-ahead past whichever
- * rollover is coming next, exactly as a plain `periodStart + windowHours` window always has.
- *
- * The start moves earlier, to the day's own midnight, so an afternoon fetch — where
- * `periodStart` is noon — no longer misses the morning that already happened today. Since
- * `dayStart` is never later than `periodStart`, this can only widen the window, never narrow the
- * look-ahead the old computation relied on.
+ * Replaces the fixed 12-hour period as what the dial actually shows (#25) — `periodStart` stays
+ * the angle origin (see `calculateTrueArcAngles`), but the window this clamps and filters events
+ * against now moves continuously with `time` rather than jumping twice a day.
  */
-export function getFetchWindow(
+export function getRollingWindow(
   time: Date,
-  windowHours: number
+  lookbehindHours: number = ROLLING_WINDOW_LOOKBEHIND_HOURS,
+  lookaheadHours: number = ROLLING_WINDOW_LOOKAHEAD_HOURS
 ): { windowStart: Date; windowEnd: Date } {
-  const windowStart = getDayStart(time);
-  const windowEnd = new Date(getPeriodStart(time).getTime() + windowHours * 60 * 60 * 1000);
-  return { windowStart, windowEnd };
+  return {
+    windowStart: new Date(time.getTime() - lookbehindHours * 60 * 60 * 1000),
+    windowEnd: new Date(time.getTime() + lookaheadHours * 60 * 60 * 1000)
+  };
 }
 
 /**
- * Narrow events to those overlapping a 12-hour period. All-day events are dropped —
- * they have no start or end angle, so they belong in a separate list beside the dial.
+ * The window the client should fetch from the server: wide enough for the dial's own rolling
+ * window (#25) *and* the whole calendar day (#37), widened by `marginHours` at each end still in
+ * play.
  *
- * Overlap is exclusive at both ends: an event ending exactly at `periodStart`, or
- * starting exactly at `periodEnd`, is not included.
+ * Two independent callers need coverage here, and neither one's need replaces the other's:
+ * - The dial only ever draws `getRollingWindow(time)` — `marginHours` covers the gap between
+ *   polls, since the window keeps moving continuously and `main.ts` only refetches every 5
+ *   minutes.
+ * - `getDayStart(time)`/today's midnight bound the window to at least the whole calendar day
+ *   regardless of the rolling window's own bounds, because #36 (the agenda panel epic)'s first
+ *   sub-issue is fetching the *whole day* — including hours the rolling window itself would
+ *   never reach on its own (the morning, on a lookbehind that only reaches 3 hours back; the
+ *   evening, on a lookahead that only reaches 8 hours forward) — and there is no dial-only reason
+ *   to narrow back to less than #37 already guaranteed at either end.
+ */
+export function getFetchWindow(
+  time: Date,
+  marginHours: number
+): { windowStart: Date; windowEnd: Date } {
+  const { windowStart: rollingStart, windowEnd: rollingEnd } = getRollingWindow(time);
+  const marginMs = marginHours * 60 * 60 * 1000;
+  const dayStart = getDayStart(time);
+  const dayEnd = new Date(dayStart.getTime() + 24 * 60 * 60 * 1000);
+  // The margin only buffers the rolling bound against poll drift — the day floor/ceiling is a
+  // fixed boundary that does not move between polls, so it takes no margin of its own.
+  return {
+    windowStart: new Date(Math.min(dayStart.getTime(), rollingStart.getTime() - marginMs)),
+    windowEnd: new Date(Math.max(dayEnd.getTime(), rollingEnd.getTime() + marginMs))
+  };
+}
+
+/**
+ * Narrow events to those overlapping `[windowStart, windowEnd)` — a plain time range, not
+ * necessarily a 12-hour period; the dial's rolling window (#25) is the main caller today. All-day
+ * events are dropped — they have no start or end angle, so they belong in a separate list beside
+ * the dial.
+ *
+ * Overlap is exclusive at both ends: an event ending exactly at `windowStart`, or
+ * starting exactly at `windowEnd`, is not included.
  */
 export function filterEventsForPeriod(
   events: ClockEventInput[],
-  periodStart: Date,
-  periodEnd: Date
+  windowStart: Date,
+  windowEnd: Date
 ): ClockEventInput[] {
-  const startMs = periodStart.getTime();
-  const endMs = periodEnd.getTime();
+  const startMs = windowStart.getTime();
+  const endMs = windowEnd.getTime();
   return events.filter((event) => {
     if (event.isAllDay) return false;
     const eventStart = new Date(event.startDate).getTime();
@@ -191,6 +226,18 @@ export function eventsToClockEvents(
 }
 
 /**
+ * A timestamp's angle against the fixed `periodStart` origin (0° = 12 o'clock), **not** reduced
+ * modulo 360 — a time before `periodStart` or past `periodStart + 720min` yields a negative angle
+ * or one past 360° rather than wrapping. Shared by every window boundary this module computes
+ * (event clamping, the window-gap track) so they all stay in the same unwrapped angle space that
+ * `describeArc`/`polarToCartesian` already handle via ordinary trigonometry.
+ */
+export function angleForTime(time: Date, periodStart: Date): number {
+  const minutes = (time.getTime() - periodStart.getTime()) / (60 * 1000);
+  return (minutes / PERIOD_MINUTES) * 360;
+}
+
+/**
  * The event's actual extent within a window, in degrees against the fixed `periodStart` origin —
  * clamped to the window but **not** widened to the minimum visible width.
  *
@@ -215,15 +262,12 @@ export function calculateTrueArcAngles(
   windowStart: Date = periodStart,
   windowEnd: Date = defaultWindowEnd(periodStart)
 ): ClampedArcAngles {
-  const clampedStart = Math.max(eventStart.getTime(), windowStart.getTime());
-  const clampedEnd = Math.min(eventEnd.getTime(), windowEnd.getTime());
-
-  const startMinutes = (clampedStart - periodStart.getTime()) / (60 * 1000);
-  const endMinutes = (clampedEnd - periodStart.getTime()) / (60 * 1000);
+  const clampedStart = new Date(Math.max(eventStart.getTime(), windowStart.getTime()));
+  const clampedEnd = new Date(Math.min(eventEnd.getTime(), windowEnd.getTime()));
 
   return {
-    startAngle: (startMinutes / PERIOD_MINUTES) * 360,
-    endAngle: (endMinutes / PERIOD_MINUTES) * 360,
+    startAngle: angleForTime(clampedStart, periodStart),
+    endAngle: angleForTime(clampedEnd, periodStart),
     continuesBefore: eventStart.getTime() < windowStart.getTime(),
     continuesAfter: eventEnd.getTime() > windowEnd.getTime(),
   };
@@ -249,10 +293,8 @@ export function calculateArcAngles(
   );
 
   if (endAngle - startAngle < MIN_ARC_DEGREES) {
-    const windowStartAngle =
-      ((windowStart.getTime() - periodStart.getTime()) / (60 * 1000) / PERIOD_MINUTES) * 360;
-    const windowEndAngle =
-      ((windowEnd.getTime() - periodStart.getTime()) / (60 * 1000) / PERIOD_MINUTES) * 360;
+    const windowStartAngle = angleForTime(windowStart, periodStart);
+    const windowEndAngle = angleForTime(windowEnd, periodStart);
 
     endAngle = startAngle + MIN_ARC_DEGREES;
     // Widening past the window's own end would wrap the arc, so pull the start back instead.

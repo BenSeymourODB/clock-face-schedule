@@ -14,6 +14,9 @@ export {
   type ClockBox
 } from './clamp-label';
 export {
+  ROLLING_WINDOW_LOOKAHEAD_HOURS,
+  ROLLING_WINDOW_LOOKBEHIND_HOURS,
+  angleForTime,
   calculateArcAngles,
   calculateTrueArcAngles,
   combineTitleWithEmoji,
@@ -25,12 +28,19 @@ export {
   getFetchWindow,
   getPeriodBounds,
   getPeriodStart,
+  getRollingWindow,
   hasEventInProgress,
   parseEventTitle,
   polarToCartesian,
   roundCoord
 } from './clock-utils';
-export { compositeOver, readableTextColor, relativeLuminance } from './contrast';
+export {
+  adjustForContrast,
+  compositeOver,
+  contrastRatio,
+  readableTextColor,
+  relativeLuminance
+} from './contrast';
 export { formatEventDuration } from './duration';
 // `emoji.ts` is deliberately absent. Its consumers — `clock-utils`, `pack-lines`, `fit-label` —
 // are all inside this directory and import it directly, and re-exporting the pattern here put a
