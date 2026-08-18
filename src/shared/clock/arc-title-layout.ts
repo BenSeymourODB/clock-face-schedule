@@ -26,10 +26,14 @@ export const TITLE_RADIUS_RATIO = 0.5;
 /**
  * Title font size = arc band height × this ratio.
  *
- * Deliberately uncapped. An inherited ceiling of 18 units meant that widening the band — the
- * whole response to "it cannot be read from there" — bought a thicker arc carrying the same small
- * text. The ratio already adapts to however much radial room a ring actually has, including when
- * stacking divides the band, so a ceiling only ever fought the intent.
+ * Deliberately uncapped in *absolute* terms. An inherited ceiling of 18 units meant that widening
+ * the band — the whole response to "it cannot be read from there" — bought a thicker arc carrying
+ * the same small text. The ratio already adapts to however much radial room a ring actually has,
+ * including when stacking divides the band, so a ceiling only ever fought the intent.
+ *
+ * `computeArcTitleLayout` does hold the result to the room the ring's own edge strokes leave (#67),
+ * which is a different thing: that limit is derived from the band and grows with it, so widening the
+ * band still buys bigger text.
  */
 export const TITLE_FONT_SIZE_RATIO = 0.28;
 
@@ -46,7 +50,7 @@ export const TITLE_LINE_OFFSET_RATIO = 0.55;
  * One unit, matching the separator's own floor: below that the two are not distinguishable as
  * separate marks anyway, so there is nothing left to protect.
  */
-const EDGE_CLEARANCE = 1;
+export const TITLE_EDGE_CLEARANCE = 1;
 
 /** Slack when comparing a ring's thickness with the band's, since the one is derived from the other. */
 const RING_EQUALITY_TOLERANCE = 1e-6;
@@ -56,10 +60,27 @@ export interface ArcTitleLayout {
   titleRadius: number;
   /** Resolved title font size in px. */
   titleFontSize: number;
+  /**
+   * Half the radial gap between two stacked baselines, in the same units as the radii.
+   *
+   * Part of the layout rather than left to the renderer because the font size is capped by the room
+   * the ring's own strokes leave (#67), and an offset re-derived from the *uncapped* size would put
+   * the lines straight back where the cap moved them from.
+   */
+  lineOffset: number;
   /** Lines the title may occupy on this arc. */
   maxLines: 1 | 2;
   /** Word-pack result — drives both rendering and overflow detection. */
   fit: FitTitleResult;
+}
+
+/**
+ * How far the outermost line's glyph band reaches from the centre of the stack, per unit of font
+ * size. `central` dominant-baseline puts a glyph band at ±fontSize/2 around its own baseline, and a
+ * stacked line's baseline sits `TITLE_LINE_OFFSET_RATIO` further out again.
+ */
+function stackReachRatio(maxLines: 1 | 2): number {
+  return maxLines === 2 ? TITLE_LINE_OFFSET_RATIO + 0.5 : 0.5;
 }
 
 export function computeArcTitleLayout(params: {
@@ -68,14 +89,40 @@ export function computeArcTitleLayout(params: {
   arcSpan: number;
   innerRadius: number;
   outerRadius: number;
+  /**
+   * Width of the widest stroke the caller draws on this ring's own outline — the elapsed outline,
+   * for the dial. Passed whether or not the event has elapsed: text that moved at the moment an
+   * event finished would visibly twitch on a wall display. Defaults to none, for a caller drawing
+   * nothing there.
+   */
+  edgeStrokeWidth?: number;
 }): ArcTitleLayout {
-  const { title, arcSpan, innerRadius, outerRadius } = params;
+  const { title, arcSpan, innerRadius, outerRadius, edgeStrokeWidth = 0 } = params;
   const arcHeight = outerRadius - innerRadius;
   const titleRadius = innerRadius + arcHeight * TITLE_RADIUS_RATIO;
-  const titleFontSize = roundCoord(arcHeight * TITLE_FONT_SIZE_RATIO);
   const maxLines: 1 | 2 = arcSpan >= TWO_LINE_MIN_SPAN_DEGREES ? 2 : 1;
+
+  // The room the stack has, measured from the centre of the ring outward: half the ring, less the
+  // half-width a stroke straddling the edge reaches back in, less the clearance to it. A stroke
+  // straddles its path, so it takes half its width from each edge (#67).
+  const usableHalf = Math.max(
+    0,
+    arcHeight / 2 - (edgeStrokeWidth / 2 + TITLE_EDGE_CLEARANCE)
+  );
+
+  // Sized from the ring, then held to what the ring's own strokes leave. Not the absolute 18-unit
+  // ceiling #35's comment records removing: that one meant widening the band bought a thicker arc
+  // carrying the same small text, whereas this limit scales with the band exactly as the ratio does.
+  // It binds only where the stroke genuinely takes the space — four deep on a 600-unit dial, three
+  // deep on a 300-unit one — and truncates to `roundCoord`'s own precision rather than rounding,
+  // since rounding a *limit* upward is how a ten-thousandth of an overlap gets back in.
+  const preferred = roundCoord(arcHeight * TITLE_FONT_SIZE_RATIO);
+  const ceiling = Math.floor(usableHalf / stackReachRatio(maxLines) * 1e4) / 1e4;
+  const titleFontSize = Math.min(preferred, ceiling);
+
+  const lineOffset = titleFontSize * TITLE_LINE_OFFSET_RATIO;
   const fit = fitTitleToArc(title, arcSpan, titleRadius, titleFontSize, maxLines);
-  return { titleRadius, titleFontSize, maxLines, fit };
+  return { titleRadius, titleFontSize, lineOffset, maxLines, fit };
 }
 
 /**
@@ -153,8 +200,10 @@ export function fitDurationLine(params: {
   // thickness comes back through floating-point arithmetic rather than as the band verbatim.
   if (outerRadius - innerRadius < bandThickness - RING_EQUALITY_TOLERANCE) return undefined;
 
-  // A stroke straddles its path, so it reaches half its width into the ring from either edge.
-  const reach = edgeStrokeWidth / 2 + EDGE_CLEARANCE;
+  // A stroke straddles its path, so it reaches half its width into the ring from either edge. The
+  // offset re-derived below is `ArcTitleLayout.lineOffset` by construction — the layout applies
+  // `TITLE_LINE_OFFSET_RATIO` to whatever font size it resolved, capped or not.
+  const reach = edgeStrokeWidth / 2 + TITLE_EDGE_CLEARANCE;
   const lineHalfHeight = fontSize * TITLE_LINE_OFFSET_RATIO + fontSize / 2;
   if (titleRadius + lineHalfHeight > outerRadius - reach) return undefined;
   if (titleRadius - lineHalfHeight < innerRadius + reach) return undefined;

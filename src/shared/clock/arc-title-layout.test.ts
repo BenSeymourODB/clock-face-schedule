@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  TITLE_EDGE_CLEARANCE,
   TITLE_FONT_SIZE_RATIO,
   TITLE_LINE_OFFSET_RATIO,
   TITLE_RADIUS_RATIO,
@@ -101,6 +102,123 @@ describe('computeArcTitleLayout', () => {
       });
       expect(result.maxLines).toBe(1);
       expect(result.fit.didOverflow).toBe(true);
+    });
+  });
+
+  /**
+   * The clearance nothing used to check (#67). An elapsed arc's outline is sized from the whole
+   * band, deliberately (#26), while the text is sized from this arc's own ring — two quantities that
+   * move independently, compared against each other nowhere. At the 0.12 halo #27 retired, a
+   * two-line stack three deep cleared the stroke by 0.03 units and four deep by −1.35; at today's
+   * 0.07 outline it clears by 1.93 and 0.55, so the only thing standing between the text and the
+   * stroke is a constant that changed for an unrelated reason.
+   *
+   * These cases assert the property rather than the numbers: whatever the caller strokes on the
+   * ring's edges, both lines stay `TITLE_EDGE_CLEARANCE` clear of it.
+   */
+  describe('clearing what is stroked on the ring edges', () => {
+    /** One ring of a `depth`-deep cluster on a dial of `size`, as `analog-clock.ts` derives it. */
+    function ring(size: number, depth: number) {
+      const outerRadius = size / 2 - 8;
+      const band = outerRadius * 0.26;
+      const gap = depth > 1 ? Math.max(2, band * 0.06) : 0;
+      const thickness = (band - (depth - 1) * gap) / depth;
+
+      return {
+        innerRadius: outerRadius - thickness,
+        outerRadius,
+        // The elapsed outline: `ELAPSED_BORDER_RATIO` of the band, capped by the ring, floored at 1.
+        edgeStrokeWidth: Math.max(1, Math.min(band * 0.07, thickness * 0.4))
+      };
+    }
+
+    /** How far the outward and inward lines fall short of the stroke's near edge. */
+    function clearances(shape: ReturnType<typeof ring>, title: string, arcSpan: number) {
+      const { titleRadius, titleFontSize, lineOffset, maxLines } = computeArcTitleLayout({
+        ...shape,
+        title,
+        arcSpan
+      });
+      const reach = (maxLines === 2 ? lineOffset : 0) + titleFontSize / 2;
+      const strokeReach = shape.edgeStrokeWidth / 2;
+
+      return {
+        outward: shape.outerRadius - strokeReach - (titleRadius + reach),
+        inward: titleRadius - reach - (shape.innerRadius + strokeReach),
+        titleFontSize
+      };
+    }
+
+    const depths = [1, 2, 3, 4];
+    const sizes = [300, 600, 900];
+    const cases = sizes.flatMap((size) => depths.map((depth): [number, number] => [size, depth]));
+
+    it.each(cases)('at size %i, %i deep', (size, depth) => {
+      const { outward, inward } = clearances(ring(size, depth), 'Study Skills and Revision', 60);
+
+      expect(outward).toBeGreaterThanOrEqual(TITLE_EDGE_CLEARANCE);
+      expect(inward).toBeGreaterThanOrEqual(TITLE_EDGE_CLEARANCE);
+    });
+
+    it('holds under the 0.12 halo #27 retired, which the ratio alone did not', () => {
+      // The stroke is the caller's to choose and has been half again this wide inside this repo's
+      // own history, so the guarantee has to survive a change to it rather than depend on one.
+      const shape = ring(600, 3);
+      const halo = { ...shape, edgeStrokeWidth: (shape.outerRadius * 0.26) * 0.12 };
+
+      expect(clearances(halo, 'Study Skills and Revision', 60).outward).toBeGreaterThanOrEqual(
+        TITLE_EDGE_CLEARANCE
+      );
+    });
+
+    it('holds for a single line on an arc too narrow for two', () => {
+      const shape = { ...ring(600, 4), edgeStrokeWidth: 12 };
+      const { outward, inward } = clearances(shape, 'Study', TWO_LINE_MIN_SPAN_DEGREES - 1);
+
+      expect(outward).toBeGreaterThanOrEqual(TITLE_EDGE_CLEARANCE);
+      expect(inward).toBeGreaterThanOrEqual(TITLE_EDGE_CLEARANCE);
+    });
+
+    it.each([[1], [2], [3]])(
+      'leaves the font at the ring ratio where the stroke leaves room (%i deep)',
+      (depth) => {
+        const shape = ring(600, depth);
+        const arcHeight = shape.outerRadius - shape.innerRadius;
+
+        expect(clearances(shape, 'Study Skills and Revision', 60).titleFontSize).toBeCloseTo(
+          arcHeight * TITLE_FONT_SIZE_RATIO,
+          2
+        );
+      }
+    );
+
+    it('takes the font no lower than the stroke demands', () => {
+      // Four deep at size 600 is the case that binds: 4.13 units of usable half-height against a
+      // stack wanting 4.58. Yielding more than that would cost legibility for nothing.
+      const shape = ring(600, 4);
+      const arcHeight = shape.outerRadius - shape.innerRadius;
+      const usableHalf = arcHeight / 2 - (shape.edgeStrokeWidth / 2 + TITLE_EDGE_CLEARANCE);
+      const { titleFontSize } = clearances(shape, 'Study Skills and Revision', 60);
+
+      expect(titleFontSize).toBeLessThan(arcHeight * TITLE_FONT_SIZE_RATIO);
+      expect(titleFontSize).toBeCloseTo(usableHalf / (TITLE_LINE_OFFSET_RATIO + 0.5), 1);
+    });
+
+    it('keeps lineOffset at TITLE_LINE_OFFSET_RATIO of whatever font it resolved', () => {
+      // The renderer draws the stack at this offset, so a font the cap moved and an offset derived
+      // from the uncapped one would put the lines back where they started.
+      const shape = ring(600, 4);
+      const layout = computeArcTitleLayout({ ...shape, title: 'Study Skills', arcSpan: 60 });
+
+      expect(layout.lineOffset).toBeCloseTo(layout.titleFontSize * TITLE_LINE_OFFSET_RATIO, 6);
+    });
+
+    it('is a no-op when nothing is stroked on the edges', () => {
+      const shape = ring(600, 4);
+      const arcHeight = shape.outerRadius - shape.innerRadius;
+      const bare = computeArcTitleLayout({ ...shape, edgeStrokeWidth: 0, title: 'x', arcSpan: 60 });
+
+      expect(bare.titleFontSize).toBeCloseTo(arcHeight * TITLE_FONT_SIZE_RATIO, 2);
     });
   });
 
