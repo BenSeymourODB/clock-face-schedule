@@ -35,16 +35,14 @@ const TITLE_MIN_SPAN_DEGREES = 20;
 /**
  * Where the emoji sits across the ring, and how big it is, as fractions of the ring's height.
  *
- * The emoji and the title stack radially, and a two-line title is tall: at the inherited ratios
- * they needed 1.03 of the ring between them and overlapped by a measured 8.7 units on a
- * full-width band. Both were reduced to fit, the emoji more than the title — the title is the
- * specific information and the emoji the category cue, so the title wins the argument.
+ * Centred, at the same ratio as `TITLE_RADIUS_RATIO`: the glyph only renders standalone, when no
+ * title is sharing the ring, so it takes the centre the title would have taken.
  *
  * Uncapped, for the same reason the title's ceiling went: a cap in viewBox units means "never
  * larger than this fraction of the dial", which fights every attempt to make the dial readable
  * from further away.
  */
-const EMOJI_RADIUS_RATIO = 0.17;
+const EMOJI_RADIUS_RATIO = 0.5;
 const EMOJI_FONT_SIZE_RATIO = 0.3;
 
 /**
