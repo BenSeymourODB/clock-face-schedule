@@ -285,8 +285,14 @@ export function clockFace({
       )
     : [undefined, undefined];
 
-  element.append(periodIndicator, hourHalo, hourHand, minuteHalo, minuteHand);
-  if (secondHalo && secondHand) element.append(secondHalo, secondHand);
+  // Halos all mount before any hand's own line: the hour and minute hands are collinear at the
+  // top of every hour, and a per-hand pairing would let the minute halo — wider than the hour
+  // hand's own line — paint over and thin it. Painting every halo first keeps each hand's colour
+  // on top regardless of which other hand shares its angle.
+  element.append(periodIndicator, hourHalo, minuteHalo);
+  if (secondHalo) element.append(secondHalo);
+  element.append(hourHand, minuteHand);
+  if (secondHand) element.append(secondHand);
 
   element.append(
     svg("circle", {

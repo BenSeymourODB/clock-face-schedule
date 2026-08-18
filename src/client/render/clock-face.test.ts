@@ -142,13 +142,18 @@ describe("clockFace", () => {
       expect(find(element, "second-hand-halo")?.getAttribute("stroke")).toBe("var(--card)");
     });
 
-    it("mounts each halo immediately before its hand, so the hand paints on top", () => {
+    it("mounts every halo before every hand, so no hand's colour is ever overpainted", () => {
+      // Guards a real regression: the hour and minute hands are collinear at the top of every
+      // hour, and mounting each halo right next to its own hand let the wider minute halo paint
+      // over — and visibly thin — the narrower hour hand for the whole of that minute.
       const { element } = build(at(6, 30), true);
+      const children = Array.from(element.children);
+      const indexOf = (testId: string) => children.indexOf(find(element, testId) as Element);
 
-      for (const id of ["hour-hand", "minute-hand", "second-hand"]) {
-        const halo = find(element, `${id}-halo`);
-        expect(halo?.nextElementSibling).toBe(find(element, id));
-      }
+      const haloIndices = ["hour-hand-halo", "minute-hand-halo", "second-hand-halo"].map(indexOf);
+      const handIndices = ["hour-hand", "minute-hand", "second-hand"].map(indexOf);
+
+      expect(Math.max(...haloIndices)).toBeLessThan(Math.min(...handIndices));
     });
 
     it("shares geometry and angle with its hand, and follows it on setTime", () => {
