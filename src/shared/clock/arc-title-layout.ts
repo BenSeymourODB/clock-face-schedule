@@ -92,9 +92,12 @@ export function computeArcTitleLayout(params: {
  * The gate is checked against that stroke whether or not the event has elapsed yet: a duration that
  * appeared and vanished as an event crossed into elapsed would flicker on the wall.
  *
- * **Angular.** The formatted string has to fit the character budget at the radius the line is
- * actually drawn at — not the title's, since the two straddle the band's centre and a curved line's
- * budget is a function of the radius it curves along.
+ * **Angular.** Both strings have to fit the character budget at the *inner* of the two radii. Not
+ * the title's own radius: adding this line displaces the title onto the opposite one, and which
+ * that is flips with the half of the dial — so on the lower half a title fitted at the centre would
+ * be moved inward onto a 4.6% smaller budget and could overrun the arc it was measured against.
+ * Taking the tighter radius for both also makes an arc and its mirror image across the dial reach
+ * the same decision, rather than one carrying a duration the other cannot.
  *
  * Deliberately no span threshold and no compact fallback. The angular gate is derived from arc
  * length, so it gates itself; and a dial mixing "2 hr 25" on one arc with "2h25" on the next is the
@@ -104,7 +107,9 @@ export function computeArcTitleLayout(params: {
 export function fitDurationLine(params: {
   durationMinutes: number;
   arcSpan: number;
-  /** Centre of the two-line stack — the radius a single line would have taken. */
+  /** The single line of title this would sit under, which it displaces off the centre radius. */
+  titleLine: string;
+  /** Centre of the two-line stack — the radius that single line would otherwise have taken. */
   titleRadius: number;
   fontSize: number;
   /** This arc's own ring, which both lines have to sit inside. */
@@ -116,6 +121,7 @@ export function fitDurationLine(params: {
   const {
     durationMinutes,
     arcSpan,
+    titleLine,
     titleRadius,
     fontSize,
     innerRadius,
@@ -132,6 +138,8 @@ export function fitDurationLine(params: {
   if (titleRadius + lineHalfHeight > outerRadius - reach) return undefined;
   if (titleRadius - lineHalfHeight < innerRadius + reach) return undefined;
 
-  const lineRadius = titleRadius - fontSize * TITLE_LINE_OFFSET_RATIO;
-  return visualWidth(text) <= arcCharBudget(arcSpan, lineRadius, fontSize) ? text : undefined;
+  const innerLineRadius = titleRadius - fontSize * TITLE_LINE_OFFSET_RATIO;
+  const budget = arcCharBudget(arcSpan, innerLineRadius, fontSize);
+  const widest = Math.max(visualWidth(text), visualWidth(titleLine));
+  return widest <= budget ? text : undefined;
 }

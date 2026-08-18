@@ -437,14 +437,16 @@ export function eventArc({
     // already on two lines has spent the arc's text budget: a three-line stack measures 34.01 of a
     // lone arc's 37.96 half-band, and overruns every stacked ring.
     //
-    // `fitDurationLine` owns both gates. The stroke width it is handed is the halo's, the widest
-    // thing drawn on this arc's outline — and it is passed whether or not this arc has elapsed,
-    // because a duration line appearing at the moment an event finished would flicker on the wall.
+    // `fitDurationLine` owns both gates, including re-checking the *title* against the radius this
+    // line displaces it onto. The stroke width it is handed is the halo's, the widest thing drawn on
+    // this arc's outline — and it is passed whether or not this arc has elapsed, because a duration
+    // line appearing at the moment an event finished would flicker on the wall.
     const durationLine =
       fit.lines.length === 1
         ? fitDurationLine({
             durationMinutes: event.durationMinutes,
             arcSpan,
+            titleLine: fit.lines[0],
             titleRadius,
             fontSize: titleFontSize,
             innerRadius,

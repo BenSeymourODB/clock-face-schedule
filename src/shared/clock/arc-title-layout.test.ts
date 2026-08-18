@@ -132,7 +132,8 @@ describe('fitDurationLine', () => {
       outerRadius: OUTER,
       titleRadius: innerRadius + thickness * TITLE_RADIUS_RATIO,
       fontSize: thickness * TITLE_FONT_SIZE_RATIO,
-      edgeStrokeWidth: HALO
+      edgeStrokeWidth: HALO,
+      titleLine: 'Lunch'
     };
   }
 
@@ -152,11 +153,31 @@ describe('fitDurationLine', () => {
 
   // The two lines straddle the band's centre, so the *same* string on the same arc can fit one and
   // not the other. Budgeting at the title's own radius would silently overrun the inner line.
-  it("budgets against the radius the line is drawn at, not the title's", () => {
+  it("budgets against the inner radius, not the title's own", () => {
     const wide = { ...loneArc, durationMinutes: 145, arcSpan: 21 };
 
     expect(arcCharBudget(21, wide.titleRadius, wide.fontSize)).toBeGreaterThanOrEqual(7);
     expect(fitDurationLine(wide)).toBeUndefined();
+  });
+
+  // Adding this line displaces the title onto the opposite radius, and which one that is flips with
+  // the half of the dial — so on the lower half a title fitted at the centre is moved *inward* onto
+  // a 4.6% smaller budget. Measuring only the duration would let the title overrun the arc it was
+  // measured against, and the two mirror-image arcs would disagree about whether it fits.
+  it('refuses when the title itself would not fit the radius it is displaced onto', () => {
+    const arcSpan = 33;
+    const innerBudget = arcCharBudget(
+      arcSpan,
+      loneArc.titleRadius - loneArc.fontSize * TITLE_LINE_OFFSET_RATIO,
+      loneArc.fontSize
+    );
+    // A title one character past what the inner line can carry, and a duration well within it.
+    const titleLine = 'x'.repeat(innerBudget + 1);
+
+    expect(fitDurationLine({ ...loneArc, titleLine, durationMinutes: 120, arcSpan })).toBeUndefined();
+    expect(
+      fitDurationLine({ ...loneArc, titleLine: titleLine.slice(1), durationMinutes: 120, arcSpan })
+    ).toBe('2 hr');
   });
 
   it.each([[0], [0.2], [-30]])('returns nothing for a %s-minute event', (durationMinutes) => {

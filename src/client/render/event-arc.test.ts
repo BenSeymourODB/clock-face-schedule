@@ -311,6 +311,18 @@ describe("eventArc", () => {
         }
       });
 
+      // The title is fitted at the band's centre and this line displaces it outward at the top of
+      // the dial and *inward* at the bottom, onto a smaller budget. Both halves have to agree, or
+      // the same event would carry a duration in the morning and lose it in the afternoon.
+      it.each([
+        ["top half", 30, 75],
+        ["bottom half", 150, 195],
+      ])("reaches the same decision on the %s", (_label, startAngle, endAngle) => {
+        const group = render({ cleanTitle: "Assembly", startAngle, endAngle });
+
+        expect(durationOf(group)?.querySelector("textPath")?.textContent).toBe("1 hr 30");
+      });
+
       it("sits a weight below the title rather than a size below it", () => {
         // Shrinking it is the one de-emphasis that costs legibility, and opacity trades away
         // contrast — which #15 and #27 are both about not doing.
