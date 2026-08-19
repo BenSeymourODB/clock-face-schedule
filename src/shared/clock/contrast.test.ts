@@ -243,24 +243,36 @@ describe("adjustForContrast", () => {
 
   it("clears the floor whenever either extreme can, over a sweep of colour/ground/floor triples", () => {
     // The general property, rather than the enumerated grounds above: the returned colour clears
-    // the floor in every case where *some* answer does. The midpoint rule fails this on ~20% of
+    // the floor in every case where *some* answer does. The midpoint rule fails this on 24% of
     // reachable triples; it is the invariant, not the threshold constant, that is worth pinning.
-    let seed = 12345;
+    //
+    // mulberry32 rather than the textbook `seed * 1103515245` LCG, whose state exceeds 2^53 on
+    // every step: the low bits are lost to double rounding before the mask applies, and the
+    // generator settles into a 10,466-long cycle after a 5,937-step transient. A 5,000-iteration
+    // loop happens to fit inside that, but raising the count would silently replay triples rather
+    // than test new ones. Every operation here stays 32-bit via `Math.imul` and `|0`.
+    let state = 12345;
     const random = () => {
-      seed = (seed * 1103515245 + 12345) & 0x7fffffff;
-      return seed / 0x7fffffff;
+      state = (state + 0x6d2b79f5) | 0;
+      let t = Math.imul(state ^ (state >>> 15), 1 | state);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
     };
     const randomHex = () =>
       `#${[0, 1, 2]
         .map(() => Math.floor(random() * 256).toString(16).padStart(2, "0"))
         .join("")}`;
 
+    const ITERATIONS = 5000;
     const missed: string[] = [];
+    const drawn = new Set<string>();
     let reachable = 0;
-    for (let i = 0; i < 5000; i += 1) {
+    for (let i = 0; i < ITERATIONS; i += 1) {
       const color = randomHex();
       const ground = randomHex();
       const floor = 1 + random() * 6;
+      drawn.add(`${color}|${ground}|${floor}`);
+
       const best = Math.max(contrastRatio(WHITE, ground)!, contrastRatio(BLACK, ground)!);
       if (best < floor) continue;
 
@@ -271,6 +283,9 @@ describe("adjustForContrast", () => {
       }
     }
 
+    // Every iteration tested something new. Without this a degenerate generator makes the loop
+    // count iterations rather than cases, and the sweep reports coverage it does not have.
+    expect(drawn.size).toBe(ITERATIONS);
     expect(reachable).toBeGreaterThan(1000);
     expect(missed).toEqual([]);
   });

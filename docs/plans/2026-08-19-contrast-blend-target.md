@@ -48,12 +48,33 @@ reaches **10.94:1**, a gap of 9.02. The guard below the target choice is what ma
 rather than merely suboptimal — it returns that white and the comment claims it is the best available
 answer, which is wrong on the same grounds the line is.
 
-Over 200,000 pseudorandom `(colour, ground, floor)` triples where *some* extreme reaches the floor:
+Drawing 200,000 pseudorandom `(colour, ground, floor)` triples, of which **182,896 have a floor some
+extreme reaches**:
 
 | rule | missed a reachable floor |
 | --- | --- |
-| midpoint threshold | **40,358** (20.2%) |
+| midpoint threshold | **43,311** — 23.7% of the reachable triples |
 | compare the extremes | **0** |
+
+<details>
+<summary>The first version of this sweep overstated its own sample by 18×</summary>
+
+It seeded a textbook `seed = (seed * 1103515245 + 12345) & 0x7fffffff` LCG. That state exceeds 2^53
+on every step — 2.1e9 × 1.1e9 ≈ 2.4e18 — so the low bits are lost to double rounding *before* the
+mask applies. Measured: a 5,937-step transient into a cycle of period **10,466**, and 16,403 distinct
+states out of 2^31. Two hundred thousand draws produced **11,315 distinct triples**, each tested
+about 18 times.
+
+It also reported the miss rate as 40,358/200,000 = 20.2%, dividing by the number *drawn* where the
+sentence above the table defines the population as the *reachable* subset. On that run the reachable
+count was 182,624, so the rate it should have quoted was 22.1%.
+
+The conclusion never depended on either error — the corrected sweep above puts the midpoint rule
+higher, not lower — but a sample size is a measurement like any other, and this one was not measured.
+The generator is now mulberry32, whose state stays inside 32 bits via `Math.imul`, and the spec
+asserts that all 5,000 of its triples are distinct so a future degenerate generator fails loudly.
+
+</details>
 
 ## What the tests pin
 
@@ -61,7 +82,13 @@ The spec that missed this asserted "darkens toward black on a light ground inste
 `#ffffff` — the trivially-correct end of the range, and an assertion encoding the same rule the code
 held. The replacement pins the independent property instead: **whenever some variant can clear the
 floor, the returned one does**, exercised on grounds inside the broken interval and over a sweep of
-random triples. All seven new assertions fail against the old line and pass against the new one.
+random triples.
+
+Twelve specs are added. **Seven of them fail against the old line** and pass against the new one —
+the five per-ground floor assertions, the guard's fallback case, and the sweep. The other five
+assert only that the five grounds sit where the argument says they do (above 0.1791, below 0.5,
+black winning), and hold under either rule; they are there to keep the table honest, not to detect
+the defect.
 
 ## Verification
 
