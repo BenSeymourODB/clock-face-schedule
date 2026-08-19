@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  INK_HEIGHT_RATIO,
   TITLE_EDGE_CLEARANCE,
   TITLE_FONT_SIZE_RATIO,
   TITLE_LINE_OFFSET_RATIO,
@@ -314,6 +315,31 @@ describe('computeArcTitleLayout', () => {
   });
 });
 
+/**
+ * #78. Every radial clearance on the band used to be measured to the em box — `±fontSize / 2`,
+ * which is what `dominant-baseline: central` centres, and not what the text covers. Ink measured in
+ * the preview's Chromium reaches 0.596 em either side of the anchor, so a stack whose baselines sat
+ * 1.10 em apart overlapped itself by 0.09 em: 1.96 units on the fixture's lone arcs, on every
+ * two-line title the dial has ever drawn. A full green suite never saw it, because nothing asserted
+ * the separation the comment claimed.
+ */
+describe('stacked line separation', () => {
+  it('leaves the two lines of a stack clear of each other at real ink heights', () => {
+    const baselineGap = 2 * TITLE_LINE_OFFSET_RATIO;
+
+    expect(baselineGap).toBeGreaterThan(INK_HEIGHT_RATIO);
+  });
+
+  it('is derived from ink rather than from the em box', () => {
+    // 0.55 is what the em box gives: half of 1 em, plus half the same 0.1 em of intended slack.
+    // Naming it here means a drift back to that value fails, which asserting `2 × 0.55 < 1.2`
+    // would not — that compares two literals and holds whatever the ratio is.
+    const emBoxDerived = (1 + 0.1) / 2;
+
+    expect(TITLE_LINE_OFFSET_RATIO).toBeGreaterThan(emBoxDerived);
+  });
+});
+
 describe('fitDurationLine', () => {
   const OUTER = 292;
   const BAND = OUTER * 0.26;
@@ -424,16 +450,16 @@ describe('fitDurationLine', () => {
    * The radial gate, which is about not drawing text on a stroke and moves independently of the
    * legibility one. An elapsed arc's outline is sized from the whole *band* so its weight does not
    * thin with overlap depth (#26); the text is sized from this arc's own *ring*. Pushing a one-line
-   * title onto the two-line radii closes the gap between them — to 1.93 units three deep and 0.55
-   * four deep at today's 0.07 outline, and to **0.03** three deep at the 0.12 the neutral halo used
-   * before #27 retired it. Rendering the fixture at 04:15 with that halo still in place is what found
-   * it: "🎮 Game Time / 1 hr 30" sat on the elapsed outline of its own arc.
+   * title onto the two-line radii closes the gap between them — measured against real ink rather
+   * than the em box (#78), to 0.68 units three deep and −0.32 four deep at today's 0.07 outline.
+   * Rendering the fixture at 04:15 with the neutral halo #27 later retired is what found it:
+   * "🎮 Game Time / 1 hr 30" sat on the elapsed outline of its own arc.
    */
   describe('clearing what is stroked on the ring edges', () => {
     it.each([
       [1, '2 hr'],
       [2, '2 hr'],
-      [3, '2 hr'],
+      [3, undefined],
       [4, undefined]
     ])('at %i deep, band aside → %s', (depth, expected) => {
       expect(fitDurationLine({ ...ringAlone(depth), durationMinutes: 120, arcSpan: 60 })).toBe(
@@ -441,12 +467,27 @@ describe('fitDurationLine', () => {
       );
     });
 
-    it('would have refused a three-deep ring under the halo #27 retired', () => {
-      // The regression this gate was written for, kept as a case because the stroke it measures is
-      // the caller's to choose and could widen again.
+    // #78. Three deep is the depth the two models disagree about: the em box left 0.93 units of
+    // headroom there and real ink overruns the outline by 0.32. Rendered output is unaffected —
+    // the legibility gate already refuses every stacked ring — but the gate that is *about* the
+    // stroke now answers for the text that is actually drawn.
+    it('refuses a three-deep ring the em-box model would have admitted', () => {
+      const shape = { ...ringAlone(3), durationMinutes: 120, arcSpan: 60 };
+      const reach = shape.edgeStrokeWidth / 2 + 1;
+      const room = (shape.outerRadius - shape.innerRadius) / 2 - reach;
+
+      expect(shape.fontSize * (TITLE_LINE_OFFSET_RATIO + 0.5)).toBeLessThan(room);
+      expect(shape.fontSize * (TITLE_LINE_OFFSET_RATIO + INK_HEIGHT_RATIO / 2)).toBeGreaterThan(room);
+      expect(fitDurationLine(shape)).toBeUndefined();
+    });
+
+    it('answers to the stroke the caller passes, not to a fixed one', () => {
+      // The regression this gate was written for, at the shallowest depth that still isolates it:
+      // two deep clears today's 0.07 outline and does not clear the 0.12 the halo used.
+      expect(fitDurationLine({ ...ringAlone(2), durationMinutes: 120, arcSpan: 60 })).toBe('2 hr');
       expect(
         fitDurationLine({
-          ...ringAlone(3),
+          ...ringAlone(2),
           edgeStrokeWidth: BAND * 0.12,
           durationMinutes: 120,
           arcSpan: 60

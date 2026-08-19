@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
   FEATHER_DEGREES,
+  INK_HEIGHT_RATIO,
   TITLE_EDGE_CLEARANCE,
   TITLE_FONT_SIZE_RATIO,
+  TITLE_LINE_OFFSET_RATIO,
   type ClockEvent,
   adjustForContrast,
   arcCharBudget,
@@ -271,8 +273,29 @@ describe("eventArc", () => {
         arcRadius(node.getAttribute("d") ?? "")
       );
 
-      const offset = layout.titleFontSize * 0.55;
+      const offset = layout.titleFontSize * TITLE_LINE_OFFSET_RATIO;
       expect(radii).toEqual([layout.titleRadius + offset, layout.titleRadius - offset]);
+    });
+
+    /**
+     * #78. The pair above was asserted for years while the two lines' ink overlapped by 1.96 units,
+     * because every assertion on them compared radii to the same ratio that produced them. This one
+     * compares the gap the renderer emits against what the glyphs actually cover, so a ratio chosen
+     * against the em box fails here rather than passing quietly and smudging on the wall.
+     */
+    it("puts the two lines far enough apart that their ink does not overlap", () => {
+      const cleanTitle = "Parent Teacher Conference Planning Session Extra Words Here To Wrap";
+      const radii = [...render({ cleanTitle }).querySelectorAll("defs path")].map((node) =>
+        arcRadius(node.getAttribute("d") ?? "")
+      );
+      expect(radii).toHaveLength(2);
+
+      const fontSize = Number(
+        render({ cleanTitle }).querySelector("text")?.getAttribute("font-size")
+      );
+      const baselineGap = Math.abs(radii[0] - radii[1]);
+
+      expect(baselineGap).toBeGreaterThan(fontSize * INK_HEIGHT_RATIO);
     });
 
     /**
@@ -296,7 +319,7 @@ describe("eventArc", () => {
           innerRadius: INNER,
           outerRadius: OUTER,
         });
-        const offset = layout.titleFontSize * 0.55;
+        const offset = layout.titleFontSize * TITLE_LINE_OFFSET_RATIO;
         const radii = [...render().querySelectorAll("defs path")].map((node) =>
           arcRadius(node.getAttribute("d") ?? "")
         );
