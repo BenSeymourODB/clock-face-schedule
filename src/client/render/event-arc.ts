@@ -12,7 +12,6 @@ import {
   type ClockEvent,
   type FeatherSpan,
   type OccludedSpan,
-  TITLE_LINE_OFFSET_RATIO,
   adjustForContrast,
   combineTitleWithEmoji,
   compositeOver,
@@ -153,6 +152,24 @@ const ELAPSED_BORDER_RATIO = 0.07;
  * the arc reads as filled again — which is the one thing an elapsed arc must not do.
  */
 const ELAPSED_STROKE_MAX_RATIO = 0.4;
+
+/**
+ * The elapsed outline's width for one ring — sized from the band, capped by the ring: uniform weight
+ * wherever there is room for it, and narrower only where the ring genuinely cannot carry it.
+ *
+ * Exported because it is also the widest stroke drawn on an arc's own outline, so it is what the
+ * title layout has to keep its lines clear of (#67) — and the dial computes that layout before it
+ * renders the arc. A second derivation of this number in the caller is exactly how the text and the
+ * stroke came to be sized from different quantities with nothing comparing them.
+ */
+export function arcEdgeStrokeWidth(ringThickness: number, bandThickness: number): number {
+  return roundCoord(
+    Math.max(
+      ARC_SEPARATOR_MIN,
+      Math.min(bandThickness * ELAPSED_BORDER_RATIO, ringThickness * ELAPSED_STROKE_MAX_RATIO)
+    )
+  );
+}
 
 interface FadeMaskGeometry {
   cx: number;
@@ -415,16 +432,8 @@ export function eventArc({
   // the fill goes and the outline stays. Sharing one path, as this did, forces the two to move
   // together.
   const d = describeArc(cx, cy, outerRadius, innerRadius, startAngle, endAngle);
-  // Sized from the band, capped by the ring: uniform weight wherever there is room for it, and
-  // narrower only where the ring genuinely cannot carry it.
   const band = bandThickness ?? arcHeight;
-  const stroke = (ratio: number) =>
-    roundCoord(
-      Math.max(
-        ARC_SEPARATOR_MIN,
-        Math.min(band * ratio, arcHeight * ELAPSED_STROKE_MAX_RATIO)
-      )
-    );
+  const edgeStrokeWidth = arcEdgeStrokeWidth(arcHeight, band);
 
   group.append(
     svg("path", {
@@ -469,14 +478,22 @@ export function eventArc({
         // beneath it, so the colour has to clear contrast against the dial on its own (#27).
         // Preserves hue, so a ⚫ or 🟤 event stays recognisably itself while becoming visible.
         stroke: adjustForContrast(color, DIAL_BACKGROUND, OUTLINE_MIN_CONTRAST),
-        "stroke-width": stroke(ELAPSED_BORDER_RATIO),
+        "stroke-width": edgeStrokeWidth,
         mask: spentFade,
       })
     );
   }
 
   const resolved =
-    layout ?? computeArcTitleLayout({ title: displayTitle, arcSpan, innerRadius, outerRadius });
+    layout ??
+    computeArcTitleLayout({
+      title: displayTitle,
+      arcSpan,
+      innerRadius,
+      outerRadius,
+      // Standalone rendering: the dial passes a layout that already accounts for this.
+      edgeStrokeWidth,
+    });
   const showTitle = !forceHideTitle && arcSpan >= TITLE_MIN_SPAN_DEGREES;
   const titleRendersOnArc = showTitle && resolved.fit.lines.length > 0;
 
@@ -517,8 +534,7 @@ export function eventArc({
   }
 
   if (titleRendersOnArc) {
-    const { titleRadius, titleFontSize, fit } = resolved;
-    const lineOffset = titleFontSize * TITLE_LINE_OFFSET_RATIO;
+    const { titleRadius, titleFontSize, lineOffset, fit } = resolved;
 
     /**
      * The copies of each title line, and what each is coloured for.
@@ -623,7 +639,7 @@ export function eventArc({
             innerRadius,
             outerRadius,
             bandThickness: band,
-            edgeStrokeWidth: stroke(ELAPSED_BORDER_RATIO),
+            edgeStrokeWidth,
           })
         : undefined;
 
