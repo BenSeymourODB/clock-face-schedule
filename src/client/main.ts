@@ -7,12 +7,15 @@
  */
 import {
   type ClockEventInput,
+  type DialScaleId,
+  dialScale,
+  dialWindow,
   getFetchWindow,
   getPeriodBounds,
-  getRollingWindow,
+  parseDialScaleId,
 } from "../shared/clock";
 import { analogClock } from "./render/analog-clock";
-import { sampleEvents } from "./sample-events";
+import { oneHourSampleEvents, sampleEvents } from "./sample-events";
 import { type ScheduleStatus, describeStatus, nextStatus } from "./schedule-status";
 
 const TICK_INTERVAL_MS = 1_000;
@@ -54,12 +57,29 @@ function fetchWindow(): Promise<ClockEventInput[]> {
   );
 }
 
+/**
+ * Which dial scale to run at (#34).
+ *
+ * The deployed page is a sandboxed iframe whose own URL carries none of the viewer's query
+ * parameters, so `doGet` templates the raw value onto the mount and it is parsed here — the same
+ * reason `?demo=1` arrives as a data attribute. The preview has no server to template anything, so
+ * the attribute is present but empty there and its own query string answers instead, which is what
+ * makes `preview.html?scale=1h` work from disk.
+ */
+function chosenScale(mount: Element): DialScaleId {
+  const templated = mount instanceof HTMLElement ? mount.dataset["scale"] : undefined;
+  if (templated) return parseDialScaleId(templated);
+
+  return parseDialScaleId(new URLSearchParams(window.location.search).get("scale"));
+}
+
 function startDisplay(): void {
   const mount = document.querySelector("#dial");
   const statusLine = document.querySelector("#status");
   if (!mount) return;
 
-  const clock = analogClock({ events: [], showSeconds: true, time: new Date() });
+  const scale = chosenScale(mount);
+  const clock = analogClock({ events: [], showSeconds: true, time: new Date(), scale });
   mount.append(clock.element);
 
   // Hands before data. A google.script.run round trip runs 0.5–2s and the server cache does not
@@ -80,9 +100,14 @@ function startDisplay(): void {
    * real schedule, and the whole point of the mode is that someone is standing in front of it.
    */
   if (mount instanceof HTMLElement && mount.dataset["demo"] === "1") {
-    // Anchored to the rolling window's own start, not periodStart, so the fixture lands inside
-    // whatever window is live at load time regardless of the hour — see sample-events.ts.
-    clock.setEvents(sampleEvents(getRollingWindow(new Date()).windowStart));
+    // Anchored to the drawn window's own start, not periodStart, so the fixture lands inside
+    // whatever window is live at load time regardless of the hour — see sample-events.ts. Each
+    // scale gets its own fixture: a 55-minute window has no room for an eleven-hour schedule, and
+    // the 1-hour mode's whole claim is about events too short for the 12-hour one to show.
+    const { windowStart } = dialWindow(new Date(), dialScale(scale));
+    clock.setEvents(
+      scale === "1h" ? oneHourSampleEvents(windowStart) : sampleEvents(windowStart)
+    );
     setStatusText("Sample events — not a real calendar");
     return;
   }

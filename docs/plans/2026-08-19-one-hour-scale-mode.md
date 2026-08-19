@@ -85,5 +85,56 @@ the new radius, and de-emphasis comes from being both shorter and greyer.
 ## Measurements this design rests on
 
 At the shipped 600-unit dial, `faceRadius` resolves to **204.4** (`outerRadius` 292, band 75.92,
-face gap 11.68). Everything below is a fraction of that; see the phase-4 notes for what rendering
-said about them.
+face gap 11.68). Everything else is a fraction of that.
+
+| | value | units |
+| --- | --- | --- |
+| Outer numeral ring, 12h / 1h | 0.72 / 0.70 | 147.2 / 143.1 |
+| Inner hour ring (1h only) | 0.50 | 102.2 |
+| Hour hand, 12h / 1h | 0.64 / 0.43 | 130.8 / 87.9 |
+| Inner ring ink (cap height, ±0.35em) | — | 95.0 – 109.4 |
+| Hour-hand tip inside that ink | — | 7.1 |
+| Inner ring → outer ring, ink to ink | — | 20.6 |
+| Inner ring → AM/PM, ink to ink | — | 17.1 |
+
+## What rendering found that the tests did not
+
+Three defects, all invisible to a green suite, all found by looking at `build/preview.html`.
+
+**1. Titles past 360° read upside down — and this is a live bug on the shipped 12-hour dial.**
+`describeTextArc` decides which way to run its baseline from `midAngle > 90 && midAngle < 270`,
+against an angle the rest of the pipeline deliberately never reduces (#33). Every arc past a
+revolution therefore fails the test. Measured off the rendered DOM by comparing each baseline's
+sweep flag against the half of the dial it actually sits on:
+
+| build | 12-hour dial at 23:00 | 1-hour dial |
+| --- | --- | --- |
+| before | **4 title lines upside down** (🎂 Reading and Snacks, 🧸 Free Play) | 🍽️ Break upside down |
+| after | none | none |
+
+Fixed by reducing the angle modulo 360 **for the reading-direction test only** — the path itself
+still runs at the angles it was given, so nothing moves. One line, and a case in
+`text-arc.test.ts` for each of the wrapped, unwrapped and negative forms.
+
+**2. Two-digit minute values collide with the hour markers at three and nine.** Only there: a
+numeral's width adds straight onto its radius on the horizontal spokes, and barely counts on the
+vertical ones. The 12-hour dial never showed it because its only two-digit numeral, "12", is at
+the top.
+
+| | clearance to the marker's inner end |
+| --- | --- |
+| 12-hour "3" / "9" | 13.65 |
+| 12-hour "12" — its own tightest numeral anywhere | 6.32 |
+| 1-hour "15" / "45" at the 0.72 ring | **3.75** — reads as a dash welded to the number |
+| 1-hour "15" / "45" at the 0.70 ring | 7.82 |
+
+Paid for by pulling the 1-hour outer ring in 0.02, which is where `RADIUS.numeralOneHour` comes
+from. That still leaves 13.8 units to the inner hour ring, so the cost falls on the side with room.
+
+**3. The 1-hour fixture had no elapsed arc**, so the preview showed filled and draining but not
+elapsed — and #66 asks for the three to be judged together. "Register" now ends two minutes before
+load, which makes it the elapsed *and* the leading-edge-crossing case at once; a leading-edge
+crosser can never be wider than the 5-minute look-behind, so 18° is its natural size.
+
+Each has a test alongside it. The clearance test was checked by reverting `numeralOneHour` to 0.72
+and confirming it fails.

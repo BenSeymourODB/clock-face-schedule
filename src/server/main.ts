@@ -19,11 +19,18 @@ export { getEvents } from "./calendar";
  *
  * Both need to be checkable on the device rather than on a workstation, which is why they are URL
  * parameters and not a build flag.
+ *
+ * `?scale=1h` selects the 1-hour dial (#34), and rides here for a third reason: the deployed page
+ * runs inside a sandboxed iframe whose own URL carries none of the viewer's parameters, so a
+ * client-side read of `location.search` would see nothing. Passed through raw and unvalidated —
+ * the client parses it, which keeps the server the calendar adapter ADR 0003 says it is and keeps
+ * the geometry layer's emoji tables out of the server bundle.
  */
 export function doGet(event?: GoogleAppsScript.Events.DoGet): GoogleAppsScript.HTML.HtmlOutput {
   const template = HtmlService.createTemplateFromFile("Index");
   template["showDiagnostics"] = event?.parameter?.["check"] === "1";
   template["showDemo"] = event?.parameter?.["demo"] === "1";
+  template["scaleParam"] = event?.parameter?.["scale"] ?? "";
 
   return template
     .evaluate()

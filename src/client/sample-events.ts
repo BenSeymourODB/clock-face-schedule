@@ -84,3 +84,58 @@ export function sampleEvents(windowStart: Date): ClockEventInput[] {
     { id: "y", title: "🟢 Aftercare", startDate: at(10, 50), endDate: at(13, 15), isAllDay: false, fallbackColor },
   ];
 }
+
+/**
+ * Fixture schedule for the 1-hour scale (#34), anchored to that mode's own window start.
+ *
+ * A separate set rather than a reuse: the 12-hour fixture spans eleven hours, so inside a
+ * 55-minute window all but one or two of its events fall outside it and the survivors are drawn as
+ * full-band arcs continuing past both edges — which exercises nothing the mode is about. The whole
+ * claim of the 1-hour scale is that **sub-hour events become legible**, so its fixture has to be
+ * made of sub-hour events or it cannot be judged at all.
+ *
+ * Deliberately carries, at this scale: a three-deep cluster; an event already running at load, so
+ * the drain (#28) is visible in the preview without waiting for luck (which is #76's complaint
+ * about the 12-hour fixture); an event crossing each end of the window; a five-minute event, which
+ * the 12-hour dial floors into the same 7.5° sliver as a fifteen-minute one and this dial draws at
+ * 30°; a one-minute event, which is short enough to still need that floor even here; an emoji-only
+ * title; a title too long for its arc; and a ⚫, whose fill measures 1.21:1 on the dial.
+ *
+ * `at` counts minutes from the window's leading edge, which is 5 minutes behind now — so `at(5)`
+ * is the moment the page loads and anything spanning it is in progress.
+ */
+export function oneHourSampleEvents(windowStart: Date): ClockEventInput[] {
+  const at = (minutes: number) =>
+    new Date(windowStart.getTime() + minutes * 60_000).toISOString();
+  const fallbackColor = "#3b82f6";
+
+  return [
+    // Began before the window and finished two minutes before load, so it is feathered at the
+    // leading edge *and* elapsed — the two states the 5-minute look-behind exists to show. A
+    // leading-edge crosser can never be wider than that look-behind, so 18° is its natural size.
+    { id: "p", title: "⚪ Register", startDate: at(-8), endDate: at(3), isAllDay: false, fallbackColor },
+    // Running at load, so the preview always opens with a draining arc rather than waiting for a
+    // real day to oblige (#76). Starts a minute clear of "p": with the two states on neighbouring
+    // arcs they can be judged against each other (#66), without a one-minute overlap halving the
+    // thickness of a half-hour arc for its whole length.
+    //
+    // Also the outer arc of the three-deep cluster, which runs +15 to +22.
+    { id: "q", title: "🟢 🎮 Maths Starter", startDate: at(4), endDate: at(30), isAllDay: false, fallbackColor },
+    { id: "r", title: "🔴 Spelling Test", startDate: at(12), endDate: at(26), isAllDay: false, fallbackColor },
+    { id: "s", title: "🟣 Reading", startDate: at(15), endDate: at(22), isAllDay: false, fallbackColor },
+    // One minute is 6° even here, so the minimum-span floor still has something to hold open —
+    // the floor is angular and does not scale with the mode, which is the behaviour to keep sight of.
+    { id: "n", title: "🟠 Bell", startDate: at(31), endDate: at(32), isAllDay: false, fallbackColor },
+    // Five minutes: identical to a fifteen-minute event on the 12-hour dial, 30° of readable arc here.
+    { id: "t", title: "🟡 🍽️ Break", startDate: at(33), endDate: at(38), isAllDay: false, fallbackColor },
+    // Six minutes of arc carrying a title far too long for it, in the one colour the palette
+    // itself fails contrast for once filled (#26/#27) — so it overflows onto a ⚫-washed card.
+    { id: "u", title: "⚫ Assembly Notes and Reminders", startDate: at(39), endDate: at(45), isAllDay: false, fallbackColor },
+    // Two minutes is 12°: past the emoji floor, short of the title floor, and its title is the
+    // emoji alone — the one shape that still draws a standalone radial glyph.
+    { id: "v", title: "🟤 ⚽", startDate: at(46), endDate: at(48), isAllDay: false, fallbackColor },
+    // Runs on past the window's end, so the dial must not claim it finishes there. Its 👩‍🏫 is a ZWJ
+    // sequence: one glyph across several code points, which must never be sliced apart by a wrap.
+    { id: "w", title: "🔵 👩‍🏫 Parent Drop-in and Book Fair", startDate: at(49), endDate: at(70), isAllDay: false, fallbackColor },
+  ];
+}

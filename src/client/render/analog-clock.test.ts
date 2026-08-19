@@ -62,6 +62,28 @@ function arcs(root: SVGSVGElement): Element[] {
   return [...root.querySelectorAll('path[data-arc-part="fill"]')];
 }
 
+/** Where a point on the dial sits, in the same degrees-clockwise-from-twelve the geometry uses. */
+function angleAt(x: number, y: number): number {
+  return (((Math.atan2(x - CX, CY - y) * 180) / Math.PI) + 360) % 360;
+}
+
+/**
+ * How many degrees of dial an annular sector covers, read back off its own path.
+ *
+ * Only the outer sweep is needed: `M` is its start and the first `A`'s endpoint its end. Recovered
+ * modulo 360, which is all a single arc can be — nothing this project draws sweeps further.
+ */
+function arcSpanDegrees(arc: Element): number {
+  const parts =
+    (arc.getAttribute("d") ?? "").match(
+      /^M ([\d.-]+) ([\d.-]+) A [\d.-]+ [\d.-]+ 0 [01] 1 ([\d.-]+) ([\d.-]+)/
+    ) ?? [];
+
+  const start = angleAt(Number(parts[1]), Number(parts[2]));
+  const end = angleAt(Number(parts[3]), Number(parts[4]));
+  return (end - start + 360) % 360;
+}
+
 /** `M x y A R R … L x y A r r …` — the two radii of a donut segment. */
 function arcRadii(arc: Element): { outer: number; inner: number } {
   const found = (arc.getAttribute("d") ?? "")
@@ -626,5 +648,98 @@ describe("analogClock", () => {
         AFTERNOON.toLocaleTimeString()
       );
     });
+  });
+});
+
+/**
+ * The 1-hour scale (#34). The mode exists because a classroom day is mostly sub-hour events and
+ * the 12-hour band draws them all as slivers; these pin that the band actually runs at twelve
+ * times the resolution, and against the right window.
+ */
+describe("analogClock at the 1-hour scale", () => {
+  /** MORNING is 4:00, so the 1-hour window is [3:55, 4:50). */
+  const oneHour = (events: ClockEventInput[]) => build(events, { scale: "1h" });
+
+  it("draws a 20-minute event at 120° rather than 10°", () => {
+    const event = [input("a", 4 + 5 / 60, 4 + 25 / 60)];
+
+    expect(arcSpanDegrees(arcs(oneHour(event).element)[0])).toBeCloseTo(120, 3);
+    expect(arcSpanDegrees(arcs(build(event).element)[0])).toBeCloseTo(10, 3);
+  });
+
+  /**
+   * The complaint #32 was opened about: `MIN_ARC_DEGREES` floors anything under 15 minutes at
+   * 7.5°, so on the 12-hour dial a 5-minute and a 15-minute event are drawn *identically*. At 6°
+   * per minute the floor stops binding and the two are told apart again.
+   */
+  it("stops drawing a 5- and a 15-minute event identically", () => {
+    const spanAt = (scale: "12h" | "1h", minutes: number) =>
+      arcSpanDegrees(
+        arcs(build([input("a", 4 + 5 / 60, 4 + (5 + minutes) / 60)], { scale }).element)[0]
+      );
+
+    expect(spanAt("12h", 5)).toBeCloseTo(spanAt("12h", 15), 3);
+    expect(spanAt("1h", 5)).toBeCloseTo(30, 3);
+    expect(spanAt("1h", 15)).toBeCloseTo(90, 3);
+  });
+
+  it("shows only what overlaps 5 minutes back and 50 ahead", () => {
+    const { element } = oneHour([
+      input("in-progress", 3 + 50 / 60, 4 + 10 / 60),
+      input("just-ended", 3 + 40 / 60, 3 + 56 / 60),
+      input("long-gone", 3, 3 + 30 / 60),
+      input("soon", 4 + 30 / 60, 4 + 45 / 60),
+      input("beyond", 5, 5 + 30 / 60),
+    ]);
+
+    expect(new Set(arcs(element).map((arc) => arc.getAttribute("data-testid")))).toEqual(
+      new Set(["event-arc-in-progress", "event-arc-just-ended", "event-arc-soon"])
+    );
+  });
+
+  it("spans the same 330° band as the 12-hour dial, leaving the same gap", () => {
+    const trackSpan = (scale: "12h" | "1h") =>
+      arcSpanDegrees(
+        build([], { scale }).element.querySelector('[data-testid="window-track"]')!
+      );
+
+    expect(trackSpan("1h")).toBeCloseTo(330, 3);
+    expect(trackSpan("12h")).toBeCloseTo(330, 3);
+  });
+
+  it("passes the scale to the face, which draws the hour numbers on their own ring", () => {
+    expect(
+      oneHour([]).element.querySelectorAll('[data-testid^="hour-number-inner-"]')
+    ).toHaveLength(12);
+    expect(build([]).element.querySelectorAll('[data-testid^="hour-number-inner-"]')).toHaveLength(
+      0
+    );
+  });
+
+  /**
+   * Every 1-hour window wraps past twelve o'clock unless `now` sits within 5 minutes of the hour,
+   * so this is the ordinary case rather than an edge one (#33). An arc on the far side of the wrap
+   * must still be drawn the short way round — the failure mode is a 15-minute event painted as
+   * 345° of dial.
+   */
+  it("draws an event past the wrap the short way round", () => {
+    const wrapping = analogClock({
+      events: [input("a", 5 + 5 / 60, 5 + 20 / 60)],
+      time: new Date(2026, 7, 15, 4, 45, 0),
+      scale: "1h",
+    });
+
+    expect(arcSpanDegrees(arcs(wrapping.element)[0])).toBeCloseTo(90, 3);
+  });
+
+  it("keeps rebuilding as the window rolls", () => {
+    const clock = oneHour([input("a", 4 + 30 / 60, 4 + 45 / 60)]);
+    const before = clock.element.querySelector('[data-testid="window-track"]')?.getAttribute("d");
+
+    clock.setTime(new Date(MORNING.getTime() + 70_000));
+
+    expect(clock.element.querySelector('[data-testid="window-track"]')?.getAttribute("d")).not.toBe(
+      before
+    );
   });
 });
