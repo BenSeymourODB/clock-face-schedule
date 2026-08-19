@@ -232,9 +232,15 @@ five-year-old does not.
 - Height is a **weak lock** in any case. It stops the youngest students and nothing else. The
   durable answers are a deliberate gesture (long-press, two-finger tap) or a short PIN — hostile to
   casual pressing rather than to short people — and either would supersede this.
-- A persistent bar costs vertical space on a page whose dial is square and already tight for
-  radius. Whether the bar is always visible or reveals on interaction is unsettled; revealing keeps
-  the radius but adds the discoverability problem a wall display can least afford.
+- **The bar is always visible.** This was recorded as unsettled — a persistent bar costs vertical
+  space on a page whose dial is square and already tight for radius, against revealing on
+  interaction, which keeps the radius but adds the discoverability problem a wall display can least
+  afford. ADR 0009 settles it, and reverses the premise: the dial is bound by the board's *height*,
+  so vertical space the bar takes converts into horizontal room rather than being lost. A 100 mm bar
+  on a 4 ft 16:9 board shrinks the dial 1219 mm → 1119 mm (−8.2%) and *raises* the horizontal slack,
+  measured in the dial's own units, from 466.7 to 562.0 — 95 units that ADR 0009 hands to the panel
+  and the labels. It is also the only option under which a
+  persistent 1h/12h switch is its own state indicator — see the placement/liveness distinction below.
 - "Up high" is not one physical height. A projector screen, a wall-mounted board and a desk-height
   display put the same top bar at very different reaches. Verify on the hardware (#10).
 
@@ -251,6 +257,63 @@ and the timer's start, pause and stop are all of that kind.
 
 **Revisit when** the pilot has real users, or as soon as anyone the top bar excludes is among them —
 whichever comes first.
+
+---
+
+## ADR 0009 — The board's spare width, allocated once
+
+**Status:** accepted
+
+**Context.** The dial fills a square 600-unit viewBox on a page with nothing beside it. Three
+features want the horizontal room a widescreen board has spare, and #39 records that it should be
+allocated once rather than three times: the agenda panel (#36), floating-label distance (#30), and
+the labels' basic margin, which #21 left at 25.7 units of usable width at nine o'clock.
+
+The allocation could not be settled from the geometry alone, because the geometry has no opinion on
+how large the dial ought to be. The missing input was the deployment: **16:9 or 16:10, about 4 ft
+tall, viewed from across a classroom, and the dial may occupy between a half and two thirds of the
+width and still read.**
+
+**Decision.** The dial keeps the board's full height. It is **centred in the width that remains
+after the panel**, and the panel is **180 units wide, on the right**.
+
+**Consequences.**
+
+- **The dial never pays.** At full height it is 56.3% of a 16:9 board's width and 62.5% of a 16:10
+  board's — inside the stated range on both, with a persistent top bar and without. The legibility
+  pass (#9, #14, #16, #20) is safe by construction rather than by negotiation.
+- **Both label margins are equal**, because the dial is centred in the remainder rather than on the
+  board. That removes the per-side semi-axis #39 worked out was necessary under a board-centred
+  dial, and keeps `sin θ = 0` on centre so 12 and 6 o'clock keep vertical connectors.
+- **The locus stays a circle.** Guaranteed card width — `min(labelWidthLimit, faceClearanceLimit)`
+  minimised over the half-dial — saturates at **155.2 units, 13 chars a line, for any margin at or
+  above 75.4**. A 180-unit panel leaves 143.3 units of margin on 16:9 and 90.0 on 16:10, both past
+  the knee. Labels go from today's 8 chars a line to 13 with no change to the locus at all.
+- **#88's ellipse is not needed and should not be built.** It exists to spend a margin below the
+  knee, where the circle binds early; it buys 11 chars against the circle's 8 at today's 50.4-unit
+  margin, and *nothing* past 75.4. Granting the margin dominates it outright, and avoids the
+  band-occlusion cost (#98) that the inward optimum carries.
+- **180 is the smallest width that serves the panel's own justification.** It holds 10 characters a
+  line at 26 units, and on a 4 ft board 26 units is 53 mm — comfortable reading at 8 m by the
+  conventional distance/150 rule. That is the size at which the panel can carry the names of a
+  three-deep cluster, whose arc titles render at 6.24 units, 12.7 mm, legible to about 2 m (#70).
+- **16:10 is the binding case and the ceiling is 209 units.** Past that the margin drops below the
+  knee and the panel starts taking width from the labels one-for-one. 180 leaves 29 units of
+  headroom; anything wider should be re-measured rather than assumed.
+- **The panel holds five cards** at 26 units over three lines, seven at two lines. That confirms the
+  agenda brainstorm's estimate from the other direction, and with it that **scrolling is the general
+  display mode and whole-day the special case** (#41).
+- The narrow-display fallback (#39 item 4) is unchanged and still needs designing: as the board
+  approaches square the margin falls below the knee and the panel has to collapse or stack.
+
+**Measured, not argued** — with one exception. Everything above is arithmetic over the dial's own
+constants, and per `CLAUDE.md` none of it is evidence of *legibility* until it is rendered at board
+proportions. Two figures in particular are budgets rather than measurements: the character counts
+come from `CHAR_WIDTH_RATIO = 0.6`, which is deliberately crude, and the distance/150 rule is an AV
+signage convention rather than a measurement of these glyphs at this contrast.
+
+**Revisit when** the pilot board is up (#10) and the panel has been looked at from the back of the
+room, or if a target display falls outside 16:9–16:10.
 
 ---
 
