@@ -230,22 +230,31 @@ Not optional, and not satisfiable by tests. For any change to rendered output:
 npm run build
 ```
 
-Then serve `build/` and open `preview.html` — it resolves the HtmlService
-includes and always runs the fixture schedule in `src/client/sample-events.ts`.
-The deployed app shows the same fixture behind `?demo=1`.
+Then open `build/preview.html` — straight from disk, no server needed; it
+resolves the HtmlService includes and always runs the fixture schedule in
+`src/client/sample-events.ts`. The deployed app shows the same fixture behind
+`?demo=1`.
 
 - **Screenshot it and look.** Check the change you made *and* the things near it
   — several defects here were collisions with a neighbouring element.
 - **Cross-check numerically** by querying the DOM for the attributes you changed.
   Useful, but it is a complement to looking, not a substitute: measurement is how
   you confirm what you intended, screenshots are how you find what you did not.
-- **Exercise the hard cases the fixture already contains**: a three-deep overlap
+- **Exercise the hard cases the fixture already contains**: a four-deep overlap
   cluster, an isolated arc beside it, a ten-minute event held open by the minimum
   span, an overflowing title, a two-line title carrying an emoji, an event
   crossing each end of the period, and a `⚫` event whose colour measures 1.21:1
   on the dial background.
 - **Add a fixture case** when your change has a stress case none of those covers.
 - Put the screenshot or the measured before/after in the PR body.
+
+**For the "before" half, and for reviewing someone else's branch, CI has already
+built it.** Every run attaches `build/` as an artifact — `preview-pr-<n>` on a
+pull request, `preview-main-<sha>` on `main`, kept 14 days — uploaded before the
+checks that can fail, so even a red run leaves the picture. Grab it with
+`gh run download <run-id> -n preview-main-<sha>`, or via
+`mcp__github__actions_list` (`list_workflow_run_artifacts`), instead of building
+`main` in a second worktree.
 
 ## 9. Finalize
 

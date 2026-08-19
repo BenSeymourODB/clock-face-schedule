@@ -59,6 +59,12 @@ That last one is the sharpest lesson: the test written alongside it asserted `el
 and passed, because it used a full-band arc. **A test can encode the same wrong assumption as the
 code.** Rendering is what breaks the tie.
 
+**A state that depends on the time is not a state you have to wait for.** `?now=04:15&freeze=1`
+pins the dial's clock, on the preview and the deployed app alike; README has the parameters and a
+table of which times show which fixture states. Unpinned, the fixture has *nothing in progress* at
+any time of day, so a draining arc only appears if you ask for one — which is how a drain that
+never drained shipped through two releases.
+
 So: for any change to rendered output, `npm run build`, serve `build/preview.html`, screenshot it,
 and look. Query the DOM for the attributes you changed as a cross-check — but measurement confirms
 what you intended, and screenshots find what you did not. Look at the neighbours of what you
@@ -70,10 +76,12 @@ targeted assertion capturing the specific property that was wrong.
 ## The fixture is the stress case
 
 `src/client/sample-events.ts` drives `build/preview.html` and the deployed `?demo=1`. It deliberately
-contains a three-deep cluster, an isolated arc beside it, a ten-minute event held open by the minimum
-span, an overflowing title, a two-line title carrying an emoji, an event crossing each end of the
-period, and a `⚫` event whose colour measures **1.21:1** on the dial background. Add to it when your
-change has a stress case none of those covers; do not quietly make it easier.
+contains a four-deep cluster — as many rings as `maxRings` opens — carrying a two-line title on its
+innermost ring and one-line titles beside it, an isolated arc beside the cluster, a ten-minute event
+held open by the minimum span, an overflowing title, a two-line title carrying an emoji, an event
+crossing each end of the period, and a `⚫` event whose colour measures **1.21:1** on the dial
+background. Add to it when your change has a stress case none of those covers; do not quietly make
+it easier.
 
 A demo mode that ships to production was a deliberate call: legibility has to be judged on the smart
 board, and waiting for someone's real day to contain a useful overlap is not a plan.
