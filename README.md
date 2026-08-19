@@ -174,7 +174,7 @@ Two consequences of that anchoring worth knowing before you pin something:
   keeps the picture it already had. Only `?now=` re-anchors.
 - **A pinned time is useful in the morning, and empty by the evening.** The fixture spans 22:50 the
   previous day to 13:15, against a window of `[now − 3h, now + 8h]`, so arcs drop away through the
-  afternoon: **15** arcs at 03:00, 11 at 06:00, 6 at 09:00, 3 at 12:00, and **none from 17:00**.
+  afternoon: **16** arcs at 03:00, 11 at 06:00, 6 at 09:00, 3 at 12:00, and **none from 17:00**.
   That is what the fixture covers, not a fault in the pin — `?now=19:00` correctly shows an empty
   dial, because the fixture has nothing at seven in the evening.
 

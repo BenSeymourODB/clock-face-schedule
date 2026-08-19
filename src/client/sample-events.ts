@@ -6,11 +6,12 @@
  * judging it on the smart board, and waiting for the viewer's real day to contain a useful overlap
  * is not a plan.
  *
- * Chosen to exercise what is hardest to judge from a specification — three-deep overlap, a title
- * too long for its arc, an event short enough to need the minimum-width floor, an event crossing
- * each end of the rolling window (#25), a floating label washed with a colour the palette itself
- * fails contrast for once filled (⚫, #26/#27), and a card whose duration line is wider than its
- * title (#35).
+ * Chosen to exercise what is hardest to judge from a specification — a four-deep overlap, which is as
+ * many rings as `maxRings` will open, carrying both a two-line title and a one-line one on rings that
+ * divide the band four ways (#67), a title too long for its arc, an event short enough to need
+ * the minimum-width floor, an event crossing each end of the rolling window (#25), a floating label
+ * washed with a colour the palette itself fails contrast for once filled (⚫, #26/#27), and a card
+ * whose duration line is wider than its title (#35).
  *
  * Anchored to `windowStart` — the rolling window's own leading edge — rather than a fixed
  * `periodStart`, so the whole fixture lands inside whatever window is live the moment demo mode
@@ -31,10 +32,23 @@ export function sampleEvents(windowStart: Date): ClockEventInput[] {
   return [
     // Already running when the window began — its leading end is the window's, not the event's.
     { id: "z", title: "⚪ Breakfast Club", startDate: at(-1, 10), endDate: at(0, 20), isAllDay: false, fallbackColor },
-    // Three deep between 01:00 and 02:00.
+    // Four deep between 01:45 and 02:00 — the deepest stack the dial will open, so the rings here are
+    // the thinnest it ever draws (15.56 units of a 75.92 band) and the case #67 and #70 are both about.
+    // Was three deep; the fourth member is what makes the preview reach the geometry #67 added, since
+    // a three-deep ring has room for a two-line stack without the cap binding.
     { id: "a", title: "🟢 🎮 Game Time", startDate: at(0, 30), endDate: at(2, 0), isAllDay: false, fallbackColor },
     { id: "b", title: "🔴 Deadline", startDate: at(1, 0), endDate: at(3, 0), isAllDay: false, fallbackColor },
-    { id: "c", title: "🟣 Study", startDate: at(1, 30), endDate: at(2, 30), isAllDay: false, fallbackColor },
+    // A **one-line title on a four-deep ring**: 36 visual units against its ring's 48-character
+    // budget. It keeps the full 4.36-unit font, because one line has radial room to spare — the room a
+    // line that is not drawn does not get to take (#67).
+    { id: "c", title: "🟣 Study Skills and Exam Revision Group", startDate: at(1, 30), endDate: at(2, 30), isAllDay: false, fallbackColor },
+    // Innermost of the four, and the fixture's only **two-line title on a stacked ring** — every other
+    // wrapping title here is on a lone arc, so nothing exercised text sized from a divided band
+    // against an outline sized from the whole of it (#67). 45 visual units against the 44 its ring
+    // gives, so it wraps by one word; well inside the 88 two lines can carry, so it stays on the arc
+    // rather than overflowing to a card. This is the arc where the clearance cap binds: the stack
+    // wants 4.58 units of half-height in the 4.12 the outline leaves, so the font yields to 3.93.
+    { id: "k", title: "🟠 Swimming Group B Kit Check and Coach Handover", startDate: at(1, 45), endDate: at(2, 45), isAllDay: false, fallbackColor },
     // Overlaps nothing — should keep the whole band despite the cluster above. Ends 55 minutes
     // before "j" starts, deliberately, so the stretch between them is empty *and inside* the
     // window — the one stress case the window-track (#25) exists to distinguish from the gap.

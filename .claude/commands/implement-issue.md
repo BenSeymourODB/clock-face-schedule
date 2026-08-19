@@ -240,7 +240,7 @@ resolves the HtmlService includes and always runs the fixture schedule in
 - **Cross-check numerically** by querying the DOM for the attributes you changed.
   Useful, but it is a complement to looking, not a substitute: measurement is how
   you confirm what you intended, screenshots are how you find what you did not.
-- **Exercise the hard cases the fixture already contains**: a three-deep overlap
+- **Exercise the hard cases the fixture already contains**: a four-deep overlap
   cluster, an isolated arc beside it, a ten-minute event held open by the minimum
   span, an overflowing title, a two-line title carrying an emoji, an event
   crossing each end of the period, and a `⚫` event whose colour measures 1.21:1
