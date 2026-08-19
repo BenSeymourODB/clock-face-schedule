@@ -14,7 +14,8 @@ jobs:
   quality-gate:
     name: quality-gate
     runs-on: ubuntu-latest
-    # Checkout, install, and npm scripts. Nothing here writes to the repository.
+    # Checkout, install, and npm scripts. Nothing here writes to the repository — the artifact
+    # upload goes through the runner's own token, not GITHUB_TOKEN, so it needs nothing added here.
     permissions:
       contents: read
     # The gate runs in about a minute; the realistic failure is a hang, not a slow run.
@@ -33,6 +34,22 @@ jobs:
       - run: npm ci
 
       - run: npm run build
+
+      # `build/preview.html` is what "render before you believe it works" names, and the runner
+      # would otherwise delete it. Kept here, directly after the build and *before* the checks
+      # that can fail: a red suite is a reason to look at the dial, not a reason to be denied the
+      # picture. Anything after `npm test` would be skipped in exactly that case.
+      #
+      # Named per source so two downloads can be told apart; `github.sha` on a pull_request run is
+      # the ephemeral merge commit, hence the PR number there. `main` gets one too, so a rendered
+      # before/after costs no checkout either.
+      - name: Keep the built preview for visual review
+        uses: actions/upload-artifact@v7
+        with:
+          name: preview-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || format('main-{0}', github.sha) }}
+          path: build/
+          retention-days: 14
+          if-no-files-found: error
 
       - run: npm run check-types
 

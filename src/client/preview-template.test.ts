@@ -11,6 +11,7 @@
  */
 import { describe, expect, it } from "vitest";
 import indexTemplate from "../../static/Index.html?raw";
+import stylesTemplate from "../../static/Styles.html?raw";
 import { readClockPin } from "./clock-pin";
 
 /** The strip pass from `scripts/build.mjs` — kept in step with it by hand. */
@@ -38,5 +39,33 @@ describe("the stripped Index template", () => {
 
     expect(pin?.origin.getHours()).toBe(4);
     expect(pin?.frozen).toBe(true);
+  });
+});
+
+/**
+ * Everything the page needs arrives through `include()`, which is what leaves the resolved preview
+ * a single self-contained file — openable from `file://`, and so reviewable straight out of CI's
+ * build artifact with no checkout and no local server (#100).
+ *
+ * A `<script src>`, a stylesheet `<link>` or a webfont `@import` would keep working on the deployed
+ * app and keep every other test here green, while quietly making a downloaded preview depend on a
+ * network the reviewer may not have. Inline `data:` payloads are fine — they travel with the file.
+ */
+const SUBRESOURCE = [
+  ["a script from elsewhere", /<script[^>]*\ssrc\s*=/i],
+  ["a linked stylesheet or icon", /<link[^>]*\shref\s*=/i],
+  ["an image or media file", /<(?:img|image|video|audio|source|iframe|embed)[^>]*\ssrc\s*=/i],
+  ["a CSS import", /@import/i],
+  ["a CSS url() that is not inline data", /url\(\s*['"]?(?!data:)/i],
+] as const;
+
+describe("the preview's self-containment", () => {
+  it.each([
+    ["Index.html", indexTemplate],
+    ["Styles.html", stylesTemplate],
+  ])("%s fetches nothing of its own", (_file, source) => {
+    for (const [what, pattern] of SUBRESOURCE) {
+      expect(source, `loads ${what}`).not.toMatch(pattern);
+    }
   });
 });
