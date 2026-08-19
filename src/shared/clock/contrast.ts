@@ -175,3 +175,54 @@ export function adjustForContrast(
 
   return compositeOver(color, target, hi) ?? target;
 }
+
+/**
+ * How much of `tint` has to be over `background` before `tintText` overtakes `baseText` — as a
+ * fraction of `alpha`, 0–1.
+ *
+ * The case is a fill that ramps in rather than arriving all at once: a draining arc's seam (#28) runs
+ * from bare band to full fill across a few degrees, and a title crossing it has one ground at each
+ * end. Splitting the text at the seam's midpoint is wrong, because that is not where the two colours
+ * change places — measured on the fixture, black text where the fill had barely begun sat on a ground
+ * it cleared **1.09:1** against, which is a letter missing from the middle of the title.
+ *
+ * Returns the tie, where the two candidates are equally legible on the blend. Split there and the
+ * worst contrast anywhere across the ramp is as high as it can be made — for the palette, 4.37:1
+ * against 2.35:1 for either colour used alone. Note what that means: the tie *is* the max-min, so a
+ * seam cannot be made to clear AA by moving the split. Only a different pair of colours could, and
+ * the pair here is fixed by the theme (ADR 0007).
+ *
+ * Both candidates are passed in rather than derived, because the caller paints a theme token and not
+ * the pure white `readableTextColor` would pick: deriving them put the tie 0.03–0.10 of the ramp
+ * away from where the painted pair actually crosses.
+ *
+ * Contrast against the blend is monotonic in coverage for each candidate, so the crossing is unique
+ * and a binary search finds it. Returns 1 when there is no crossing — `tintText` never overtakes, or
+ * a colour will not parse — which a caller should read as "this pair needs no split at all".
+ */
+export function textFlipCoverage(
+  background: string,
+  tint: string,
+  alpha: number,
+  baseText: string,
+  tintText: string
+): number {
+  const flipped = (coverage: number): boolean => {
+    const ground = compositeOver(background, tint, alpha * coverage);
+    if (ground === null) return false;
+
+    const base = contrastRatio(baseText, ground);
+    const over = contrastRatio(tintText, ground);
+    return base !== null && over !== null && over >= base;
+  };
+
+  let lo = 0;
+  let hi = 1;
+  for (let step = 0; step < BLEND_SEARCH_STEPS; step += 1) {
+    const mid = (lo + hi) / 2;
+    if (flipped(mid)) hi = mid;
+    else lo = mid;
+  }
+
+  return hi;
+}

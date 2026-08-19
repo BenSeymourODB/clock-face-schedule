@@ -7,7 +7,18 @@
   </head>
   <body>
     <main id="display">
-      <div id="dial"<? if (showDemo) { ?> data-demo="1"<? } ?>></div>
+      <!--
+        The pin's two attributes are emitted unconditionally with a templated *value*, not wrapped
+        in a `<? if ?>` guard the way data-demo is. The preview builder strips scriptlets while
+        keeping what they guard — which is how demo mode is always on in the preview — so a guarded
+        `data-freeze="1"` would freeze every preview permanently. Templated values strip to "",
+        which the client reads as absent and falls back to its own query string.
+      -->
+      <div
+        id="dial"<? if (showDemo) { ?> data-demo="1"<? } ?>
+        data-now="<?= pinnedNow ?>"
+        data-freeze="<?= freezeClock ?>"
+      ></div>
       <p id="status" role="status" hidden></p>
     </main>
 
