@@ -379,13 +379,9 @@ export function eventArc({
   // colour a viewer does: the fill itself, the title `readableTextColor` picks against it, and the
   // ground the drain seam splits the title on. The authored `color` is kept for the elapsed
   // outline, which is #27's and derives from the authored hex — floored, it moves by one 8-bit step
-  // (⚫ `#747b83` → `#747b84`), so the elapsed state does not notice this change at all.
-  const fillColor = adjustCompositeForContrast(
-    color,
-    BAND_BACKGROUND,
-    ARC_FILL_OPACITY,
-    FILL_MIN_CONTRAST
-  );
+  // (⚫ `#7b8189` → `#7a8189`, against `DIAL_BACKGROUND` as that call still measures), so the
+  // elapsed state does not notice this change at all.
+  const fillColor = arcFillColor(color);
 
   const arcSpan = endAngle - startAngle;
   const midAngle = (startAngle + endAngle) / 2;

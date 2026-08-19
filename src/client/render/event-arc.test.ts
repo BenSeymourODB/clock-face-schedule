@@ -138,8 +138,13 @@ describe("eventArc", () => {
       });
 
       it("leaves the elapsed outline reading the authored colour, not the floored one", () => {
-        // The two are one 8-bit step apart (⚫ `#747b83` against `#747b84`), so the elapsed state
-        // does not notice this change — and the outline is #27/#74's to move, not this one's.
+        // The two are one 8-bit step apart (⚫ `#7b8189` against `#7a8189`, measured against
+        // `DIAL_BACKGROUND` as that call still does), so the elapsed state does not notice this
+        // change — and the outline is #27/#74's to move, not this one's.
+        //
+        // Pinned as a literal rather than as `adjustForContrast(color, DIAL_BACKGROUND, 4.5)`,
+        // which is the same call with the same arguments the renderer makes: that would agree with
+        // any ground or floor the renderer drifted to, which is the failure mode #74 was.
         const color = "#1F2937";
         const group = eventArc({
           event: makeEvent({ color }),
@@ -150,9 +155,12 @@ describe("eventArc", () => {
           isElapsed: true,
         });
 
-        expect(
-          group.querySelector('[data-testid="event-arc-outline-e1"]')?.getAttribute("stroke")
-        ).toBe(adjustForContrast(color, DIAL_BACKGROUND, 4.5));
+        const stroke = group
+          .querySelector('[data-testid="event-arc-outline-e1"]')
+          ?.getAttribute("stroke");
+
+        expect(stroke).toBe("#7b8189");
+        expect(stroke).not.toBe(adjustForContrast(arcFillColor(color), DIAL_BACKGROUND, 4.5));
       });
     });
 

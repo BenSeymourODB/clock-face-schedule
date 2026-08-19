@@ -26,6 +26,29 @@ function hue(color: string): number | undefined {
   return h * 60;
 }
 
+/**
+ * The other twelve colours the dial can be handed: Google's own event palette (`EVENT_COLORS` in
+ * `map-event.ts`, keyed by the ordinal `CalendarEvent.getColor()` returns) and the fallback.
+ *
+ * Kept beside `PALETTE` because the claim #66 rests on is about *every* colour that can reach an
+ * arc, not only the nine a colour-dot selects — and an event with no dot in its title takes one of
+ * these. They are all light, so none of them moves; that is the point of asserting it.
+ */
+const CALENDAR_PALETTE = [
+  ["Lavender", "#a4bdfc"],
+  ["Sage", "#7ae7bf"],
+  ["Grape", "#dbadff"],
+  ["Flamingo", "#ff887c"],
+  ["Banana", "#fbd75b"],
+  ["Tangerine", "#ffb878"],
+  ["Peacock", "#46d6db"],
+  ["Graphite", "#e1e1e1"],
+  ["Blueberry", "#5484ed"],
+  ["Basil", "#51b749"],
+  ["Tomato", "#dc2127"],
+  ["the fallback", "#3b82f6"],
+] as const;
+
 /** Every colour a title can land on via a colour-dot emoji prefix. */
 const PALETTE = [
   ["🔴 red", "#EF4444"],
@@ -244,7 +267,7 @@ describe("adjustCompositeForContrast", () => {
     it.each([
       ["⚫ near-black", "#1F2937", 1.25],
       ["🟤 brown", "#92400E", 2.28],
-    ])("%s painted at %d:1 before, and clears the floor after", (_name, color, before) => {
+    ])("%s painted at %f:1 before, and clears the floor after", (_name, color, before) => {
       expect(painted(color)).toBeCloseTo(before, 2);
 
       const floored = adjustCompositeForContrast(color, BAND, ARC_FILL_OPACITY, AA_GRAPHICAL_OBJECT);
@@ -277,7 +300,11 @@ describe("adjustCompositeForContrast", () => {
     // Why the floor is the graphical one and not #27's 4.5. `readableTextColor`'s crossover for ⚫
     // sits at a floor of 3.34:1; flooring at 3.5 or at #27's 4.5 flips its title to black, which
     // makes the change a redesign of the filled state rather than one attribute moving.
-    for (const [, color] of PALETTE) {
+    //
+    // Over all 21 colours the dial can be handed, not only the nine colour-dots: the claim in
+    // #66's plan is that the floor moves ⚫ and 🟤 and nothing else, and twelve of the twenty-one
+    // are Google's, which no other spec here covers.
+    for (const [, color] of [...PALETTE, ...CALENDAR_PALETTE]) {
       const floored = adjustCompositeForContrast(color, BAND, ARC_FILL_OPACITY, AA_GRAPHICAL_OBJECT);
 
       expect(readableTextColor(floored)).toBe(readableTextColor(color));
@@ -286,6 +313,19 @@ describe("adjustCompositeForContrast", () => {
     expect(
       readableTextColor(adjustCompositeForContrast("#1F2937", BAND, ARC_FILL_OPACITY, 3.5))
     ).toBe("#000000");
+  });
+
+  it("moves ⚫ and 🟤, and leaves the other nineteen byte-identical", () => {
+    // The other half of the same claim, and the one that stops the floor quietly becoming a
+    // restyle: a change that lightened the whole dial would still pass every ratio assertion here.
+    const moved = [...PALETTE, ...CALENDAR_PALETTE]
+      .filter(
+        ([, color]) =>
+          adjustCompositeForContrast(color, BAND, ARC_FILL_OPACITY, AA_GRAPHICAL_OBJECT) !== color
+      )
+      .map(([name]) => name);
+
+    expect(moved).toEqual(["⚫ near-black", "🟤 brown"]);
   });
 
   it("darkens toward black on a light ground instead", () => {
@@ -297,6 +337,39 @@ describe("adjustCompositeForContrast", () => {
       contrastRatio(compositeOver("#ffffff", floored, ARC_FILL_OPACITY)!, "#ffffff")
     ).toBeGreaterThanOrEqual(3);
     expect(relativeLuminance(floored)!).toBeLessThan(relativeLuminance(pale)!);
+  });
+
+  describe("picks the extreme that reaches furthest, measured rather than inferred", () => {
+    /** Whichever of black and white gets further from `ground` once painted at `alpha`. */
+    const bestReach = (ground: string, alpha: number) =>
+      Math.max(
+        contrastRatio(compositeOver(ground, "#ffffff", alpha)!, ground)!,
+        contrastRatio(compositeOver(ground, "#000000", alpha)!, ground)!
+      );
+
+    it.each([
+      // A ground just past the black/white crossover (0.1791) but far below 0.5, where a luminance
+      // threshold at 0.5 picks white: white tops out at 3.78:1 here and black reaches 4.12:1, so a
+      // 4:1 floor is reachable and the threshold misses it outright.
+      ["#767676", 0.85, 4],
+      ["#808080", 0.85, 4],
+      ["#949494", 0.85, 4],
+      ["#b0b0b0", 0.85, 4],
+      // And the case a *full-strength* comparison gets wrong: contrast is not linear in luminance,
+      // so on a saturated ground the extreme that wins at alpha 1 can lose at alpha 0.25.
+      ["#a30bc2", 0.248, 1.45],
+      ["#dc0416", 0.563, 2.4],
+    ])("clears a reachable floor on %s at alpha %f", (ground, alpha, floor) => {
+      // The property, not the mechanism: whenever *some* variant can clear the floor, the returned
+      // one does. A test that asserted "blends toward white on a dark ground" would encode the same
+      // rule the code uses and pass on every wrong rule the code could hold.
+      expect(bestReach(ground, alpha)).toBeGreaterThanOrEqual(floor);
+
+      const floored = adjustCompositeForContrast("#1F2937", ground, alpha, floor);
+      expect(
+        contrastRatio(compositeOver(ground, floored, alpha)!, ground)
+      ).toBeGreaterThanOrEqual(floor);
+    });
   });
 
   it("floors an arbitrary calendar colour no table could enumerate", () => {

@@ -200,8 +200,27 @@ export function adjustForContrast(
  * Shares `adjustForContrast`'s search and its guarantees: blends toward the ground's far extreme by
  * the smallest fraction that clears the ratio, so hue survives and a colour already clearing the
  * floor is returned untouched; returns the extreme where even that cannot clear `minRatio`; returns
- * `color` unchanged for anything unparseable. At `alpha` of 1 it *is* `adjustForContrast` — the
- * composite is the colour — which the spec asserts rather than assumes.
+ * `color` unchanged for anything unparseable. At `alpha` of 1 the composite *is* the colour, so on
+ * any ground where the two agree on a blend target it reduces exactly to `adjustForContrast` — which
+ * the spec asserts rather than assumes, over the palette and the ground the dial actually uses.
+ *
+ * "Far extreme" is measured, not inferred from the ground's luminance. Two ways of inferring it are
+ * both wrong, and both were tried here:
+ *
+ * - **Thresholding luminance at 0.5**, which `adjustForContrast` does. Black and white change places
+ *   at luminance **0.1791**, not 0.5, so every ground between the two — mid-greys, and any light
+ *   theme that is not near-white (#81) — gets white picked when black reaches further. Not merely a
+ *   worse blend: on `#767676` at 0.85, white tops out at 3.78:1 while black reaches 4.12:1, so a 4:1
+ *   floor is reachable and the threshold misses it outright.
+ * - **Asking `readableTextColor`**, which compares the two properly — but at *full* strength. The
+ *   comparison does not survive `alpha`: contrast is not linear in luminance, so on a saturated
+ *   ground the extreme that wins at 1.0 can lose at 0.25. Measured over 20,000 random cases, that
+ *   substitution still missed a reachable floor 122 times; comparing the two *painted* misses none.
+ *
+ * So the target is whichever extreme reaches further **once painted at this alpha**, which is the
+ * only version of the question the caller actually has. `adjustForContrast` keeps the 0.5 threshold
+ * and its latent bug; it is not corrected here because its one caller measures against a ground far
+ * below the crossover, where every rule above agrees. See #95.
  */
 export function adjustCompositeForContrast(
   color: string,
@@ -209,8 +228,7 @@ export function adjustCompositeForContrast(
   alpha: number,
   minRatio: number = DEFAULT_MIN_CONTRAST
 ): string {
-  const backgroundLuminance = relativeLuminance(background);
-  if (backgroundLuminance === null) return color;
+  if (relativeLuminance(background) === null) return color;
 
   /** The ratio a viewer sees for `candidate` painted at `alpha`, or null if it will not parse. */
   const painted = (candidate: string): number | null => {
@@ -222,7 +240,7 @@ export function adjustCompositeForContrast(
   if (current === null) return color;
   if (current >= minRatio) return color;
 
-  const target = backgroundLuminance < 0.5 ? WHITE : BLACK;
+  const target = (painted(WHITE) ?? 0) >= (painted(BLACK) ?? 0) ? WHITE : BLACK;
   if ((painted(target) ?? 0) < minRatio) return target;
 
   let lo = 0;
