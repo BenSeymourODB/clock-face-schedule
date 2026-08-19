@@ -161,3 +161,43 @@ The shape of it is worth keeping: **`normaliseAngle` now exists precisely so thi
 decision has one home.** Angles stay unnormalised everywhere else, deliberately (#33) — but "which
 direction does this point" and "where does this sit" are different questions, and four separate
 places had been answering the first with the second's number.
+
+## Merging main, and the one conflict that was a decision
+
+`main` moved on while this was in review: #62 landed the recurring fixture, #82 the preference wire,
+#72 the clock pin. Four of the five conflicts were additive. The fifth was the `?demo=1` block —
+`main` tiles copies of one fixture, this branch picked a fixture and a window by scale, and there is
+no version that keeps both.
+
+**Made the recurrence scale-aware** rather than leaving the 1-hour demo anchored once, because the
+1-hour window is the case that needs recurrence most. Measured on a single copy:
+
+| minutes after load | arcs still in view |
+| --- | --- |
+| 0 | 9 |
+| 3 — the elapsed one has gone | 8 |
+| 50 | 1 |
+| 70 | 0 |
+
+Against about thirteen hours for the 12-hour fixture. Leaving it anchored would have shipped a demo
+mode that empties itself while still captioned "Sample events".
+
+`DemoFixture` bundles a fixture with the bounds derived from it, so one piece of tiling arithmetic
+serves both without either carrying the other's numbers — and the period stays *derived*, which is
+the property that makes consecutive copies abut and the seam add no concurrency. `fixtureAnchor`
+takes the scale for the same reason: "the window's own leading edge" is `now − 3h` on one dial and
+`now − 5min` on the other.
+
+**Two claims made earlier in this branch were wrong, and are corrected rather than restated.** The
+1-hour dial does not empty "inside the hour" — it holds one arc until seventy minutes. And tiling
+restores the *states* a viewer needs, not the individual arcs: `p` itself does not come back for
+another 78 minutes, so a test asserting that it did would have been asserting something this design
+does not do. Both were caught by writing the assertion and watching it fail.
+
+## Found while merging, filed rather than folded in
+
+**#107 — a hand's halo erases half the AM/PM indicator.** Every hand is drawn with a `var(--card)`
+halo under it, and the indicator is appended *before* the halos, so a hand crossing it does not
+overlap the text but erases it. The stripe is 13.29 units of a 31.77-unit word, for roughly an hour
+a day. Byte-identical to `main` — the indicator's position and the halo are untouched here — but
+visible in both scale modes, and worth knowing that neither obvious fix works.
