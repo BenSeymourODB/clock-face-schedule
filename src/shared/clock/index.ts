@@ -1,4 +1,6 @@
 export {
+  INK_HEIGHT_RATIO,
+  TITLE_EDGE_CLEARANCE,
   TITLE_FONT_SIZE_RATIO,
   TITLE_LINE_OFFSET_RATIO,
   TITLE_RADIUS_RATIO,
@@ -35,6 +37,7 @@ export {
   roundCoord
 } from './clock-utils';
 export {
+  adjustCompositeForContrast,
   adjustForContrast,
   compositeOver,
   contrastRatio,

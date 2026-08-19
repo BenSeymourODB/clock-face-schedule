@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
+  INK_HEIGHT_RATIO,
+  TITLE_EDGE_CLEARANCE,
   TITLE_FONT_SIZE_RATIO,
   TITLE_LINE_OFFSET_RATIO,
   TITLE_RADIUS_RATIO,
@@ -104,6 +106,205 @@ describe('computeArcTitleLayout', () => {
     });
   });
 
+  /**
+   * The clearance nothing used to check (#67). An elapsed arc's outline is sized from the whole
+   * band, deliberately (#26), while the text is sized from this arc's own ring — two quantities that
+   * move independently, compared against each other nowhere. At the 0.12 halo #27 retired, a
+   * two-line stack three deep cleared the stroke by 0.03 units and four deep by −1.35; at today's
+   * 0.07 outline it clears by 1.93 and 0.55, so the only thing standing between the text and the
+   * stroke is a constant that changed for an unrelated reason.
+   *
+   * These cases assert the property rather than the numbers: whatever the caller strokes on the
+   * ring's edges, both lines stay `TITLE_EDGE_CLEARANCE` clear of it.
+   */
+  describe('clearing what is stroked on the ring edges', () => {
+    /** One ring of a `depth`-deep cluster on a dial of `size`, as `analog-clock.ts` derives it. */
+    function ring(size: number, depth: number) {
+      const outerRadius = size / 2 - 8;
+      const band = outerRadius * 0.26;
+      const gap = depth > 1 ? Math.max(2, band * 0.06) : 0;
+      const thickness = (band - (depth - 1) * gap) / depth;
+
+      return {
+        innerRadius: outerRadius - thickness,
+        outerRadius,
+        // The elapsed outline: `ELAPSED_BORDER_RATIO` of the band, capped by the ring, floored at 1.
+        edgeStrokeWidth: Math.max(1, Math.min(band * 0.07, thickness * 0.4))
+      };
+    }
+
+    /**
+     * A title that really wraps onto two lines on this ring, and really fits — two words that each
+     * fit a line alone and cannot share one.
+     *
+     * Derived rather than written out because the budget moves with the ring: a fixed string is a
+     * two-line case on a thin ring and a truncated one-line case on a thick one, and a truncated
+     * title is a configuration the dial never draws on the arc (it routes to a floating label).
+     */
+    function wrappingTitle(shape: ReturnType<typeof ring>, arcSpan: number): string {
+      const probe = computeArcTitleLayout({ ...shape, title: 'x', arcSpan });
+      const budget = arcCharBudget(arcSpan, probe.titleRadius, probe.titleFontSize);
+      const word = 'a'.repeat(Math.max(1, Math.floor(budget / 2) + 1));
+
+      return `${word} ${word}`;
+    }
+
+    /** How far the outward and inward lines fall short of the stroke's near edge. */
+    function clearances(shape: ReturnType<typeof ring>, title: string, arcSpan: number) {
+      const { titleRadius, titleFontSize, lineOffset, fit } = computeArcTitleLayout({
+        ...shape,
+        title,
+        arcSpan
+      });
+      // Keyed on the lines drawn, which is what the cap is keyed on too.
+      const reach = (fit.lines.length >= 2 ? lineOffset : 0) + titleFontSize / 2;
+      const strokeReach = shape.edgeStrokeWidth / 2;
+
+      return {
+        outward: shape.outerRadius - strokeReach - (titleRadius + reach),
+        inward: titleRadius - reach - (shape.innerRadius + strokeReach),
+        titleFontSize,
+        fit
+      };
+    }
+
+    const depths = [1, 2, 3, 4];
+    const sizes = [300, 600, 900];
+    const cases = sizes.flatMap((size) => depths.map((depth): [number, number] => [size, depth]));
+
+    it.each(cases)('at size %i, %i deep, a two-line title clears both edges', (size, depth) => {
+      const shape = ring(size, depth);
+      const { outward, inward, fit } = clearances(shape, wrappingTitle(shape, 60), 60);
+
+      // The premise: two lines that fit, not a truncated one-liner.
+      expect(fit.lines).toHaveLength(2);
+      expect(fit.didOverflow).toBe(false);
+
+      expect(outward).toBeGreaterThanOrEqual(TITLE_EDGE_CLEARANCE);
+      expect(inward).toBeGreaterThanOrEqual(TITLE_EDGE_CLEARANCE);
+    });
+
+    it.each(cases)('at size %i, %i deep, a one-line title clears both edges', (size, depth) => {
+      const { outward, inward, fit } = clearances(ring(size, depth), 'Lunch', 60);
+
+      expect(fit.lines).toHaveLength(1);
+      expect(outward).toBeGreaterThanOrEqual(TITLE_EDGE_CLEARANCE);
+      expect(inward).toBeGreaterThanOrEqual(TITLE_EDGE_CLEARANCE);
+    });
+
+    it('holds for a stroke wider than the renderer would draw today', () => {
+      // The stroke is the caller's to choose and has been half again this wide inside this repo's own
+      // history (#26's halo, 0.12 of the band), so the guarantee has to survive a change to it rather
+      // than depend on one. 9.11 units on a 22.27 ring is past what `ELAPSED_STROKE_MAX_RATIO` would
+      // permit, which makes it a fat-stroke case rather than a replay of that halo.
+      const shape = ring(600, 3);
+      const fat = { ...shape, edgeStrokeWidth: shape.outerRadius * 0.26 * 0.12 };
+
+      expect(clearances(fat, wrappingTitle(fat, 60), 60).outward).toBeGreaterThanOrEqual(
+        TITLE_EDGE_CLEARANCE
+      );
+    });
+
+    it('holds for a single line on an arc too narrow for two', () => {
+      const shape = { ...ring(600, 4), edgeStrokeWidth: 12 };
+      const { outward, inward } = clearances(shape, 'Study', TWO_LINE_MIN_SPAN_DEGREES - 1);
+
+      expect(outward).toBeGreaterThanOrEqual(TITLE_EDGE_CLEARANCE);
+      expect(inward).toBeGreaterThanOrEqual(TITLE_EDGE_CLEARANCE);
+    });
+
+    it.each([[1], [2], [3]])(
+      'leaves a two-line font at the ring ratio where the stroke leaves room (%i deep)',
+      (depth) => {
+        const shape = ring(600, depth);
+        const arcHeight = shape.outerRadius - shape.innerRadius;
+
+        expect(clearances(shape, wrappingTitle(shape, 60), 60).titleFontSize).toBeCloseTo(
+          arcHeight * TITLE_FONT_SIZE_RATIO,
+          2
+        );
+      }
+    );
+
+    it('takes a two-line font no lower than the stroke demands', () => {
+      // Four deep at size 600 is the case that binds: 4.12 units of usable half-height against a
+      // stack wanting 4.58. Yielding more than that would cost legibility for nothing.
+      const shape = ring(600, 4);
+      const arcHeight = shape.outerRadius - shape.innerRadius;
+      const usableHalf = arcHeight / 2 - (shape.edgeStrokeWidth / 2 + TITLE_EDGE_CLEARANCE);
+      const { titleFontSize } = clearances(shape, wrappingTitle(shape, 60), 60);
+
+      expect(titleFontSize).toBeLessThan(arcHeight * TITLE_FONT_SIZE_RATIO);
+      expect(titleFontSize).toBeCloseTo(usableHalf / (TITLE_LINE_OFFSET_RATIO + 0.5), 1);
+    });
+
+    /**
+     * The room a line that is not drawn does not get to take. Charging the two-line reach to every
+     * arc wider than `TWO_LINE_MIN_SPAN_DEGREES` cost a one-line title 10% of its size four deep at
+     * size 600 and 33% at size 300, on the rings that can least afford it (#70).
+     */
+    it.each([
+      [600, 4],
+      [300, 3],
+      [300, 4]
+    ])('does not shrink a one-line title at size %i, %i deep', (size, depth) => {
+      const shape = ring(size, depth);
+      const arcHeight = shape.outerRadius - shape.innerRadius;
+      const single = computeArcTitleLayout({ ...shape, title: 'Lunch', arcSpan: 60 });
+      const stacked = computeArcTitleLayout({
+        ...shape,
+        title: wrappingTitle(shape, 60),
+        arcSpan: 60
+      });
+
+      expect(single.fit.lines).toHaveLength(1);
+      expect(single.titleFontSize).toBeCloseTo(arcHeight * TITLE_FONT_SIZE_RATIO, 2);
+      // …and the two-line case on the same ring is the one that yields.
+      expect(stacked.titleFontSize).toBeLessThan(single.titleFontSize);
+    });
+
+    /**
+     * Overflow routing is the dial's decision about whether a title goes on the band at 3.93 units or
+     * onto a floating card at 17.52, and the cap must not move it: a smaller font is a *larger*
+     * character budget, so packing against the capped size would quietly keep borderline titles on
+     * the band. Whether cluster titles belong there at all is #70's question, not this one's.
+     */
+    it('packs against the ring font, so the cap cannot change what overflows', () => {
+      const shape = ring(600, 4);
+      const title = wrappingTitle(shape, 60);
+      const withStroke = computeArcTitleLayout({ ...shape, title, arcSpan: 60 });
+      const withNone = computeArcTitleLayout({ ...shape, edgeStrokeWidth: 0, title, arcSpan: 60 });
+
+      // Same lines, same didOverflow — the stroke moves how large the text is drawn, never what fits.
+      expect(withStroke.fit).toEqual(withNone.fit);
+      expect(withStroke.titleFontSize).toBeLessThan(withNone.titleFontSize);
+    });
+
+    it('keeps lineOffset at TITLE_LINE_OFFSET_RATIO of whatever font it resolved', () => {
+      const shape = ring(600, 4);
+      const layout = computeArcTitleLayout({
+        ...shape,
+        title: wrappingTitle(shape, 60),
+        arcSpan: 60
+      });
+
+      expect(layout.lineOffset).toBeCloseTo(layout.titleFontSize * TITLE_LINE_OFFSET_RATIO, 6);
+    });
+
+    it('is a no-op when nothing is stroked on the edges', () => {
+      const shape = ring(600, 4);
+      const arcHeight = shape.outerRadius - shape.innerRadius;
+      const bare = { ...shape, edgeStrokeWidth: 0 };
+      const layout = computeArcTitleLayout({
+        ...bare,
+        title: wrappingTitle(bare, 60),
+        arcSpan: 60
+      });
+
+      expect(layout.titleFontSize).toBeCloseTo(arcHeight * TITLE_FONT_SIZE_RATIO, 2);
+    });
+  });
+
   // The dial computes this once and shares it with both the arc and the floating
   // label. Were the two to compute independently and disagree, an event would render
   // its title twice or not at all — so determinism is the contract, not an incidental.
@@ -111,6 +312,31 @@ describe('computeArcTitleLayout', () => {
     const a = computeArcTitleLayout({ ...baseInput, arcSpan: 45 });
     const b = computeArcTitleLayout({ ...baseInput, arcSpan: 45 });
     expect(a).toEqual(b);
+  });
+});
+
+/**
+ * #78. Every radial clearance on the band used to be measured to the em box — `±fontSize / 2`,
+ * which is what `dominant-baseline: central` centres, and not what the text covers. Ink measured in
+ * the preview's Chromium reaches 0.596 em either side of the anchor, so a stack whose baselines sat
+ * 1.10 em apart overlapped itself by 0.09 em: 1.96 units on the fixture's lone arcs, on every
+ * two-line title the dial has ever drawn. A full green suite never saw it, because nothing asserted
+ * the separation the comment claimed.
+ */
+describe('stacked line separation', () => {
+  it('leaves the two lines of a stack clear of each other at real ink heights', () => {
+    const baselineGap = 2 * TITLE_LINE_OFFSET_RATIO;
+
+    expect(baselineGap).toBeGreaterThan(INK_HEIGHT_RATIO);
+  });
+
+  it('is derived from ink rather than from the em box', () => {
+    // 0.55 is what the em box gives: half of 1 em, plus half the same 0.1 em of intended slack.
+    // Naming it here means a drift back to that value fails, which asserting `2 × 0.55 < 1.2`
+    // would not — that compares two literals and holds whatever the ratio is.
+    const emBoxDerived = (1 + 0.1) / 2;
+
+    expect(TITLE_LINE_OFFSET_RATIO).toBeGreaterThan(emBoxDerived);
   });
 });
 
@@ -224,16 +450,16 @@ describe('fitDurationLine', () => {
    * The radial gate, which is about not drawing text on a stroke and moves independently of the
    * legibility one. An elapsed arc's outline is sized from the whole *band* so its weight does not
    * thin with overlap depth (#26); the text is sized from this arc's own *ring*. Pushing a one-line
-   * title onto the two-line radii closes the gap between them — to 1.93 units three deep and 0.55
-   * four deep at today's 0.07 outline, and to **0.03** three deep at the 0.12 the neutral halo used
-   * before #27 retired it. Rendering the fixture at 04:15 with that halo still in place is what found
-   * it: "🎮 Game Time / 1 hr 30" sat on the elapsed outline of its own arc.
+   * title onto the two-line radii closes the gap between them — measured against real ink rather
+   * than the em box (#78), to 0.68 units three deep and −0.32 four deep at today's 0.07 outline.
+   * Rendering the fixture at 04:15 with the neutral halo #27 later retired is what found it:
+   * "🎮 Game Time / 1 hr 30" sat on the elapsed outline of its own arc.
    */
   describe('clearing what is stroked on the ring edges', () => {
     it.each([
       [1, '2 hr'],
       [2, '2 hr'],
-      [3, '2 hr'],
+      [3, undefined],
       [4, undefined]
     ])('at %i deep, band aside → %s', (depth, expected) => {
       expect(fitDurationLine({ ...ringAlone(depth), durationMinutes: 120, arcSpan: 60 })).toBe(
@@ -241,12 +467,27 @@ describe('fitDurationLine', () => {
       );
     });
 
-    it('would have refused a three-deep ring under the halo #27 retired', () => {
-      // The regression this gate was written for, kept as a case because the stroke it measures is
-      // the caller's to choose and could widen again.
+    // #78. Three deep is the depth the two models disagree about: the em box left 0.93 units of
+    // headroom there and real ink overruns the outline by 0.32. Rendered output is unaffected —
+    // the legibility gate already refuses every stacked ring — but the gate that is *about* the
+    // stroke now answers for the text that is actually drawn.
+    it('refuses a three-deep ring the em-box model would have admitted', () => {
+      const shape = { ...ringAlone(3), durationMinutes: 120, arcSpan: 60 };
+      const reach = shape.edgeStrokeWidth / 2 + 1;
+      const room = (shape.outerRadius - shape.innerRadius) / 2 - reach;
+
+      expect(shape.fontSize * (TITLE_LINE_OFFSET_RATIO + 0.5)).toBeLessThan(room);
+      expect(shape.fontSize * (TITLE_LINE_OFFSET_RATIO + INK_HEIGHT_RATIO / 2)).toBeGreaterThan(room);
+      expect(fitDurationLine(shape)).toBeUndefined();
+    });
+
+    it('answers to the stroke the caller passes, not to a fixed one', () => {
+      // The regression this gate was written for, at the shallowest depth that still isolates it:
+      // two deep clears today's 0.07 outline and does not clear the 0.12 the halo used.
+      expect(fitDurationLine({ ...ringAlone(2), durationMinutes: 120, arcSpan: 60 })).toBe('2 hr');
       expect(
         fitDurationLine({
-          ...ringAlone(3),
+          ...ringAlone(2),
           edgeStrokeWidth: BAND * 0.12,
           durationMinutes: 120,
           arcSpan: 60

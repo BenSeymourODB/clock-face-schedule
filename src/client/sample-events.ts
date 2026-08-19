@@ -6,20 +6,20 @@
  * judging it on the smart board, and waiting for the viewer's real day to contain a useful overlap
  * is not a plan.
  *
- * Chosen to exercise what is hardest to judge from a specification — three-deep overlap, a title
- * too long for its arc, an event short enough to need the minimum-width floor, an event crossing
- * each end of the rolling window (#25), a floating label washed with a colour the palette itself
- * fails contrast for once filled (⚫, #26/#27), and a card whose duration line is wider than its
- * title (#35).
+ * Chosen to exercise what is hardest to judge from a specification — a four-deep overlap, which is as
+ * many rings as `maxRings` will open, carrying both a two-line title and a one-line one on rings that
+ * divide the band four ways (#67), a title too long for its arc, an event short enough to need
+ * the minimum-width floor, an event crossing each end of the rolling window (#25), a floating label
+ * washed with a colour the palette itself fails contrast for once filled (⚫, #26/#27), and a card
+ * whose duration line is wider than its title (#35).
  *
  * Anchored to `windowStart` — the rolling window's own leading edge — rather than a fixed
  * `periodStart`, so the whole fixture lands inside whatever window is live the moment demo mode
  * loads, regardless of the time of day. The window is 11 hours (was 12), so "y" — the event
  * meant to cross the *trailing* edge — moved 15 minutes earlier to still cross it; every other
  * event already fit inside the shorter span unchanged. Because the window keeps moving with real
- * time after load, the fixture will gradually scroll out of view on a display left running for
- * hours — acceptable for a legibility check at load time, tracked as a known limitation for a
- * longer-running demo in #62.
+ * time after load, one copy of the fixture scrolls out of view over about thirteen hours, so
+ * `recurringSampleEvents` tiles copies of it end to end rather than re-anchoring the one (#62).
  */
 import type { ClockEventInput } from "../shared/clock";
 
@@ -31,10 +31,23 @@ export function sampleEvents(windowStart: Date): ClockEventInput[] {
   return [
     // Already running when the window began — its leading end is the window's, not the event's.
     { id: "z", title: "⚪ Breakfast Club", startDate: at(-1, 10), endDate: at(0, 20), isAllDay: false, fallbackColor },
-    // Three deep between 01:00 and 02:00.
+    // Four deep between 01:45 and 02:00 — the deepest stack the dial will open, so the rings here are
+    // the thinnest it ever draws (15.56 units of a 75.92 band) and the case #67 and #70 are both about.
+    // Was three deep; the fourth member is what makes the preview reach the geometry #67 added, since
+    // a three-deep ring has room for a two-line stack without the cap binding.
     { id: "a", title: "🟢 🎮 Game Time", startDate: at(0, 30), endDate: at(2, 0), isAllDay: false, fallbackColor },
     { id: "b", title: "🔴 Deadline", startDate: at(1, 0), endDate: at(3, 0), isAllDay: false, fallbackColor },
-    { id: "c", title: "🟣 Study", startDate: at(1, 30), endDate: at(2, 30), isAllDay: false, fallbackColor },
+    // A **one-line title on a four-deep ring**: 36 visual units against its ring's 48-character
+    // budget. It keeps the full 4.36-unit font, because one line has radial room to spare — the room a
+    // line that is not drawn does not get to take (#67).
+    { id: "c", title: "🟣 Study Skills and Exam Revision Group", startDate: at(1, 30), endDate: at(2, 30), isAllDay: false, fallbackColor },
+    // Innermost of the four, and the fixture's only **two-line title on a stacked ring** — every other
+    // wrapping title here is on a lone arc, so nothing exercised text sized from a divided band
+    // against an outline sized from the whole of it (#67). 45 visual units against the 44 its ring
+    // gives, so it wraps by one word; well inside the 88 two lines can carry, so it stays on the arc
+    // rather than overflowing to a card. This is the arc where the clearance cap binds: the stack
+    // wants 4.58 units of half-height in the 4.12 the outline leaves, so the font yields to 3.93.
+    { id: "k", title: "🟠 Swimming Group B Kit Check and Coach Handover", startDate: at(1, 45), endDate: at(2, 45), isAllDay: false, fallbackColor },
     // Overlaps nothing — should keep the whole band despite the cluster above. Ends 55 minutes
     // before "j" starts, deliberately, so the stretch between them is empty *and inside* the
     // window — the one stress case the window-track (#25) exists to distinguish from the gap.
@@ -67,8 +80,9 @@ export function sampleEvents(windowStart: Date): ClockEventInput[] {
     // 9.999999999999943° and loses the 10° overflow floor to floating-point error, rendering no text
     // of any kind. Real, and not this change's to fix — see #69.
     { id: "j", title: "🔵 Yoga", startDate: at(6, 15), endDate: at(6, 37), isAllDay: false, fallbackColor },
-    // ⚫ measures 1.21:1 on the dial background, so once elapsed its outline is invisible without
-    // the neutral band beneath it. Placed clear of the cluster so the two stresses stay separable.
+    // ⚫ measures 1.32:1 on the band's own ground, so once elapsed its outline is invisible
+    // without the neutral band beneath it. Placed clear of the cluster so the two stresses
+    // stay separable.
     { id: "x", title: "⚫ Assembly", startDate: at(3, 15), endDate: at(4, 0), isAllDay: false, fallbackColor },
     // Short and ⚫-coloured, so it overflows into a floating label (#29): the one colour whose
     // wash and border are both load-bearing, since it is one of the two the palette itself fails
@@ -93,7 +107,91 @@ export function sampleEvents(windowStart: Date): ClockEventInput[] {
     // only the *leading* emoji is stripped, so 🪀🎈 stay adjacent inside cleanTitle, and a line of
     // pure emoji gets none of the slack that over-charged plain characters usually provide.
     { id: "h", title: "🟣 🧸 🪀🎈 Free Play", startDate: at(8, 20), endDate: at(9, 25), isAllDay: false, fallbackColor },
-    // Runs on past the window's end, so the dial must not claim it finishes there.
+    // Runs on past the window's end, so the dial must not claim it finishes there. Also the
+    // fixture's last event, so under `recurringSampleEvents` it abuts the next copy's "z" exactly,
+    // on the same ring and with no separator between them — the two read as separate arcs only
+    // because 🟢 against ⚪ is a strong colour change. Recolouring either to the other's colour
+    // would merge them into one apparent arc at every seam.
     { id: "y", title: "🟢 Aftercare", startDate: at(10, 50), endDate: at(13, 15), isAllDay: false, fallbackColor },
   ];
+}
+
+/** Minutes from the anchor to the fixture's earliest start and its latest end. */
+function fixtureBounds(): { firstStartMinutes: number; lastEndMinutes: number } {
+  const anchor = new Date(0);
+  const minutesFromAnchor = (iso: string) =>
+    (new Date(iso).getTime() - anchor.getTime()) / 60_000;
+  const events = sampleEvents(anchor);
+
+  return {
+    firstStartMinutes: Math.min(...events.map((event) => minutesFromAnchor(event.startDate))),
+    lastEndMinutes: Math.max(...events.map((event) => minutesFromAnchor(event.endDate))),
+  };
+}
+
+const { firstStartMinutes, lastEndMinutes } = fixtureBounds();
+
+/**
+ * How far apart consecutive copies of the fixture sit — the fixture's own span, whatever it is.
+ *
+ * Derived rather than chosen, and that is the whole of why the tiling works. At exactly the span,
+ * a copy's first event begins at the instant the previous copy's last event ends: the seam adds no
+ * concurrency, so peak overlap stays the three rings the fixture was authored around, and the
+ * window at load reaches neither neighbour, so the picture every screenshot judged is unchanged.
+ * A hand-written period would do neither, and would stop being right the moment an event moved.
+ */
+export const FIXTURE_PERIOD_MINUTES = lastEndMinutes - firstStartMinutes;
+
+/**
+ * Which copies of the fixture reach `[windowStart, windowEnd)`, as offsets in whole periods from
+ * the load-time anchor.
+ *
+ * Usually one, two across a seam. `main.ts` re-emits only when this changes, so it must be stable
+ * between advances rather than recomputed into a new-looking value every poll.
+ *
+ * A copy is bounded by its span, and the fixture is not contiguous — its largest internal gap is 55
+ * minutes. So a window narrower than that gap could be handed a copy with nothing actually in view;
+ * harmless while the caller's window is the rolling 11 hours, and the reason this returns candidate
+ * copies rather than claiming each one is drawn.
+ */
+export function fixtureCopyIndices(
+  anchor: Date,
+  { windowStart, windowEnd }: { windowStart: Date; windowEnd: Date }
+): number[] {
+  const start = (windowStart.getTime() - anchor.getTime()) / 60_000;
+  const end = (windowEnd.getTime() - anchor.getTime()) / 60_000;
+
+  // Copy k spans [k·P + firstStart, k·P + lastEnd], and overlap is strict at both ends to match
+  // filterEventsForPeriod — an event ending exactly at windowStart is not in view.
+  const first = Math.floor((start - lastEndMinutes) / FIXTURE_PERIOD_MINUTES) + 1;
+  const last = Math.ceil((end - firstStartMinutes) / FIXTURE_PERIOD_MINUTES) - 1;
+
+  const indices: number[] = [];
+  for (let index = first; index <= last; index += 1) indices.push(index);
+  return indices;
+}
+
+/**
+ * The fixture, recurring: every copy that reaches the given window (#62).
+ *
+ * A display left on `?demo=1` outlives one copy — the rolling window walks off it in about
+ * thirteen hours and the dial goes blank. Re-anchoring the single copy to the current window would
+ * fix the blankness by freezing the picture instead: the anchor is `now − 3h`, so every event's
+ * offset from `now` would be constant and nothing would ever elapse or drain (#76 measured that
+ * invariance). Tiling keeps time moving — events age out at the leading edge exactly as they do
+ * now, and the next copy arrives at the trailing one.
+ *
+ * Copy 0 keeps its bare ids, because they reach the DOM as `data-testid="event-arc-<id>"` and are
+ * what every existing reference to the fixture names.
+ */
+export function recurringSampleEvents(
+  anchor: Date,
+  view: { windowStart: Date; windowEnd: Date }
+): ClockEventInput[] {
+  return fixtureCopyIndices(anchor, view).flatMap((index) => {
+    const shifted = new Date(anchor.getTime() + index * FIXTURE_PERIOD_MINUTES * 60_000);
+    return sampleEvents(shifted).map((event) =>
+      index === 0 ? event : { ...event, id: `${event.id}@${index}` }
+    );
+  });
 }

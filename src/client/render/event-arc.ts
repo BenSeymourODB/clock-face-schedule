@@ -12,7 +12,7 @@ import {
   type ClockEvent,
   type FeatherSpan,
   type OccludedSpan,
-  TITLE_LINE_OFFSET_RATIO,
+  adjustCompositeForContrast,
   adjustForContrast,
   combineTitleWithEmoji,
   compositeOver,
@@ -36,29 +36,22 @@ import { svg } from "../svg";
 const FONT_STACK = "system-ui, -apple-system, sans-serif";
 
 /**
- * The dial's own background, as a hex `contrast.ts` can measure against — the value `--card` holds
- * in `Styles.html`, duplicated here because the renderer knows only the token name (ADR 0007).
- * Keep the two in sync; `Styles.html` carries a comment pointing back.
+ * The ground the arc band is drawn on, as a hex `contrast.ts` can measure against — the value
+ * `--page` holds in `Styles.html`, duplicated here because the renderer knows only the token name
+ * (ADR 0007). Keep the two in sync; `Styles.html` carries a comment pointing back.
  *
- * Note this is the *face circle's* fill, and the arc band sits outside it, over `--page`. The
- * elapsed outline below is measured against this one anyway, as #26/#27 wrote it: the real ground is
- * darker, so an outline adjusted against `--card` over-clears rather than under-clears. Tracked
- * separately rather than changed here, since correcting it moves every elapsed arc's colour.
+ * `--page` and not `--card`: `--card` fills `clock-face-bg`, and the band is drawn *outside* that
+ * circle — `analog-clock.ts` stops the face at `clockRadius − outerRadius × FACE_GAP_RATIO` while
+ * the band runs from `clockRadius` out. Sampled off the rendered preview at band radius rather than
+ * inferred: `#0c0e12` both where no arc is drawn and inside a draining arc's spent side.
+ *
+ * Measuring the elapsed outline against the face's ground instead was #74. It erred safe, the real
+ * ground being darker, but black text measures 1.09:1 here against 1.18:1 on `--card`, which left
+ * every adjusted colour further from its authored hue than it needed to be. Exported so the spec
+ * measures against this one value rather than a second copy of the hex — the premise was the part
+ * that was wrong.
  */
-const DIAL_BACKGROUND = "#16181d";
-
-/**
- * What is actually behind the arc band: `--page`, not `--card`.
- *
- * The band is drawn outside the face circle (`analog-clock.ts` insets the face by
- * `FACE_GAP_RATIO`), so this is the ground a drained arc exposes and the ground its fill composites
- * over. Sampled off the rendered preview at band radius to confirm it, rather than inferred:
- * `#0c0e12` both where no arc is drawn and inside a draining arc's spent side.
- *
- * The difference is not cosmetic — black text measures 1.09:1 here against 1.18:1 on `--card`, and
- * every drain-seam split lands 0.03–0.10 of the ramp away if the wrong one is used.
- */
-const BAND_BACKGROUND = "#0c0e12";
+export const BAND_BACKGROUND = "#0c0e12";
 
 /**
  * The hex behind `var(--card-foreground)`, for the same reason `BAND_BACKGROUND` is spelled out: a
@@ -74,10 +67,10 @@ const BAND_FOREGROUND = "#f2f4f8";
 const BLACK_TEXT = "#000000";
 
 /**
- * Contrast floor for an elapsed outline's own colour, against the dial (#27).
+ * Contrast floor for an elapsed outline's own colour, against the band (#27).
  *
  * Outlined, an event colour is the foreground rather than the fill, so it has to clear a threshold
- * it never had to when filled — and ⚫ (1.21:1) and 🟤 (2.50:1) fail it outright. 4.5:1 is WCAG AA
+ * it never had to when filled — and ⚫ (1.32:1) and 🟤 (2.72:1) fail it outright. 4.5:1 is WCAG AA
  * for text rather than the 3:1 graphical-object floor, because this dial is read across a room.
  */
 const OUTLINE_MIN_CONTRAST = 4.5;
@@ -104,11 +97,45 @@ const EMOJI_FONT_SIZE_RATIO = 0.3;
 const ARC_FILL_OPACITY = 0.85;
 
 /**
+ * Contrast floor for a filled arc's own body, against the band (#66).
+ *
+ * WCAG 1.4.11's floor for a non-text object, and not #27's 4.5:1, because this is about a shape and
+ * not about text. An arc's body is how a viewer reads *how long* a block lasts, and composited at
+ * `ARC_FILL_OPACITY` over the band ⚫ gray-800 measured **1.25:1** — the extent could not be read at
+ * all, and what revealed the arc was incidental: the title on it, and a separator that is itself
+ * 1.15:1 against that fill.
+ *
+ * 4.5 was not simply the safer choice here. `readableTextColor`'s black/white crossover for ⚫ sits
+ * at a floor of 3.34:1, so flooring at 4.5 flips its title from white to black and turns a
+ * one-attribute change into a redesign of the filled state. 3:1 is the largest round floor under
+ * that crossover, and on the whole palette — the nine colour-dots, Google's eleven, and the default
+ * — it moves ⚫ and 🟤 and nothing else.
+ */
+const FILL_MIN_CONTRAST = 3;
+
+/**
+ * The colour an arc's body is actually painted in — the authored colour, floored so its extent can
+ * be read (#66).
+ *
+ * A function rather than an inline call because three separate things have to agree on it: the fill
+ * itself, the title colour picked against it, and the ground a draining title splits on. They read
+ * the painted colour and not the authored one, so a floored ⚫ fill takes a title measured on a
+ * floored ⚫ fill.
+ *
+ * Exported so a spec can ask what is painted instead of keeping its own copy of the floor and the
+ * opacity — the premise is the part these tests keep getting wrong (#74).
+ */
+export function arcFillColor(color: string): string {
+  return adjustCompositeForContrast(color, BAND_BACKGROUND, ARC_FILL_OPACITY, FILL_MIN_CONTRAST);
+}
+
+/**
  * Fill left under an elapsed arc.
  *
  * Zero draws the pure outline #26 specifies. A little body might read better at distance, so this
- * is a constant rather than an omission — but note it can only add *weight*, never contrast: 10% of
- * `#1F2937` over `#16181d` is still `#16181d` to the eye. Colour legibility is #27's problem.
+ * is a constant rather than an omission — but note it can only add *weight*, never contrast: at 10%
+ * even a ⚫ floored by `arcFillColor` reaches 1.08:1 on the band, against the authored hex's 1.02:1.
+ * Both are nothing to the eye, and #66's floor does not change that. Colour legibility is #27's.
  */
 const ELAPSED_FILL_OPACITY = 0;
 
@@ -133,7 +160,7 @@ const ARC_SEPARATOR_MIN = 1;
  * dial now carries the same weight.
  *
  * #26 drew this as a 0.07 coloured line inside a 0.12 neutral `var(--border)` band, because an
- * event's colour could not be trusted to contrast — ⚫ gray-800 measures 1.21:1 on `--card`, which
+ * event's colour could not be trusted to contrast — ⚫ gray-800 measures 1.32:1 on the band, which
  * is not a faint edge but no edge. Now that #27 resolves the colour itself to 4.5:1 the neutral band
  * has nothing left to carry and is gone, leaving one coloured outline that reads on its own.
  *
@@ -153,6 +180,24 @@ const ELAPSED_BORDER_RATIO = 0.07;
  * the arc reads as filled again — which is the one thing an elapsed arc must not do.
  */
 const ELAPSED_STROKE_MAX_RATIO = 0.4;
+
+/**
+ * The elapsed outline's width for one ring — sized from the band, capped by the ring: uniform weight
+ * wherever there is room for it, and narrower only where the ring genuinely cannot carry it.
+ *
+ * Exported because it is also the widest stroke drawn on an arc's own outline, so it is what the
+ * title layout has to keep its lines clear of (#67) — and the dial computes that layout before it
+ * renders the arc. A second derivation of this number in the caller is exactly how the text and the
+ * stroke came to be sized from different quantities with nothing comparing them.
+ */
+export function arcEdgeStrokeWidth(ringThickness: number, bandThickness: number): number {
+  return roundCoord(
+    Math.max(
+      ARC_SEPARATOR_MIN,
+      Math.min(bandThickness * ELAPSED_BORDER_RATIO, ringThickness * ELAPSED_STROKE_MAX_RATIO)
+    )
+  );
+}
 
 interface FadeMaskGeometry {
   cx: number;
@@ -340,6 +385,14 @@ export function eventArc({
   const { id, cleanTitle, color, eventEmoji, startAngle, endAngle } = event;
   const displayTitle = combineTitleWithEmoji(cleanTitle, eventEmoji);
 
+  // What the fill is actually painted in, floored once so every measurement below reads the same
+  // colour a viewer does: the fill itself, the title `readableTextColor` picks against it, and the
+  // ground the drain seam splits the title on. The authored `color` is kept for the elapsed
+  // outline, which is #27's and derives from the authored hex — floored, it moves by one 8-bit step
+  // (⚫ `#747b83` → `#747b84`, against the band ground #74 moved that call to), so the elapsed
+  // state does not notice this change at all.
+  const fillColor = arcFillColor(color);
+
   const arcSpan = endAngle - startAngle;
   const midAngle = (startAngle + endAngle) / 2;
   const arcHeight = outerRadius - innerRadius;
@@ -415,16 +468,8 @@ export function eventArc({
   // the fill goes and the outline stays. Sharing one path, as this did, forces the two to move
   // together.
   const d = describeArc(cx, cy, outerRadius, innerRadius, startAngle, endAngle);
-  // Sized from the band, capped by the ring: uniform weight wherever there is room for it, and
-  // narrower only where the ring genuinely cannot carry it.
   const band = bandThickness ?? arcHeight;
-  const stroke = (ratio: number) =>
-    roundCoord(
-      Math.max(
-        ARC_SEPARATOR_MIN,
-        Math.min(band * ratio, arcHeight * ELAPSED_STROKE_MAX_RATIO)
-      )
-    );
+  const edgeStrokeWidth = arcEdgeStrokeWidth(arcHeight, band);
 
   group.append(
     svg("path", {
@@ -433,7 +478,7 @@ export function eventArc({
       // so a caller can find the fill alone.
       "data-arc-part": "fill",
       d,
-      fill: color,
+      fill: fillColor,
       "fill-opacity": isElapsed ? ELAPSED_FILL_OPACITY : ARC_FILL_OPACITY,
       stroke: "none",
       mask: fillFade,
@@ -466,17 +511,25 @@ export function eventArc({
         d,
         fill: "none",
         // The outline carries both the event's identity and its legibility, with no neutral band
-        // beneath it, so the colour has to clear contrast against the dial on its own (#27).
-        // Preserves hue, so a ⚫ or 🟤 event stays recognisably itself while becoming visible.
-        stroke: adjustForContrast(color, DIAL_BACKGROUND, OUTLINE_MIN_CONTRAST),
-        "stroke-width": stroke(ELAPSED_BORDER_RATIO),
+        // beneath it, so the colour has to clear contrast against the band's ground on its own
+        // (#27). Preserves hue, so a ⚫ or 🟤 event stays recognisably itself while becoming visible.
+        stroke: adjustForContrast(color, BAND_BACKGROUND, OUTLINE_MIN_CONTRAST),
+        "stroke-width": edgeStrokeWidth,
         mask: spentFade,
       })
     );
   }
 
   const resolved =
-    layout ?? computeArcTitleLayout({ title: displayTitle, arcSpan, innerRadius, outerRadius });
+    layout ??
+    computeArcTitleLayout({
+      title: displayTitle,
+      arcSpan,
+      innerRadius,
+      outerRadius,
+      // Standalone rendering: the dial passes a layout that already accounts for this.
+      edgeStrokeWidth,
+    });
   const showTitle = !forceHideTitle && arcSpan >= TITLE_MIN_SPAN_DEGREES;
   const titleRendersOnArc = showTitle && resolved.fit.lines.length > 0;
 
@@ -517,8 +570,7 @@ export function eventArc({
   }
 
   if (titleRendersOnArc) {
-    const { titleRadius, titleFontSize, fit } = resolved;
-    const lineOffset = titleFontSize * TITLE_LINE_OFFSET_RATIO;
+    const { titleRadius, titleFontSize, lineOffset, fit } = resolved;
 
     /**
      * The copies of each title line, and what each is coloured for.
@@ -538,13 +590,18 @@ export function eventArc({
      * Which colour each copy takes is *measured against the ground that copy lands on*, from the two
      * the theme offers. Deriving it from the authored hex instead — as the live case must, having no
      * composite to measure — picks black for seven of the nine palette colours, and for two of those
-     * black is the worse choice once composited over the band:
+     * black is the worse choice once composited over the band. Measured on the **floored** fill
+     * (#66), which is what is painted:
      *
      * | on its own fill | black | `--card-foreground` |
      * | --- | --- | --- |
      * | 🟡 🟢 🟠 ⚪ 🔵 | 8.11, 6.93, 5.66, 13.85, 4.46 | 2.35, 2.75, 3.37, 1.38, 4.28 |
      * | 🔴 🟣 | 4.31, 4.14 | **4.43, 4.60** |
-     * | ⚫ 🟤 | 1.36, 2.48 | **14.04, 7.69** |
+     * | ⚫ 🟤 | 3.26, 3.27 | **5.85, 5.83** |
+     *
+     * #66 narrows the last row's margin — the light token beat an authored ⚫ by 14.04 to 1.36 — and
+     * changes nothing about which colour wins: a floored fill is lighter, so black gains and the
+     * token loses, and at 3:1 neither crosses. Nine winners, none of them moved.
      *
      * So 🔴 and 🟣 join ⚫ and 🟤 in needing no split at all: one unmasked copy in the colour that
      * reads on both grounds. Their titles do change colour at the moment the event starts draining —
@@ -563,11 +620,17 @@ export function eventArc({
      * - **No feathers.** A title at a window edge is deliberately left unmasked (#22) so the name
      *   stays readable where the band does not; a draining arc must not quietly reverse that.
      */
-    const drainedFill = compositeOver(BAND_BACKGROUND, color, ARC_FILL_OPACITY);
-    const onFill = (text: string) => contrastRatio(text, drainedFill ?? color) ?? 0;
+    const drainedFill = compositeOver(BAND_BACKGROUND, fillColor, ARC_FILL_OPACITY);
+    const onFill = (text: string) => contrastRatio(text, drainedFill ?? fillColor) ?? 0;
     const splitCoverage =
       drain && onFill(BLACK_TEXT) > onFill(BAND_FOREGROUND)
-        ? textFlipCoverage(BAND_BACKGROUND, color, ARC_FILL_OPACITY, BAND_FOREGROUND, BLACK_TEXT)
+        ? textFlipCoverage(
+            BAND_BACKGROUND,
+            fillColor,
+            ARC_FILL_OPACITY,
+            BAND_FOREGROUND,
+            BLACK_TEXT
+          )
         : 1;
     const textSplit =
       drain && splitCoverage < 1 ? computeDrainTextSplit(drain, splitCoverage) : undefined;
@@ -588,7 +651,7 @@ export function eventArc({
       : [
           {
             name: isElapsed || drain ? "spent" : "live",
-            fill: isElapsed || drain ? "var(--card-foreground)" : readableTextColor(color),
+            fill: isElapsed || drain ? "var(--card-foreground)" : readableTextColor(fillColor),
             mask: undefined,
           },
         ];
@@ -623,7 +686,7 @@ export function eventArc({
             innerRadius,
             outerRadius,
             bandThickness: band,
-            edgeStrokeWidth: stroke(ELAPSED_BORDER_RATIO),
+            edgeStrokeWidth,
           })
         : undefined;
 
