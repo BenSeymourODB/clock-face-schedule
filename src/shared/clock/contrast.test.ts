@@ -40,6 +40,10 @@ const PALETTE = [
 
 const AA_NORMAL_TEXT = 4.5;
 
+/** The two extremes `adjustForContrast` blends toward, spelled as the module returns them. */
+const BLACK = "#000000";
+const WHITE = "#ffffff";
+
 describe("relativeLuminance", () => {
   it.each([
     ["#000000", 0],
@@ -191,6 +195,99 @@ describe("adjustForContrast", () => {
   it("makes the minimal move — a lower floor leaves a colour that clears it untouched", () => {
     // ⚫ fails 4.5 but clears 1.0 trivially, so at a 1.0 floor it is returned as-is.
     expect(adjustForContrast("#1F2937", CARD, 1)).toBe("#1F2937");
+  });
+
+  describe("on a mid-tone ground, where black and white change places below the midpoint", () => {
+    // #95. Black and white swap at L ≈ 0.1791 — the root of (L + 0.05)² = 1.05 × 0.05 — not at 0.5,
+    // so every ground in (0.1791, 0.5) is one a midpoint test sends toward the *nearer* extreme.
+    // Unreachable on today's two grounds (`--card` #16181d is L = 0.0091), and reachable the moment
+    // #81's light scheme adds a mid-tone surface.
+    const MIDTONE_GROUNDS = [
+      ["#767676", 0.1812],
+      ["#808080", 0.2159],
+      ["#949494", 0.2961],
+      ["#b0b0b0", 0.4342],
+      ["#bbbbbb", 0.4969],
+    ] as const;
+
+    it.each(MIDTONE_GROUNDS)("%s sits above the crossover and below the midpoint", (ground, l) => {
+      expect(relativeLuminance(ground)!).toBeCloseTo(l, 4);
+      expect(relativeLuminance(ground)!).toBeGreaterThan(0.1791);
+      expect(relativeLuminance(ground)!).toBeLessThan(0.5);
+
+      // The property that makes the midpoint test wrong: black wins on all of these.
+      expect(contrastRatio(BLACK, ground)!).toBeGreaterThan(contrastRatio(WHITE, ground)!);
+    });
+
+    // The assertion that would have caught this. The old spec exercised only #ffffff — the
+    // trivially-correct end of the light range — and asserted the same rule the code held.
+    it.each(MIDTONE_GROUNDS)("clears a floor on %s that only black reaches", (ground) => {
+      // A floor between what white reaches and what black reaches: satisfiable, but only one way.
+      const floor = (contrastRatio(WHITE, ground)! + contrastRatio(BLACK, ground)!) / 2;
+
+      const adjusted = adjustForContrast("#d14e89", ground, floor);
+
+      expect(contrastRatio(adjusted, ground)!).toBeGreaterThanOrEqual(floor);
+    });
+
+    it("falls back to the better extreme, not the nearer one, when no blend clears the floor", () => {
+      // The guard's own case. On #bbbbbb white tops out at 1.92:1 and black at 10.94:1, so a 12:1
+      // floor is out of reach either way and the guard picks the extreme that gets closest. The
+      // midpoint rule returned white here — 1.92:1, while calling itself the best available answer.
+      expect(contrastRatio(WHITE, "#bbbbbb")!).toBeCloseTo(1.92, 2);
+      expect(contrastRatio(BLACK, "#bbbbbb")!).toBeCloseTo(10.94, 2);
+
+      expect(adjustForContrast("#d14e89", "#bbbbbb", 12)).toBe(BLACK);
+    });
+  });
+
+  it("clears the floor whenever either extreme can, over a sweep of colour/ground/floor triples", () => {
+    // The general property, rather than the enumerated grounds above: the returned colour clears
+    // the floor in every case where *some* answer does. The midpoint rule fails this on 24% of
+    // reachable triples; it is the invariant, not the threshold constant, that is worth pinning.
+    //
+    // mulberry32 rather than the textbook `seed * 1103515245` LCG, whose state exceeds 2^53 on
+    // every step: the low bits are lost to double rounding before the mask applies, and the
+    // generator settles into a 10,466-long cycle after a 5,937-step transient. A 5,000-iteration
+    // loop happens to fit inside that, but raising the count would silently replay triples rather
+    // than test new ones. Every operation here stays 32-bit via `Math.imul` and `|0`.
+    let state = 12345;
+    const random = () => {
+      state = (state + 0x6d2b79f5) | 0;
+      let t = Math.imul(state ^ (state >>> 15), 1 | state);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+    const randomHex = () =>
+      `#${[0, 1, 2]
+        .map(() => Math.floor(random() * 256).toString(16).padStart(2, "0"))
+        .join("")}`;
+
+    const ITERATIONS = 5000;
+    const missed: string[] = [];
+    const drawn = new Set<string>();
+    let reachable = 0;
+    for (let i = 0; i < ITERATIONS; i += 1) {
+      const color = randomHex();
+      const ground = randomHex();
+      const floor = 1 + random() * 6;
+      drawn.add(`${color}|${ground}|${floor}`);
+
+      const best = Math.max(contrastRatio(WHITE, ground)!, contrastRatio(BLACK, ground)!);
+      if (best < floor) continue;
+
+      reachable += 1;
+      const adjusted = adjustForContrast(color, ground, floor);
+      if (contrastRatio(adjusted, ground)! < floor - 1e-9) {
+        missed.push(`${color} on ${ground} at ${floor.toFixed(2)} -> ${adjusted}`);
+      }
+    }
+
+    // Every iteration tested something new. Without this a degenerate generator makes the loop
+    // count iterations rather than cases, and the sweep reports coverage it does not have.
+    expect(drawn.size).toBe(ITERATIONS);
+    expect(reachable).toBeGreaterThan(1000);
+    expect(missed).toEqual([]);
   });
 });
 
