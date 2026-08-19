@@ -125,10 +125,18 @@ block in `static/appsscript.json`, not from the container type.
 generated output. Edits made in the Apps Script online editor are overwritten by the next push.
 
 **`build/preview.html`** resolves the HtmlService `include()` templating into a standalone page,
-so the UI can be opened straight from disk. This is the fast loop for visual work — no push, no
+so the UI can be opened straight from disk — `file://` renders it pixel-identically to serving it,
+because every asset it needs is inlined. This is the fast loop for visual work — no push, no
 deployment. Nothing server-side runs, so anything behind `google.script.run` shows its failure
 state; it is a complement to checking the deployed app, not a replacement. `.claspignore` keeps
 it out of the pushed project.
+
+**CI keeps that page**, so looking at what a branch draws costs no checkout: every run attaches
+`build/` as an artifact — `preview-pr-<n>` on a pull request, `preview-main-<sha>` on `main`, kept
+14 days. Download it from the run's summary page, unzip, open `preview.html`, and add `?now=` from
+the table below to reach the state you want. The `main` copy is the "before" half of a rendered
+comparison. The artifact is uploaded immediately after the build, so a run that goes red on
+`check-types` or `npm test` still leaves you the picture.
 
 ### Pinning the clock, to see a state that depends on the time
 
@@ -164,9 +172,9 @@ Two consequences of that anchoring worth knowing before you pin something:
 
 - **`?freeze=1` on its own does not move the fixture.** It holds the real clock still, so the dial
   keeps the picture it already had. Only `?now=` re-anchors.
-- **A pinned time is useful in the morning, and empty by the evening.** The fixture spans 22:50 the
+- **A pinned time is useful in the morning, and empty by the evening.** The fixture spans 23:10 the
   previous day to 13:15, against a window of `[now − 3h, now + 8h]`, so arcs drop away through the
-  afternoon: **13** arcs at 03:00, 9 at 06:00, 5 at 09:00, 3 at 12:00, and **none from 17:00**.
+  afternoon: **16** arcs at 03:00, 11 at 06:00, 6 at 09:00, 3 at 12:00, and **none from 17:00**.
   That is what the fixture covers, not a fault in the pin — `?now=19:00` correctly shows an empty
   dial, because the fixture has nothing at seven in the evening.
 
