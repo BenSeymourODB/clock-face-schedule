@@ -71,6 +71,16 @@ export {
   type FitTextResult
 } from './pack-lines';
 export { rectEdgeIntersection, rectsOverlap, type Rect } from './rect-edge';
+export {
+  ONE_HOUR_SCALE,
+  TWELVE_HOUR_SCALE,
+  dialOrigin,
+  dialScale,
+  dialWindow,
+  parseDialScaleId,
+  type DialScale,
+  type DialScaleId
+} from './scale';
 export { assignRings, type RingAssignment, type RingCandidate } from './ring-layout';
 export { describeTextArc } from './text-arc';
 export {
