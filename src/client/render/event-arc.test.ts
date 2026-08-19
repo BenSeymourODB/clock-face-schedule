@@ -1,20 +1,20 @@
 import { describe, expect, it } from "vitest";
 import {
   FEATHER_DEGREES,
+  INK_HEIGHT_RATIO,
+  TITLE_EDGE_CLEARANCE,
+  TITLE_FONT_SIZE_RATIO,
+  TITLE_LINE_OFFSET_RATIO,
   type ClockEvent,
   adjustForContrast,
+  arcCharBudget,
   compositeOver,
   computeArcTitleLayout,
   contrastRatio,
   polarToCartesian,
 } from "../../shared/clock";
-import { arcFillColor, eventArc } from "./event-arc";
-
-/** The dial background the outline's colour is made legible against — `--card`, per event-arc.ts. */
-const DIAL_BACKGROUND = "#16181d";
-
-/** What is actually behind the arc band, and what a drained arc exposes — `--page`. */
-const BAND_BACKGROUND = "#0c0e12";
+import { ARC_BAND_RATIO, RING_GAP_MIN, RING_GAP_RATIO } from "./analog-clock";
+import { BAND_BACKGROUND, arcFillColor, eventArc } from "./event-arc";
 
 const CX = 300;
 const CY = 300;
@@ -138,11 +138,11 @@ describe("eventArc", () => {
       });
 
       it("leaves the elapsed outline reading the authored colour, not the floored one", () => {
-        // The two are one 8-bit step apart (⚫ `#7b8189` against `#7a8189`, measured against
-        // `DIAL_BACKGROUND` as that call still does), so the elapsed state does not notice this
-        // change — and the outline is #27/#74's to move, not this one's.
+        // The two are one 8-bit step apart (⚫ `#747b83` against `#747b84`, measured against
+        // `BAND_BACKGROUND`, which is the ground #74 moved that call to), so the elapsed state does
+        // not notice this change — and the outline is #27/#74's to move, not this one's.
         //
-        // Pinned as a literal rather than as `adjustForContrast(color, DIAL_BACKGROUND, 4.5)`,
+        // Pinned as a literal rather than as `adjustForContrast(color, BAND_BACKGROUND, 4.5)`,
         // which is the same call with the same arguments the renderer makes: that would agree with
         // any ground or floor the renderer drifted to, which is the failure mode #74 was.
         const color = "#1F2937";
@@ -159,8 +159,8 @@ describe("eventArc", () => {
           .querySelector('[data-testid="event-arc-outline-e1"]')
           ?.getAttribute("stroke");
 
-        expect(stroke).toBe("#7b8189");
-        expect(stroke).not.toBe(adjustForContrast(arcFillColor(color), DIAL_BACKGROUND, 4.5));
+        expect(stroke).toBe("#747b83");
+        expect(stroke).not.toBe(adjustForContrast(arcFillColor(color), BAND_BACKGROUND, 4.5));
       });
     });
 
@@ -355,8 +355,29 @@ describe("eventArc", () => {
         arcRadius(node.getAttribute("d") ?? "")
       );
 
-      const offset = layout.titleFontSize * 0.55;
+      const offset = layout.titleFontSize * TITLE_LINE_OFFSET_RATIO;
       expect(radii).toEqual([layout.titleRadius + offset, layout.titleRadius - offset]);
+    });
+
+    /**
+     * #78. The pair above was asserted for years while the two lines' ink overlapped by 1.96 units,
+     * because every assertion on them compared radii to the same ratio that produced them. This one
+     * compares the gap the renderer emits against what the glyphs actually cover, so a ratio chosen
+     * against the em box fails here rather than passing quietly and smudging on the wall.
+     */
+    it("puts the two lines far enough apart that their ink does not overlap", () => {
+      const cleanTitle = "Parent Teacher Conference Planning Session Extra Words Here To Wrap";
+      const radii = [...render({ cleanTitle }).querySelectorAll("defs path")].map((node) =>
+        arcRadius(node.getAttribute("d") ?? "")
+      );
+      expect(radii).toHaveLength(2);
+
+      const fontSize = Number(
+        render({ cleanTitle }).querySelector("text")?.getAttribute("font-size")
+      );
+      const baselineGap = Math.abs(radii[0] - radii[1]);
+
+      expect(baselineGap).toBeGreaterThan(fontSize * INK_HEIGHT_RATIO);
     });
 
     /**
@@ -380,7 +401,7 @@ describe("eventArc", () => {
           innerRadius: INNER,
           outerRadius: OUTER,
         });
-        const offset = layout.titleFontSize * 0.55;
+        const offset = layout.titleFontSize * TITLE_LINE_OFFSET_RATIO;
         const radii = [...render().querySelectorAll("defs path")].map((node) =>
           arcRadius(node.getAttribute("d") ?? "")
         );
@@ -853,15 +874,33 @@ describe("eventArc once the event has ended", () => {
     expect(outline?.getAttribute("fill")).toBe("none");
   });
 
-  it("makes the outline colour contrast-safe against the dial, not the raw event colour (#27)", () => {
-    // ⚫ gray-800 is invisible on the dial as a raw outline (1.21:1). The renderer must hand the
-    // colour through adjustForContrast against the dial background — the specific defect #26 left
+  it("makes the outline colour contrast-safe against the band, not the raw event colour (#27)", () => {
+    // ⚫ gray-800 is invisible on the band as a raw outline (1.32:1). The renderer must hand the
+    // colour through adjustForContrast against the band's ground — the specific defect #26 left
     // and this issue closes. Whether the *result* clears the floor is proven in contrast.test.ts.
     const color = "#1F2937";
     const { outline } = parts({ color });
 
-    expect(outline?.getAttribute("stroke")).toBe(adjustForContrast(color, DIAL_BACKGROUND, 4.5));
+    expect(outline?.getAttribute("stroke")).toBe(adjustForContrast(color, BAND_BACKGROUND, 4.5));
     expect(outline?.getAttribute("stroke")).not.toBe(color);
+  });
+
+  it("measures against the ground the band has, not the one the face has (#74)", () => {
+    // The premise, not the assertion, was what was wrong before: this spec kept its own copy of
+    // `#16181d` and asserted the outline cleared 4.5:1 against it — true, and against a ground the
+    // band never sits on. Pinning the constant is what stops that drifting back; the geometric half
+    // of the claim — that no arc is drawn inside the face circle — is asserted in analog-clock.test.
+    expect(BAND_BACKGROUND).toBe("#0c0e12");
+    expect(BAND_BACKGROUND).not.toBe("#16181d");
+  });
+
+  it("leaves a colour that already clears the floor on the band exactly as authored", () => {
+    // 🟣 purple-500 is the case the correction freed: 4.49:1 against the face's ground, so it was
+    // nudged to `#a856f7`, but 4.88:1 against the band's, so it needs no adjustment at all. The
+    // whole point of #27's minimal blend is that a passing colour is returned untouched.
+    const color = "#A855F7";
+
+    expect(parts({ color }).outline?.getAttribute("stroke")).toBe(color);
   });
 
   it("draws no outline layer while the event is still to come", () => {
@@ -869,8 +908,8 @@ describe("eventArc once the event has ended", () => {
   });
 
   it.each([
-    ["⚫ gray-800, which measures 1.21:1 on the dial", "#1F2937"],
-    ["🟤 amber-800, which measures 2.50:1", "#92400E"],
+    ["⚫ gray-800, which measures 1.32:1 on the band", "#1F2937"],
+    ["🟤 amber-800, which measures 2.72:1", "#92400E"],
     ["🟡 yellow, which needs no help", "#EAB308"],
   ])("carries %s at a contrast-safe weight, with no neutral band beneath", (_label, color) => {
     // #26 backed the outline with a `var(--border)` band because the event's colour could not be
@@ -879,7 +918,7 @@ describe("eventArc once the event has ended", () => {
     const { halo, outline } = parts({ color });
 
     expect(halo).toBeNull();
-    expect(contrastRatio(outline!.getAttribute("stroke")!, DIAL_BACKGROUND)).toBeGreaterThanOrEqual(
+    expect(contrastRatio(outline!.getAttribute("stroke")!, BAND_BACKGROUND)).toBeGreaterThanOrEqual(
       4.5
     );
   });
@@ -965,8 +1004,9 @@ describe("eventArc once the event has ended", () => {
   });
 
   it("switches the title to the theme's own pairing, not the event colour", () => {
-    // The text now sits on the dial background; `--card-foreground` is 16:1 on `--card` by
-    // construction, and the event colour would reintroduce exactly the failures above.
+    // The text now sits on the band's own ground; `--card-foreground` is 17.5:1 on `--page` (and
+    // 16:1 on `--card`, which is what it was authored against), and the event colour would
+    // reintroduce exactly the failures above.
     const title = parts().group.querySelector('[data-testid="event-title-e1"] text');
 
     expect(title?.getAttribute("fill")).toBe("var(--card-foreground)");
@@ -994,6 +1034,127 @@ describe("eventArc once the event has ended", () => {
     // The live band and the elapsed outline mean two different things; showing both at once on a
     // fully-spent arc would say "still live" and "already over" in the same breath.
     expect(parts().separator).toBeNull();
+  });
+});
+
+/**
+ * #67: the outline is sized from the whole band, deliberately, so its weight does not thin with
+ * overlap depth (#26) — while the text is sized from this arc's own ring, equally deliberately. Both
+ * rules are right and on a thin ring they disagree, so the two have to be compared somewhere.
+ *
+ * Asserted on rendered attributes rather than on the layout, because that is where the two meet: the
+ * `d` of each baseline against the `stroke-width` the outline actually carries. A test computing
+ * both from the same constants would encode the assumption that put the text on the stroke.
+ */
+describe("eventArc's title against what is stroked on its ring", () => {
+  const BAND = OUTER * ARC_BAND_RATIO;
+  const RING_GAP = Math.max(RING_GAP_MIN, BAND * RING_GAP_RATIO);
+
+  /** The outermost ring of a `depth`-deep cluster, as the dial divides the band. */
+  function ring(depth: number) {
+    const gap = depth > 1 ? RING_GAP : 0;
+    const thickness = (BAND - (depth - 1) * gap) / depth;
+    return { innerRadius: OUTER - thickness, outerRadius: OUTER, bandThickness: BAND };
+  }
+
+  /**
+   * A title that wraps onto two lines on this ring *and* fits — two words that each fit a line alone
+   * and cannot share one.
+   *
+   * Derived from the ring's own budget rather than written out, because a fixed string is a two-line
+   * fit on a thin ring and a truncated one-liner on a thick one. That distinction matters here: an
+   * overflowing title is routed to a floating label with `forceHideTitle`, so a truncated case would
+   * be asserting clearance on a configuration the dial never renders.
+   */
+  function wrappingTitle(depth: number, arcSpan: number) {
+    const shape = ring(depth);
+    const probe = computeArcTitleLayout({ ...shape, title: "x", arcSpan });
+    const budget = arcCharBudget(arcSpan, probe.titleRadius, probe.titleFontSize);
+    const word = "a".repeat(Math.max(1, Math.floor(budget / 2) + 1));
+
+    return `${word} ${word}`;
+  }
+
+  function measure(depth: number, cleanTitle: string, arcSpan = 30) {
+    const shape = ring(depth);
+    const group = eventArc({
+      event: makeEvent({ cleanTitle, startAngle: 0, endAngle: arcSpan }),
+      cx: CX,
+      cy: CY,
+      isElapsed: true,
+      ...shape,
+    });
+
+    const radii = [...group.querySelectorAll("defs > path")].map((node) =>
+      arcRadius(node.getAttribute("d") ?? "")
+    );
+    const fontSize = Number(
+      group.querySelector('[data-testid="event-title-e1"] text')?.getAttribute("font-size")
+    );
+    const strokeWidth = Number(
+      group.querySelector('[data-arc-part="outline"]')?.getAttribute("stroke-width")
+    );
+
+    // A stroke straddles its path, so it reaches half its width back into the ring from each edge.
+    return {
+      radii,
+      fontSize,
+      strokeWidth,
+      outward: shape.outerRadius - strokeWidth / 2 - (Math.max(...radii) + fontSize / 2),
+      inward: Math.min(...radii) - fontSize / 2 - (shape.innerRadius + strokeWidth / 2),
+    };
+  }
+
+  it.each([[1], [2], [3], [4]])("clears both edges %i deep, on two lines", (depth) => {
+    const { radii, outward, inward } = measure(depth, wrappingTitle(depth, 30));
+
+    expect(radii).toHaveLength(2);
+    expect(outward).toBeGreaterThanOrEqual(TITLE_EDGE_CLEARANCE);
+    expect(inward).toBeGreaterThanOrEqual(TITLE_EDGE_CLEARANCE);
+  });
+
+  it.each([[2], [3], [4]])("clears both edges %i deep, on one line", (depth) => {
+    const { radii, outward, inward } = measure(depth, "Lunch");
+
+    expect(radii).toHaveLength(1);
+    expect(outward).toBeGreaterThanOrEqual(TITLE_EDGE_CLEARANCE);
+    expect(inward).toBeGreaterThanOrEqual(TITLE_EDGE_CLEARANCE);
+  });
+
+  it("clears both edges when #35's duration line makes the second line", () => {
+    // A lone arc's one-line title gains a duration line beneath it, so the stack is two lines the
+    // font size was not held to. `fitDurationLine` applies the same clearance to the same font and
+    // declines where the pair would not fit, which is what keeps this in bounds — depth 1 is the only
+    // depth it survives, since its own legibility gate wants the whole band.
+    const { radii, outward, inward } = measure(1, "Lunch");
+
+    expect(radii).toHaveLength(2);
+    expect(outward).toBeGreaterThanOrEqual(TITLE_EDGE_CLEARANCE);
+    expect(inward).toBeGreaterThanOrEqual(TITLE_EDGE_CLEARANCE);
+  });
+
+  it("is the four-deep ring that binds, and it yields only the text", () => {
+    // Where the fix shows: four deep the stack wanted 4.58 units of half-height in the 4.12 the
+    // outline leaves, so the font gives up 10%. The outline is untouched — it *is* the arc once the
+    // fill is gone, and capping it by the ring is the inversion #26's band-sizing exists to prevent.
+    const stacked = measure(4, wrappingTitle(4, 30));
+    const three = measure(3, wrappingTitle(3, 30));
+
+    expect(stacked.fontSize).toBeLessThan((ring(4).outerRadius - ring(4).innerRadius) * TITLE_FONT_SIZE_RATIO);
+    expect(stacked.strokeWidth).toBe(measure(1, "Lunch").strokeWidth);
+    expect(three.fontSize).toBeCloseTo(
+      (ring(3).outerRadius - ring(3).innerRadius) * TITLE_FONT_SIZE_RATIO,
+      2
+    );
+  });
+
+  it("leaves a one-line title on the same ring at full size", () => {
+    // The room a line that is not drawn does not get to take: charging two-line reach to every arc
+    // wider than the two-line span threshold cost this title 10% of its size for nothing, on the ring
+    // that can least afford it (#70).
+    const arcHeight = ring(4).outerRadius - ring(4).innerRadius;
+
+    expect(measure(4, "Lunch").fontSize).toBeCloseTo(arcHeight * TITLE_FONT_SIZE_RATIO, 2);
   });
 });
 

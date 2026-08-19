@@ -133,16 +133,22 @@ const BLEND_SEARCH_STEPS = 24;
  *
  * Where a *filled* arc's colour is the background and `readableTextColor` picks the text against it,
  * an *outlined* arc (#26) inverts that: the colour becomes the foreground against a background it
- * does not control, and two palette colours fail it outright (⚫ 1.21:1, 🟤 2.50:1 on the dial).
+ * does not control, and two palette colours fail it outright (⚫ 1.32:1, 🟤 2.72:1 on the band).
  * A curated table cannot close this — one colour source is an arbitrary calendar hex — so the
  * adjustment is computed.
  *
- * Blends toward the background's far extreme: white on a dark ground, black on a light one, by the
- * smallest fraction that clears the ratio. Mixing toward a neutral keeps HSL hue exactly while
- * raising lightness and shedding saturation — the "lighten *and* desaturate on dark" Material
- * prescribes, and its mirror on light. Contrast is monotonic in that fraction, so a binary search
- * lands the minimal adjustment: a colour already clearing the floor is returned untouched, and one
- * that fails moves no further than it must.
+ * Blends toward whichever extreme contrasts better with the background — usually white on a dark
+ * ground and black on a light one — by the smallest fraction that clears the ratio. Mixing toward a
+ * neutral keeps HSL hue exactly while raising lightness and shedding saturation — the "lighten *and*
+ * desaturate on dark" Material prescribes, and its mirror on light. Contrast is monotonic in that
+ * fraction, so a binary search lands the minimal adjustment: a colour already clearing the floor is
+ * returned untouched, and one that fails moves no further than it must.
+ *
+ * `readableTextColor` picks the extreme rather than a luminance threshold, because black and white
+ * change places at L ≈ 0.1791 — where `(L + 0.05)² = 1.05 × 0.05` — and not at the midpoint. On a
+ * ground inside `(0.1791, 0.5)` a midpoint test blends toward the *nearer* extreme: on `#bbbbbb`
+ * that returns white at 1.92:1 where black reaches 10.94:1, and the guard below then reports the
+ * losing extreme as the best available answer.
  *
  * Returns `color` unchanged if either value is not a parseable hex — the same parseability guard the
  * rest of this module makes, so an unresolvable colour degrades to its authored form rather than
@@ -153,14 +159,13 @@ export function adjustForContrast(
   background: string,
   minRatio: number = DEFAULT_MIN_CONTRAST
 ): string {
-  const backgroundLuminance = relativeLuminance(background);
   const current = contrastRatio(color, background);
-  if (backgroundLuminance === null || current === null) return color;
+  if (current === null) return color;
   if (current >= minRatio) return color;
 
-  const target = backgroundLuminance < 0.5 ? WHITE : BLACK;
-  // The extreme itself may not clear a very high `minRatio` (e.g. white on a mid-grey); then the
-  // best available answer is the extreme, and there is nothing further to search for.
+  const target = readableTextColor(background);
+  // Even the better extreme may not clear a very high `minRatio` (e.g. black on a mid-grey at 12:1);
+  // then it is still the best available answer, since the other extreme reaches less by definition.
   if ((contrastRatio(target, background) ?? 0) < minRatio) return target;
 
   let lo = 0;
