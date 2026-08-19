@@ -26,10 +26,14 @@ export const TITLE_RADIUS_RATIO = 0.5;
 /**
  * Title font size = arc band height × this ratio.
  *
- * Deliberately uncapped. An inherited ceiling of 18 units meant that widening the band — the
- * whole response to "it cannot be read from there" — bought a thicker arc carrying the same small
- * text. The ratio already adapts to however much radial room a ring actually has, including when
- * stacking divides the band, so a ceiling only ever fought the intent.
+ * Deliberately uncapped in *absolute* terms. An inherited ceiling of 18 units meant that widening
+ * the band — the whole response to "it cannot be read from there" — bought a thicker arc carrying
+ * the same small text. The ratio already adapts to however much radial room a ring actually has,
+ * including when stacking divides the band, so a ceiling only ever fought the intent.
+ *
+ * `computeArcTitleLayout` does hold the result to the room the ring's own edge strokes leave (#67),
+ * which is a different thing: that limit is derived from the band and grows with it, so widening the
+ * band still buys bigger text.
  */
 export const TITLE_FONT_SIZE_RATIO = 0.28;
 
@@ -77,8 +81,12 @@ export const TITLE_LINE_OFFSET_RATIO = (INK_HEIGHT_RATIO + TITLE_LINE_GAP_RATIO)
  *
  * One unit, matching the separator's own floor: below that the two are not distinguishable as
  * separate marks anyway, so there is nothing left to protect.
+ *
+ * Measured to the glyph *em box*, as every radial gate on this band is. Real ink reaches past it —
+ * 0.54 units per side at a 3.93 font — so a clearance of one unit is nearer half that of actual gap;
+ * #78 carries the correction, which touches every one of those gates rather than this constant alone.
  */
-const EDGE_CLEARANCE = 1;
+export const TITLE_EDGE_CLEARANCE = 1;
 
 /** Slack when comparing a ring's thickness with the band's, since the one is derived from the other. */
 const RING_EQUALITY_TOLERANCE = 1e-6;
@@ -88,10 +96,32 @@ export interface ArcTitleLayout {
   titleRadius: number;
   /** Resolved title font size in px. */
   titleFontSize: number;
+  /**
+   * Half the radial gap between two stacked baselines, in the same units as the radii.
+   *
+   * Stated here rather than left to the renderer to restate the ratio: the clearance guarantee below
+   * is about where these lines land, so one place should decide it. Equal to
+   * `titleFontSize × TITLE_LINE_OFFSET_RATIO` by construction.
+   */
+  lineOffset: number;
   /** Lines the title may occupy on this arc. */
   maxLines: 1 | 2;
   /** Word-pack result — drives both rendering and overflow detection. */
   fit: FitTitleResult;
+}
+
+/**
+ * How far the outermost line's glyph band reaches from the centre of the stack, per unit of font
+ * size. `central` dominant-baseline puts a glyph band at ±fontSize/2 around its own baseline, and a
+ * stacked line's baseline sits `TITLE_LINE_OFFSET_RATIO` further out again.
+ *
+ * Keyed on the lines a title *actually takes*, not on the two the span allows: charging two-line room
+ * to a one-line title cost 10% of its size four deep on a 600-unit dial and 33% on a 300-unit one,
+ * where a single line had radial room to spare. Small text on a crowded ring is #70's whole subject,
+ * so there is nothing to spend there for a line that is not drawn.
+ */
+function stackReachRatio(lines: number): number {
+  return lines >= 2 ? TITLE_LINE_OFFSET_RATIO + 0.5 : 0.5;
 }
 
 export function computeArcTitleLayout(params: {
@@ -100,14 +130,51 @@ export function computeArcTitleLayout(params: {
   arcSpan: number;
   innerRadius: number;
   outerRadius: number;
+  /**
+   * Width of the widest stroke the caller draws on this ring's own outline — the elapsed outline,
+   * for the dial. Passed whether or not the event has elapsed: text that moved at the moment an
+   * event finished would visibly twitch on a wall display. Defaults to none, for a caller drawing
+   * nothing there.
+   */
+  edgeStrokeWidth?: number;
 }): ArcTitleLayout {
-  const { title, arcSpan, innerRadius, outerRadius } = params;
+  const { title, arcSpan, innerRadius, outerRadius, edgeStrokeWidth = 0 } = params;
   const arcHeight = outerRadius - innerRadius;
   const titleRadius = innerRadius + arcHeight * TITLE_RADIUS_RATIO;
-  const titleFontSize = roundCoord(arcHeight * TITLE_FONT_SIZE_RATIO);
   const maxLines: 1 | 2 = arcSpan >= TWO_LINE_MIN_SPAN_DEGREES ? 2 : 1;
-  const fit = fitTitleToArc(title, arcSpan, titleRadius, titleFontSize, maxLines);
-  return { titleRadius, titleFontSize, maxLines, fit };
+
+  // The room the stack has, measured from the centre of the ring outward: half the ring, less the
+  // half-width a stroke straddling the edge reaches back in, less the clearance to it. A stroke
+  // straddles its path, so it takes half its width from each edge (#67).
+  const usableHalf = Math.max(
+    0,
+    arcHeight / 2 - (edgeStrokeWidth / 2 + TITLE_EDGE_CLEARANCE)
+  );
+
+  // The word-pack runs at the size the *ring* gives, before any of the above. That keeps the
+  // character budget — and so `didOverflow`, and so which titles the dial routes to a floating label
+  // — exactly what it was: a capped font is a *larger* budget, and letting the cap widen it would
+  // quietly move borderline titles off a legible 17.52-unit card onto arc text a quarter that size,
+  // which is the trade #70 exists to question rather than one to make in passing. Lines packed for a
+  // larger font and drawn at a smaller one can only leave angular slack, never overrun.
+  const preferred = roundCoord(arcHeight * TITLE_FONT_SIZE_RATIO);
+  const fit = fitTitleToArc(title, arcSpan, titleRadius, preferred, maxLines);
+
+  // Then held to what the ring's own strokes leave. Not the absolute 18-unit ceiling #35's comment
+  // records removing: that one meant widening the band bought a thicker arc carrying the same small
+  // text, whereas this limit scales with the band exactly as the ratio does. It binds only where the
+  // stroke genuinely takes the space — a two-line stack four deep on a 600-unit dial, three deep on a
+  // 300-unit one — and truncates to `roundCoord`'s own precision rather than rounding, since rounding
+  // a *limit* upward is how a ten-thousandth of an overlap gets back in.
+  //
+  // `fitDurationLine` can add a second line under a one-line title (#35), which this has not budgeted
+  // for. Deliberately: that function applies this same clearance to this same font size and declines
+  // where the pair would not fit, so the stack stays bounded whichever line asked for it.
+  const ceiling = Math.floor((usableHalf / stackReachRatio(fit.lines.length)) * 1e4) / 1e4;
+  const titleFontSize = Math.min(preferred, ceiling);
+
+  const lineOffset = titleFontSize * TITLE_LINE_OFFSET_RATIO;
+  return { titleRadius, titleFontSize, lineOffset, maxLines, fit };
 }
 
 /**
@@ -128,15 +195,17 @@ export function computeArcTitleLayout(params: {
  * whatever is stroked on the ring's edges have to fit inside the ring. They do not always: an
  * elapsed arc's outline is sized from the whole *band* (#26, deliberately, so its weight does not
  * thin with overlap depth) while the text is sized from this arc's *ring*. On the 600-unit dial,
- * measured the way the gate below decides — `EDGE_CLEARANCE` included, so a negative figure is a
- * refusal — the em box left 11.98 units on a lone arc, 3.69 two deep, 0.93 three deep and −0.45
+ * measured the way the gate below decides — `TITLE_EDGE_CLEARANCE` included, so a negative figure is
+ * a refusal — the em box left 11.98 units on a lone arc, 3.69 two deep, 0.93 three deep and −0.45
  * four deep. Against real ink (#78) those become **7.73**, **1.70**, **−0.32** and **−1.32**: the
- * two deepest rings cannot carry a stack, where the em-box model admitted three of the four. The
- * legibility gate happens to cover every one of those cases today, but this is the check that is
- * actually about not drawing text on a stroke, and the two move independently: before #27 retired
- * the neutral halo the same stroke was 0.12 of the band rather than 0.07, and three deep measured
- * **−2.21**. `edgeStrokeWidth` is what the caller draws there, since the elapsed treatment is the
- * renderer's business, not this layout's.
+ * two deepest rings cannot carry a stack, where the em-box model admitted three of the four. #67
+ * holds the title's own stack to the same clearance from the other side, and its cap leaves those
+ * four figures unchanged. The legibility gate happens to cover every one of those cases today, but
+ * this is the check that is actually about not drawing text on a stroke, and the two move
+ * independently: before #27 retired the neutral halo the same stroke was 0.12 of the band rather
+ * than 0.07, and three deep measured **−2.11** — the halo *as drawn*, since `stroke()` capped it
+ * at 0.4 of the ring, giving 8.91 rather than the 9.11 the ratio asks for. `edgeStrokeWidth` is what
+ * the caller draws there, since the elapsed treatment is the renderer's business, not this layout's.
  *
  * The gate is checked against that stroke whether or not the event has elapsed yet: a duration that
  * appeared and vanished as an event crossed into elapsed would flicker on the wall.
@@ -188,8 +257,10 @@ export function fitDurationLine(params: {
   // thickness comes back through floating-point arithmetic rather than as the band verbatim.
   if (outerRadius - innerRadius < bandThickness - RING_EQUALITY_TOLERANCE) return undefined;
 
-  // A stroke straddles its path, so it reaches half its width into the ring from either edge.
-  const reach = edgeStrokeWidth / 2 + EDGE_CLEARANCE;
+  // A stroke straddles its path, so it reaches half its width into the ring from either edge. The
+  // offset re-derived below is `ArcTitleLayout.lineOffset` by construction — the layout applies
+  // `TITLE_LINE_OFFSET_RATIO` to whatever font size it resolved, capped or not.
+  const reach = edgeStrokeWidth / 2 + TITLE_EDGE_CLEARANCE;
   const lineHalfHeight = fontSize * TITLE_LINE_OFFSET_RATIO + (fontSize * INK_HEIGHT_RATIO) / 2;
   if (titleRadius + lineHalfHeight > outerRadius - reach) return undefined;
   if (titleRadius - lineHalfHeight < innerRadius + reach) return undefined;

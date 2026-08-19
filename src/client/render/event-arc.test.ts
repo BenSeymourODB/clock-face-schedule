@@ -2,17 +2,25 @@ import { describe, expect, it } from "vitest";
 import {
   FEATHER_DEGREES,
   INK_HEIGHT_RATIO,
+  TITLE_EDGE_CLEARANCE,
+  TITLE_FONT_SIZE_RATIO,
   TITLE_LINE_OFFSET_RATIO,
   type ClockEvent,
   adjustForContrast,
+  arcCharBudget,
+  compositeOver,
   computeArcTitleLayout,
   contrastRatio,
   polarToCartesian,
 } from "../../shared/clock";
+import { ARC_BAND_RATIO, RING_GAP_MIN, RING_GAP_RATIO } from "./analog-clock";
 import { eventArc } from "./event-arc";
 
 /** The dial background the outline's colour is made legible against — `--card`, per event-arc.ts. */
 const DIAL_BACKGROUND = "#16181d";
+
+/** What is actually behind the arc band, and what a drained arc exposes — `--page`. */
+const BAND_BACKGROUND = "#0c0e12";
 
 const CX = 300;
 const CY = 300;
@@ -929,6 +937,127 @@ describe("eventArc once the event has ended", () => {
 });
 
 /**
+ * #67: the outline is sized from the whole band, deliberately, so its weight does not thin with
+ * overlap depth (#26) — while the text is sized from this arc's own ring, equally deliberately. Both
+ * rules are right and on a thin ring they disagree, so the two have to be compared somewhere.
+ *
+ * Asserted on rendered attributes rather than on the layout, because that is where the two meet: the
+ * `d` of each baseline against the `stroke-width` the outline actually carries. A test computing
+ * both from the same constants would encode the assumption that put the text on the stroke.
+ */
+describe("eventArc's title against what is stroked on its ring", () => {
+  const BAND = OUTER * ARC_BAND_RATIO;
+  const RING_GAP = Math.max(RING_GAP_MIN, BAND * RING_GAP_RATIO);
+
+  /** The outermost ring of a `depth`-deep cluster, as the dial divides the band. */
+  function ring(depth: number) {
+    const gap = depth > 1 ? RING_GAP : 0;
+    const thickness = (BAND - (depth - 1) * gap) / depth;
+    return { innerRadius: OUTER - thickness, outerRadius: OUTER, bandThickness: BAND };
+  }
+
+  /**
+   * A title that wraps onto two lines on this ring *and* fits — two words that each fit a line alone
+   * and cannot share one.
+   *
+   * Derived from the ring's own budget rather than written out, because a fixed string is a two-line
+   * fit on a thin ring and a truncated one-liner on a thick one. That distinction matters here: an
+   * overflowing title is routed to a floating label with `forceHideTitle`, so a truncated case would
+   * be asserting clearance on a configuration the dial never renders.
+   */
+  function wrappingTitle(depth: number, arcSpan: number) {
+    const shape = ring(depth);
+    const probe = computeArcTitleLayout({ ...shape, title: "x", arcSpan });
+    const budget = arcCharBudget(arcSpan, probe.titleRadius, probe.titleFontSize);
+    const word = "a".repeat(Math.max(1, Math.floor(budget / 2) + 1));
+
+    return `${word} ${word}`;
+  }
+
+  function measure(depth: number, cleanTitle: string, arcSpan = 30) {
+    const shape = ring(depth);
+    const group = eventArc({
+      event: makeEvent({ cleanTitle, startAngle: 0, endAngle: arcSpan }),
+      cx: CX,
+      cy: CY,
+      isElapsed: true,
+      ...shape,
+    });
+
+    const radii = [...group.querySelectorAll("defs > path")].map((node) =>
+      arcRadius(node.getAttribute("d") ?? "")
+    );
+    const fontSize = Number(
+      group.querySelector('[data-testid="event-title-e1"] text')?.getAttribute("font-size")
+    );
+    const strokeWidth = Number(
+      group.querySelector('[data-arc-part="outline"]')?.getAttribute("stroke-width")
+    );
+
+    // A stroke straddles its path, so it reaches half its width back into the ring from each edge.
+    return {
+      radii,
+      fontSize,
+      strokeWidth,
+      outward: shape.outerRadius - strokeWidth / 2 - (Math.max(...radii) + fontSize / 2),
+      inward: Math.min(...radii) - fontSize / 2 - (shape.innerRadius + strokeWidth / 2),
+    };
+  }
+
+  it.each([[1], [2], [3], [4]])("clears both edges %i deep, on two lines", (depth) => {
+    const { radii, outward, inward } = measure(depth, wrappingTitle(depth, 30));
+
+    expect(radii).toHaveLength(2);
+    expect(outward).toBeGreaterThanOrEqual(TITLE_EDGE_CLEARANCE);
+    expect(inward).toBeGreaterThanOrEqual(TITLE_EDGE_CLEARANCE);
+  });
+
+  it.each([[2], [3], [4]])("clears both edges %i deep, on one line", (depth) => {
+    const { radii, outward, inward } = measure(depth, "Lunch");
+
+    expect(radii).toHaveLength(1);
+    expect(outward).toBeGreaterThanOrEqual(TITLE_EDGE_CLEARANCE);
+    expect(inward).toBeGreaterThanOrEqual(TITLE_EDGE_CLEARANCE);
+  });
+
+  it("clears both edges when #35's duration line makes the second line", () => {
+    // A lone arc's one-line title gains a duration line beneath it, so the stack is two lines the
+    // font size was not held to. `fitDurationLine` applies the same clearance to the same font and
+    // declines where the pair would not fit, which is what keeps this in bounds — depth 1 is the only
+    // depth it survives, since its own legibility gate wants the whole band.
+    const { radii, outward, inward } = measure(1, "Lunch");
+
+    expect(radii).toHaveLength(2);
+    expect(outward).toBeGreaterThanOrEqual(TITLE_EDGE_CLEARANCE);
+    expect(inward).toBeGreaterThanOrEqual(TITLE_EDGE_CLEARANCE);
+  });
+
+  it("is the four-deep ring that binds, and it yields only the text", () => {
+    // Where the fix shows: four deep the stack wanted 4.58 units of half-height in the 4.12 the
+    // outline leaves, so the font gives up 10%. The outline is untouched — it *is* the arc once the
+    // fill is gone, and capping it by the ring is the inversion #26's band-sizing exists to prevent.
+    const stacked = measure(4, wrappingTitle(4, 30));
+    const three = measure(3, wrappingTitle(3, 30));
+
+    expect(stacked.fontSize).toBeLessThan((ring(4).outerRadius - ring(4).innerRadius) * TITLE_FONT_SIZE_RATIO);
+    expect(stacked.strokeWidth).toBe(measure(1, "Lunch").strokeWidth);
+    expect(three.fontSize).toBeCloseTo(
+      (ring(3).outerRadius - ring(3).innerRadius) * TITLE_FONT_SIZE_RATIO,
+      2
+    );
+  });
+
+  it("leaves a one-line title on the same ring at full size", () => {
+    // The room a line that is not drawn does not get to take: charging two-line reach to every arc
+    // wider than the two-line span threshold cost this title 10% of its size for nothing, on the ring
+    // that can least afford it (#70).
+    const arcHeight = ring(4).outerRadius - ring(4).innerRadius;
+
+    expect(measure(4, "Lunch").fontSize).toBeCloseTo(arcHeight * TITLE_FONT_SIZE_RATIO, 2);
+  });
+});
+
+/**
  * #28: a still-running event splits at "now" rather than flipping straight from live to elapsed —
  * the spent portion reads like #26's hollow outline, the rest keeps its fill.
  */
@@ -1015,10 +1144,346 @@ describe("eventArc while the event is draining", () => {
 
     const gradient = group.querySelector('mask#arc-fade-e1 linearGradient');
     const midRadius = (INNER + OUTER) / 2;
+    const at = (name: string) => Number(gradient?.getAttribute(name));
+    // The ramp straddles the boundary, so its *centre* is the boundary — asserted here rather than
+    // an endpoint, which sits half a ramp to one side of it.
+    const centre = { x: (at("x1") + at("x2")) / 2, y: (at("y1") + at("y2")) / 2 };
+    const centreAngle = ((Math.atan2(centre.y - CY, centre.x - CX) * 180) / Math.PI + 450) % 360;
     const expected = polarToCartesian(CX, CY, midRadius, 10);
 
-    expect(Number(gradient?.getAttribute("x1"))).toBeCloseTo(expected.x, 4);
-    expect(Number(gradient?.getAttribute("y1"))).toBeCloseTo(expected.y, 4);
+    // Exactly on the boundary's own radial line, and within the sagitta of the arc point: the axis
+    // is a chord, so its midpoint sits ~0.28 units inside the arc at this radius.
+    expect(centreAngle).toBeCloseTo(10, 4);
+    expect(Math.hypot(centre.x - expected.x, centre.y - expected.y)).toBeLessThan(0.4);
+  });
+
+  /**
+   * #71: every assertion above passes on a mask that drains nothing, because they check *which*
+   * mask each part references and never what the mask does. A white ground plus one gradient wedge
+   * left 65–83% of the spent side at full fill; these pin the occluding region that fixes it.
+   */
+  describe("what the masks actually hide", () => {
+    // (OUTER − INNER) × ARC_SEPARATOR_RATIO, as an angle at the outer radius: how far every wedge
+    // reaches past its far edge to swallow the stroke straddling the path there.
+    const PAD_DEGREES = (1.44 / OUTER) * (180 / Math.PI);
+
+    /** Angle of a point, in the dial's 0°-at-twelve convention. */
+    function angleOf(x: number, y: number): number {
+      return (Math.atan2(y - CY, x - CX) * (180 / Math.PI) + 450) % 360;
+    }
+
+    /**
+     * A mask wedge's angular edges — its `M` point and its outer-arc endpoint — its span, its radii
+     * and its `largeArcFlag`.
+     *
+     * The flag is parsed on purpose: wrong, a wedge covers the *complement* of the side it was meant
+     * to and hides the wrong half of the arc outright, while its two endpoint angles look identical
+     * either way. Same for the radii — an occlusion drawn off the ring hides nothing at all.
+     */
+    function wedgeEdges(path: Element | null): {
+      from: number;
+      to: number;
+      span: number;
+      largeArc: number;
+      radii: number[];
+    } {
+      const d = path?.getAttribute("d") ?? "";
+      const [mx, my, , , , largeArc, , ax, ay] = d.split(/[ A]+/).slice(1).map(Number);
+      const from = angleOf(mx, my);
+      const to = angleOf(ax, ay);
+      const radii = (d.match(/A ([\d.]+) /g) ?? []).map((chunk) => Number.parseFloat(chunk.slice(2)));
+
+      return { from, to, span: (to - from + 360) % 360, largeArc, radii };
+    }
+
+    /** The padded radii every wedge is drawn at, so a mis-sized occlusion cannot pass. */
+    const WEDGE_RADII = [OUTER + 1.44, INNER - 1.44];
+
+    function occlusion(group: SVGGElement, maskId: string): Element | null {
+      return group.querySelector(`mask#${maskId} [data-mask-part="occlusion"]`);
+    }
+
+    // now at 15° of a 0°–60° arc, so the spent side is 15° and the remaining 45°. The ramp is
+    // min(FEATHER_DEGREES, 15 × 0.35) = 5.25° wide and straddles the boundary, so each solid region
+    // reaches to within half of that — 2.625° — of it.
+    const HALF_RAMP = 2.625;
+
+    it("hides the spent side of the fill outright, from the ramp back to the arc's start", () => {
+      const wedge = occlusion(draining(), "arc-fade-e1");
+      const { to, span, radii, largeArc } = wedgeEdges(wedge);
+
+      // Opaque black on a luminance mask: gone, not merely dimmed.
+      expect(wedge?.getAttribute("fill")).toBe("#000000");
+      expect(to).toBeCloseTo(15 - HALF_RAMP, 4);
+      expect(span).toBeCloseTo(15 - HALF_RAMP + PAD_DEGREES, 3);
+      // Drawn across the whole ring plus the stroke, and the short way round.
+      expect(radii).toEqual(WEDGE_RADII);
+      expect(largeArc).toBe(0);
+    });
+
+    it("hides the remaining side from the outline, so nothing unhappened wears an elapsed edge", () => {
+      const wedge = occlusion(draining(), "arc-drain-e1");
+      const { from, span, radii, largeArc } = wedgeEdges(wedge);
+
+      expect(wedge?.getAttribute("fill")).toBe("#000000");
+      expect(from).toBeCloseTo(15 + HALF_RAMP, 4);
+      expect(span).toBeCloseTo(45 - HALF_RAMP + PAD_DEGREES, 3);
+      expect(radii).toEqual(WEDGE_RADII);
+      expect(largeArc).toBe(0);
+    });
+
+    it.each([
+      ["fill", "arc-fade-e1", "to", -1],
+      ["outline", "arc-drain-e1", "from", 1],
+    ] as const)(
+      "stops the %s's solid region where its own ramp begins, leaving the seam to the ramp",
+      (_label, maskId, rampEdge, direction) => {
+        // A solid reaching the boundary would paint over the half of the ramp lying on its own side,
+        // and the crisp edge the whole seam exists to deny would be back — half a ramp from `now`.
+        // 4 places, not more: `roundCoord` quantises the wedge's own path coordinates.
+        expect(wedgeEdges(occlusion(draining(), maskId))[rampEdge]).toBeCloseTo(
+          15 + direction * HALF_RAMP,
+          4
+        );
+      }
+    );
+
+    it("leaves the two solid regions exactly the ramp between them", () => {
+      const group = draining();
+      const fill = wedgeEdges(occlusion(group, "arc-fade-e1"));
+      const outline = wedgeEdges(occlusion(group, "arc-drain-e1"));
+
+      // No double-black across the seam, and no bare sliver either side of it.
+      expect(outline.from - fill.to).toBeCloseTo(2 * HALF_RAMP, 3);
+    });
+
+    it("scales the hidden region with the boundary rather than fixing it at a ramp's depth", () => {
+      // The old failure got worse the longer the event: a 10°-capped ramp on a 120° arc left 83%
+      // of each side untouched. Occlusion has no cap — it is however much side there is, less the
+      // half-ramp that side lends to the seam.
+      const group = eventArc({
+        event: makeEvent({ startAngle: 0, endAngle: 120 }),
+        cx: CX,
+        cy: CY,
+        innerRadius: INNER,
+        outerRadius: OUTER,
+        nowAngle: 30,
+      });
+      const { span } = wedgeEdges(occlusion(group, "arc-fade-e1"));
+
+      expect(span).toBeGreaterThan(FEATHER_DEGREES);
+      expect(span).toBeCloseTo(30 - FEATHER_DEGREES / 2 + PAD_DEGREES, 3);
+    });
+
+    it("draws the long way round when the side it hides exceeds a half turn", () => {
+      // Wrap-aware geometry never normalises past 360 (#33), so a 288°-remaining side is a real
+      // case. With largeArcFlag wrong the wedge would hide the arc's *other* side entirely — and
+      // every endpoint-angle assertion above would still pass.
+      const group = eventArc({
+        event: makeEvent({ startAngle: -20, endAngle: 300 }),
+        cx: CX,
+        cy: CY,
+        innerRadius: INNER,
+        outerRadius: OUTER,
+        nowAngle: 12,
+      });
+
+      expect(wedgeEdges(occlusion(group, "arc-drain-e1")).largeArc).toBe(1);
+      expect(wedgeEdges(occlusion(group, "arc-fade-e1")).largeArc).toBe(0);
+    });
+
+    it("keeps the window feather on the spent mask too, when the arc is clamped as well", () => {
+      const group = eventArc({
+        event: makeEvent({ startAngle: 0, endAngle: 60, continuesBefore: true }),
+        cx: CX,
+        cy: CY,
+        innerRadius: INNER,
+        outerRadius: OUTER,
+        nowAngle: 15,
+      });
+      const mask = group.querySelector("mask#arc-drain-e1");
+
+      // A clamped leading edge falls on the spent side, so it is the outline's mask that has to
+      // carry it — the fade and the occlusion compose rather than one replacing the other.
+      expect([...(mask?.querySelectorAll("linearGradient") ?? [])].map((n) => n.id)).toEqual([
+        "arc-drain-e1-start",
+        "arc-drain-e1-drain",
+      ]);
+      expect(mask?.querySelector('[data-mask-part="occlusion"]')).not.toBeNull();
+    });
+  });
+
+  /**
+   * Draining the fill for the first time changes what the title sits on. Black — which
+   * `readableTextColor` picks for 🟠 🟡 🟢 ⚪ once composited over the dial — measures 1.18:1 on the
+   * bare dial the drained side exposes, and white on those same fills measures 1.7–3.0:1, so no one
+   * colour serves both grounds.
+   */
+  describe("the title across the seam", () => {
+    function titles(color: string): { fill: string | null; mask: string | null }[] {
+      const group = eventArc({
+        event: makeEvent({ startAngle: 0, endAngle: 60, color }),
+        cx: CX,
+        cy: CY,
+        innerRadius: INNER,
+        outerRadius: OUTER,
+        nowAngle: 15,
+      });
+
+      // The name's own line. #35 puts a duration line on the second baseline of a one-line title,
+      // and it takes the same per-side treatment — covered separately below.
+      return [...group.querySelectorAll('[data-testid="event-title-e1"] text')]
+        .filter((node) => node.getAttribute("data-testid") === null)
+        .map((node) => ({
+          fill: node.getAttribute("fill"),
+          mask: node.getAttribute("mask"),
+        }));
+    }
+
+    it("draws one copy per side, each masked to the ground it is coloured for", () => {
+      // ⚪ gray-100: the worst case, since its fill takes black text and the dial cannot.
+      expect(titles("#F3F4F6")).toEqual([
+        { fill: "#000000", mask: "url(#arc-title-live-e1)" },
+        { fill: "var(--card-foreground)", mask: "url(#arc-title-spent-e1)" },
+      ]);
+    });
+
+    it.each([
+      ["arc-title-live-e1"],
+      ["arc-title-spent-e1"],
+    ])("hard-edges %s: a glyph in a ramp blends to mid-grey and drops out", (maskId) => {
+      // Measured on the fixture at 1.4:1 against its own ground when both copies painted at partial
+      // alpha — a letter missing from the middle of the title. The arc's own masks keep their ramp;
+      // the text's carry the split alone.
+      const group = eventArc({
+        event: makeEvent({ startAngle: 0, endAngle: 60, continuesBefore: true }),
+        cx: CX,
+        cy: CY,
+        innerRadius: INNER,
+        outerRadius: OUTER,
+        nowAngle: 15,
+      });
+      const mask = group.querySelector(`mask#${maskId}`);
+
+      expect(mask?.querySelector('[data-mask-part="occlusion"]')).not.toBeNull();
+      expect(mask?.querySelector('[data-mask-part="ramp"]')).toBeNull();
+      // And no window feather either: a clamped title is deliberately left readable (#22), and
+      // draining must not quietly reverse that.
+      expect(mask?.querySelectorAll("linearGradient")).toHaveLength(0);
+    });
+
+    it.each([
+      ["⚫ gray-800", "#1F2937", 14.04],
+      ["🟤 amber-800", "#92400E", 7.69],
+      // These two take a *black* title while live, derived from the authored hex — but measured on
+      // the composited fill the light token beats it (4.43 against 4.31, 4.60 against 4.14), so they
+      // need no split either, and the copy they get is the one they keep once elapsed.
+      ["🔴 red-500", "#EF4444", 4.43],
+      ["🟣 purple-500", "#A855F7", 4.6],
+    ])(
+      "leaves %s one unmasked copy, which reads on its fill (%f:1) and on the band alike",
+      (_label, color, onFill) => {
+        // Splitting a title that needs no split costs two nodes and invites a seam artefact for
+        // nothing.
+        expect(titles(color)).toEqual([{ fill: "var(--card-foreground)", mask: null }]);
+        // And the claim in that sentence, measured rather than asserted.
+        const fill = compositeOver(BAND_BACKGROUND, color, 0.85)!;
+        expect(contrastRatio("#f2f4f8", fill)).toBeCloseTo(onFill, 1);
+        expect(contrastRatio("#f2f4f8", fill)!).toBeGreaterThan(contrastRatio("#000000", fill)!);
+      }
+    );
+
+    it.each([
+      ["🟠 orange-500", "#F97316"],
+      ["🟡 yellow-500", "#EAB308"],
+      ["🟢 green-500", "#22C55E"],
+      ["🔵 blue-500", "#3B82F6"],
+      ["⚪ gray-100", "#F3F4F6"],
+    ])("splits %s, whose fill genuinely reads better in black", (_label, color) => {
+      expect(titles(color)).toEqual([
+        { fill: "#000000", mask: "url(#arc-title-live-e1)" },
+        { fill: "var(--card-foreground)", mask: "url(#arc-title-spent-e1)" },
+      ]);
+    });
+
+    it("splits past the boundary, where the fill has actually arrived", () => {
+      // At the boundary the ramp has delivered no fill yet, so text coloured for the fill measures
+      // 1.18:1 there. The split belongs at `textFlipCoverage` along the ramp instead.
+      const group = eventArc({
+        event: makeEvent({ startAngle: 0, endAngle: 60, color: "#EAB308" }),
+        cx: CX,
+        cy: CY,
+        innerRadius: INNER,
+        outerRadius: OUTER,
+        nowAngle: 15,
+      });
+      const d =
+        group
+          .querySelector('mask#arc-title-live-e1 [data-mask-part="occlusion"]')
+          ?.getAttribute("d") ?? "";
+      const [, , , , , , , ax, ay] = d.split(/[ A]+/).slice(1).map(Number);
+      const splitAngle = (Math.atan2(ay - CY, ax - CX) * (180 / Math.PI) + 450) % 360;
+
+      // 15° boundary; the ramp reaches 15° + min(FEATHER_DEGREES, 15 × 0.35).
+      expect(splitAngle).toBeGreaterThan(15);
+      expect(splitAngle).toBeLessThanOrEqual(15 + 15 * 0.35);
+    });
+
+    it("still draws a single unmasked copy of each line when the arc is not draining", () => {
+      const group = render({ startAngle: 0, endAngle: 60, color: "#F3F4F6" });
+      const nodes = [...group.querySelectorAll('[data-testid="event-title-e1"] text')];
+
+      // The name and #35's duration line, once each — masks belong to the drain and nothing else.
+      expect(nodes.map((node) => node.textContent)).toEqual(["Team Meeting", "2 hr"]);
+      expect(nodes.every((node) => !node.hasAttribute("mask"))).toBe(true);
+    });
+
+    it("keeps both copies on one baseline path, so the seam recolours a letter rather than doubling it", () => {
+      const group = eventArc({
+        event: makeEvent({ startAngle: 0, endAngle: 60, color: "#F3F4F6" }),
+        cx: CX,
+        cy: CY,
+        innerRadius: INNER,
+        outerRadius: OUTER,
+        nowAngle: 15,
+      });
+      const hrefs = [...group.querySelectorAll('[data-testid="event-title-e1"] text')]
+        .filter((node) => node.getAttribute("data-testid") === null)
+        .map((node) => node.querySelector("textPath")?.getAttribute("href"));
+
+      expect(hrefs).toEqual(["#text-path-e1-0", "#text-path-e1-0"]);
+    });
+
+    it("splits #35's duration line the same way, onto its own baseline", () => {
+      // The duration line sits on the same two grounds as the name above it, so it needs the same
+      // two copies — and on the *second* baseline, not the first, or it would land on the title.
+      const group = eventArc({
+        event: makeEvent({ startAngle: 0, endAngle: 60, color: "#EAB308", durationMinutes: 120 }),
+        cx: CX,
+        cy: CY,
+        innerRadius: INNER,
+        outerRadius: OUTER,
+        nowAngle: 15,
+      });
+      const duration = [...group.querySelectorAll('[data-testid="event-duration-e1"]')].map(
+        (node) => ({
+          fill: node.getAttribute("fill"),
+          mask: node.getAttribute("mask"),
+          weight: node.getAttribute("font-weight"),
+          href: node.querySelector("textPath")?.getAttribute("href"),
+        })
+      );
+
+      expect(duration).toEqual([
+        { fill: "#000000", mask: "url(#arc-title-live-e1)", weight: "400", href: "#text-path-e1-1" },
+        {
+          fill: "var(--card-foreground)",
+          mask: "url(#arc-title-spent-e1)",
+          weight: "400",
+          href: "#text-path-e1-1",
+        },
+      ]);
+    });
   });
 
   it("combines a window-edge feather with the drain fade on the fill's own mask", () => {

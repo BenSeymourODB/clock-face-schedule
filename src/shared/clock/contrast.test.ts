@@ -5,6 +5,7 @@ import {
   contrastRatio,
   readableTextColor,
   relativeLuminance,
+  textFlipCoverage,
 } from "./contrast";
 
 /** The dial's own background, the ground every event colour is measured against (`--card`). */
@@ -38,6 +39,10 @@ const PALETTE = [
 ] as const;
 
 const AA_NORMAL_TEXT = 4.5;
+
+/** The two extremes `adjustForContrast` blends toward, spelled as the module returns them. */
+const BLACK = "#000000";
+const WHITE = "#ffffff";
 
 describe("relativeLuminance", () => {
   it.each([
@@ -191,6 +196,99 @@ describe("adjustForContrast", () => {
     // ⚫ fails 4.5 but clears 1.0 trivially, so at a 1.0 floor it is returned as-is.
     expect(adjustForContrast("#1F2937", CARD, 1)).toBe("#1F2937");
   });
+
+  describe("on a mid-tone ground, where black and white change places below the midpoint", () => {
+    // #95. Black and white swap at L ≈ 0.1791 — the root of (L + 0.05)² = 1.05 × 0.05 — not at 0.5,
+    // so every ground in (0.1791, 0.5) is one a midpoint test sends toward the *nearer* extreme.
+    // Unreachable on today's two grounds (`--card` #16181d is L = 0.0091), and reachable the moment
+    // #81's light scheme adds a mid-tone surface.
+    const MIDTONE_GROUNDS = [
+      ["#767676", 0.1812],
+      ["#808080", 0.2159],
+      ["#949494", 0.2961],
+      ["#b0b0b0", 0.4342],
+      ["#bbbbbb", 0.4969],
+    ] as const;
+
+    it.each(MIDTONE_GROUNDS)("%s sits above the crossover and below the midpoint", (ground, l) => {
+      expect(relativeLuminance(ground)!).toBeCloseTo(l, 4);
+      expect(relativeLuminance(ground)!).toBeGreaterThan(0.1791);
+      expect(relativeLuminance(ground)!).toBeLessThan(0.5);
+
+      // The property that makes the midpoint test wrong: black wins on all of these.
+      expect(contrastRatio(BLACK, ground)!).toBeGreaterThan(contrastRatio(WHITE, ground)!);
+    });
+
+    // The assertion that would have caught this. The old spec exercised only #ffffff — the
+    // trivially-correct end of the light range — and asserted the same rule the code held.
+    it.each(MIDTONE_GROUNDS)("clears a floor on %s that only black reaches", (ground) => {
+      // A floor between what white reaches and what black reaches: satisfiable, but only one way.
+      const floor = (contrastRatio(WHITE, ground)! + contrastRatio(BLACK, ground)!) / 2;
+
+      const adjusted = adjustForContrast("#d14e89", ground, floor);
+
+      expect(contrastRatio(adjusted, ground)!).toBeGreaterThanOrEqual(floor);
+    });
+
+    it("falls back to the better extreme, not the nearer one, when no blend clears the floor", () => {
+      // The guard's own case. On #bbbbbb white tops out at 1.92:1 and black at 10.94:1, so a 12:1
+      // floor is out of reach either way and the guard picks the extreme that gets closest. The
+      // midpoint rule returned white here — 1.92:1, while calling itself the best available answer.
+      expect(contrastRatio(WHITE, "#bbbbbb")!).toBeCloseTo(1.92, 2);
+      expect(contrastRatio(BLACK, "#bbbbbb")!).toBeCloseTo(10.94, 2);
+
+      expect(adjustForContrast("#d14e89", "#bbbbbb", 12)).toBe(BLACK);
+    });
+  });
+
+  it("clears the floor whenever either extreme can, over a sweep of colour/ground/floor triples", () => {
+    // The general property, rather than the enumerated grounds above: the returned colour clears
+    // the floor in every case where *some* answer does. The midpoint rule fails this on 24% of
+    // reachable triples; it is the invariant, not the threshold constant, that is worth pinning.
+    //
+    // mulberry32 rather than the textbook `seed * 1103515245` LCG, whose state exceeds 2^53 on
+    // every step: the low bits are lost to double rounding before the mask applies, and the
+    // generator settles into a 10,466-long cycle after a 5,937-step transient. A 5,000-iteration
+    // loop happens to fit inside that, but raising the count would silently replay triples rather
+    // than test new ones. Every operation here stays 32-bit via `Math.imul` and `|0`.
+    let state = 12345;
+    const random = () => {
+      state = (state + 0x6d2b79f5) | 0;
+      let t = Math.imul(state ^ (state >>> 15), 1 | state);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+    const randomHex = () =>
+      `#${[0, 1, 2]
+        .map(() => Math.floor(random() * 256).toString(16).padStart(2, "0"))
+        .join("")}`;
+
+    const ITERATIONS = 5000;
+    const missed: string[] = [];
+    const drawn = new Set<string>();
+    let reachable = 0;
+    for (let i = 0; i < ITERATIONS; i += 1) {
+      const color = randomHex();
+      const ground = randomHex();
+      const floor = 1 + random() * 6;
+      drawn.add(`${color}|${ground}|${floor}`);
+
+      const best = Math.max(contrastRatio(WHITE, ground)!, contrastRatio(BLACK, ground)!);
+      if (best < floor) continue;
+
+      reachable += 1;
+      const adjusted = adjustForContrast(color, ground, floor);
+      if (contrastRatio(adjusted, ground)! < floor - 1e-9) {
+        missed.push(`${color} on ${ground} at ${floor.toFixed(2)} -> ${adjusted}`);
+      }
+    }
+
+    // Every iteration tested something new. Without this a degenerate generator makes the loop
+    // count iterations rather than cases, and the sweep reports coverage it does not have.
+    expect(drawn.size).toBe(ITERATIONS);
+    expect(reachable).toBeGreaterThan(1000);
+    expect(missed).toEqual([]);
+  });
 });
 
 describe("compositeOver", () => {
@@ -209,5 +307,105 @@ describe("compositeOver", () => {
   it("returns null when either colour is unparseable", () => {
     expect(compositeOver("papayawhip", "#ffffff", 0.5)).toBeNull();
     expect(compositeOver("#ffffff", "papayawhip", 0.5)).toBeNull();
+  });
+});
+
+/**
+ * The seam of a draining arc (#28) is a fill ramping in from nothing, so a title crossing it has one
+ * ground at each end and somewhere in between the two candidate colours change places. This finds
+ * where — for the pair actually painted, which is why both are arguments.
+ */
+describe("textFlipCoverage", () => {
+  const ARC_FILL_OPACITY = 0.85;
+  /** What is behind the arc band: `--page`, not the face's `--card`. See `BAND_BACKGROUND`. */
+  const BAND = "#0c0e12";
+  /** The pair the renderer paints: `--card-foreground` on the drained side, black on the fill. */
+  const LIGHT = "#f2f4f8";
+  const DARK = "#000000";
+
+  const flip = (color: string) => textFlipCoverage(BAND, color, ARC_FILL_OPACITY, LIGHT, DARK);
+
+  /** Worst contrast anywhere across the ramp, if the text switches colour at `split`. */
+  function worstAcrossRamp(color: string, split: number, light = LIGHT): number {
+    let worst = Infinity;
+    for (let coverage = 0; coverage <= 1.0001; coverage += 0.002) {
+      const ground = compositeOver(BAND, color, ARC_FILL_OPACITY * coverage)!;
+      const text = coverage < split ? light : DARK;
+      worst = Math.min(worst, contrastRatio(text, ground)!);
+    }
+    return worst;
+  }
+
+  /** The colours whose fill genuinely wants the darker text, and so need a split at all. */
+  const SPLIT_COLOURS = [
+    ["🟠 orange-500", "#F97316"],
+    ["🟡 yellow-500", "#EAB308"],
+    ["🟢 green-500", "#22C55E"],
+    ["🔵 blue-500", "#3B82F6"],
+    ["⚪ gray-100", "#F3F4F6"],
+  ] as const;
+
+  it.each([
+    ["🔴 red-500", "#EF4444"],
+    ["🟣 purple-500", "#A855F7"],
+    ["⚫ gray-800", "#1F2937"],
+    ["🟤 amber-800", "#92400E"],
+  ])("reports no crossing for %s, whose fill reads better in the light colour anyway", (
+    _label,
+    color
+  ) => {
+    // Measured on the composited fill: black is 4.31 / 4.14 / 1.36 / 2.48 against the light token's
+    // 4.43 / 4.60 / 14.04 / 7.69. A caller reads 1 as "one copy, light, no split".
+    expect(flip(color)).toBe(1);
+  });
+
+  it.each(SPLIT_COLOURS)("crosses partway along the ramp for %s, at neither end", (_label, color) => {
+    expect(flip(color)).toBeGreaterThan(0);
+    expect(flip(color)).toBeLessThan(1);
+  });
+
+  it.each(SPLIT_COLOURS)("%s: splitting at the crossing is the best available seam", (
+    _label,
+    color
+  ) => {
+    const best = worstAcrossRamp(color, flip(color));
+
+    // Either colour used alone across the whole ramp is far worse — that is the defect (#71).
+    expect(worstAcrossRamp(color, 0)).toBeLessThan(1.2);
+    expect(worstAcrossRamp(color, 1)).toBeLessThan(4.4);
+    // And no other split does better: the crossing is the max-min, so it beats every alternative.
+    for (const split of [0.1, 0.25, 0.4, 0.5, 0.6, 0.75, 0.9]) {
+      expect(best).toBeGreaterThanOrEqual(worstAcrossRamp(color, split) - 1e-9);
+    }
+    // 4.37:1 for the palette — short of AA, and unreachable with this pair whatever the split.
+    // Guards the honest floor rather than asserting a pass the colours cannot deliver.
+    expect(best).toBeGreaterThan(4.3);
+  });
+
+  it("crosses at a different place for the pair actually painted than for pure white", () => {
+    // The bug this signature exists to prevent: deriving the candidates gives the black-vs-#ffffff
+    // tie, and the renderer paints `--card-foreground`. On 🟡 that is 0.028 of the ramp out, and it
+    // costs contrast at the seam — the split lands where the *wrong* pair crosses.
+    const painted = flip("#EAB308");
+    const pureWhite = textFlipCoverage(BAND, "#EAB308", ARC_FILL_OPACITY, "#ffffff", DARK);
+
+    expect(painted).not.toBeCloseTo(pureWhite, 3);
+    expect(worstAcrossRamp("#EAB308", painted)).toBeGreaterThan(
+      worstAcrossRamp("#EAB308", pureWhite)
+    );
+  });
+
+  it("reads the ground it is given: `--card` puts every crossing somewhere else", () => {
+    // The band sits over `--page`, outside the face circle. Measuring against `--card` moved each
+    // crossing 0.03–0.10 of the ramp, which is why `BAND_BACKGROUND` exists.
+    for (const [, color] of SPLIT_COLOURS) {
+      const onCard = textFlipCoverage("#16181d", color, ARC_FILL_OPACITY, LIGHT, DARK);
+
+      expect(onCard).not.toBeCloseTo(flip(color), 2);
+    }
+  });
+
+  it("reports no crossing for an unparseable colour, rather than splitting on a guess", () => {
+    expect(textFlipCoverage(BAND, "papayawhip", 0.85, LIGHT, DARK)).toBe(1);
   });
 });

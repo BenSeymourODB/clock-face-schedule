@@ -265,6 +265,43 @@ describe("analogClock", () => {
         expect(inner).toBeGreaterThanOrEqual(CLOCK_RADIUS - 1e-6);
       }
     });
+
+    /**
+     * #67: the dial derives each arc's title layout before the arc renders, so it is the dial that
+     * has to hand the layout the stroke that arc will draw on its own ring edges. Miss it and a
+     * two-line title on a four-deep ring sits 0.55 units from the outline — inside the one unit
+     * below which two marks stop reading as two — and every number here still looks right in
+     * isolation, which is why this measures the rendered attributes against each other.
+     */
+    it("keeps a stacked ring's two-line title clear of its own elapsed outline", () => {
+      // Four mutually overlapping events; "a" takes the outermost ring and a title long enough to
+      // wrap at that ring's font size. All four have ended by MORNING, so the outline is drawn.
+      const wrapping = "Parent Teacher Conference Planning Committee Meeting Notes and Actions";
+      const { element } = build([
+        input("a", 2, 3, { title: wrapping }),
+        input("b", 2, 4),
+        input("c", 2.2, 4),
+        input("d", 2.4, 4),
+      ]);
+
+      const group = element.querySelector('[data-testid="event-arc-group-a"]');
+      const { inner, outer } = arcRadii(group!.querySelector('[data-arc-part="fill"]')!);
+      const radii = [...group!.querySelectorAll("defs > path")].map((node) =>
+        Number(/A ([\d.]+) /.exec(node.getAttribute("d") ?? "")?.[1])
+      );
+      const fontSize = Number(
+        group!.querySelector('[data-testid="event-title-a"] text')?.getAttribute("font-size")
+      );
+      const strokeReach =
+        Number(group!.querySelector('[data-arc-part="outline"]')?.getAttribute("stroke-width")) / 2;
+
+      // The premise: four rings deep, and a title that really did take two lines.
+      expect(outer - inner).toBeCloseTo((ARC_THICKNESS - 3 * RING_GAP) / 4, 4);
+      expect(radii).toHaveLength(2);
+
+      expect(Math.max(...radii) + fontSize / 2).toBeLessThanOrEqual(outer - strokeReach - 1);
+      expect(Math.min(...radii) - fontSize / 2).toBeGreaterThanOrEqual(inner + strokeReach + 1);
+    });
   });
 
   describe("title overflow routing", () => {

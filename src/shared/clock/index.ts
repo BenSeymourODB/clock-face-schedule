@@ -1,5 +1,6 @@
 export {
   INK_HEIGHT_RATIO,
+  TITLE_EDGE_CLEARANCE,
   TITLE_FONT_SIZE_RATIO,
   TITLE_LINE_OFFSET_RATIO,
   TITLE_RADIUS_RATIO,
@@ -40,14 +41,21 @@ export {
   compositeOver,
   contrastRatio,
   readableTextColor,
-  relativeLuminance
+  relativeLuminance,
+  textFlipCoverage
 } from './contrast';
 export { formatEventDuration } from './duration';
 // `emoji.ts` is deliberately absent. Its consumers — `clock-utils`, `pack-lines`, `fit-label` —
 // are all inside this directory and import it directly, and re-exporting the pattern here put a
 // top-level `new RegExp` in the barrel that esbuild would not tree-shake, carrying the whole
 // sequence string into the *server* bundle even though `parseEventTitle` is dropped there.
-export { computeDrainFraction, computeDrainMasks, type DrainMasks } from './drain';
+export {
+  computeDrainFraction,
+  computeDrainMasks,
+  computeDrainTextSplit,
+  type DrainMasks,
+  type OccludedSpan
+} from './drain';
 export {
   FEATHER_DEGREES,
   FEATHER_MAX_SPAN_RATIO,
@@ -74,6 +82,14 @@ export {
 export { rectEdgeIntersection, rectsOverlap, type Rect } from './rect-edge';
 export { assignRings, type RingAssignment, type RingCandidate } from './ring-layout';
 export { describeTextArc } from './text-arc';
+export {
+  createTimeSource,
+  describeClockPin,
+  describePinnedInstant,
+  parseClockPin,
+  type ClockPin,
+  type TimeSource
+} from './time-source';
 export {
   drainEdgeDegrees,
   effectiveShowSeconds,
