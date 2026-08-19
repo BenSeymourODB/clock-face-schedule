@@ -5,17 +5,25 @@
    * colour reference — see ADR 0007. The vocabulary reads oddly out of that context:
    * `--destructive` is the second hand, not an error state.
    *
-   * Contrast ratios are against --card, the dial's own background, and are why these particular
-   * values were chosen. WCAG asks 4.5:1 for body text and 3:1 for graphical objects; a display
-   * read from the back of a room has no margin to give away, so nothing here sits near the floor.
+   * Contrast ratios are against --card, the face's own background, and are why these particular
+   * values were chosen. They describe the face: the numerals, ticks, hands and AM/PM the notes
+   * name are all drawn inside the face circle. Two of these tokens are also used on the arc band
+   * outside it, where the ground is --page and the ratio is not the one quoted — --border is the
+   * window track (1.86:1 there, composited at half opacity) and --card-foreground is an elapsed
+   * arc's title. WCAG asks 4.5:1 for body text and 3:1 for graphical objects; a display read from
+   * the back of a room has no margin to give away, so nothing here sits near the floor.
    */
   :root {
-    /* Also declared as DIAL_BACKGROUND in event-arc.ts, where contrast.ts measures against it. */
     --card: #16181d;
     --card-foreground: #f2f4f8; /* 17:1 — numerals, hour markers, hands */
     --border: #6b7280; /*  3.7:1 — face outline, minute ticks */
     --muted-foreground: #9aa3b2; /*  7:1   — AM/PM, status line */
     --destructive: #ef4444; /*  4.7:1 — second hand */
+    /*
+     * The ground the arc band is drawn on: the band sits outside the face circle, so what is
+     * behind it is the page and not --card (#74). Also declared as BAND_BACKGROUND in
+     * event-arc.ts, where contrast.ts measures elapsed outlines against it.
+     */
     --page: #0c0e12;
   }
 

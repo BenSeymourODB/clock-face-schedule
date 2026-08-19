@@ -133,7 +133,7 @@ const BLEND_SEARCH_STEPS = 24;
  *
  * Where a *filled* arc's colour is the background and `readableTextColor` picks the text against it,
  * an *outlined* arc (#26) inverts that: the colour becomes the foreground against a background it
- * does not control, and two palette colours fail it outright (⚫ 1.21:1, 🟤 2.50:1 on the dial).
+ * does not control, and two palette colours fail it outright (⚫ 1.32:1, 🟤 2.72:1 on the band).
  * A curated table cannot close this — one colour source is an arbitrary calendar hex — so the
  * adjustment is computed.
  *

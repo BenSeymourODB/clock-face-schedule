@@ -80,8 +80,9 @@ export function sampleEvents(windowStart: Date): ClockEventInput[] {
     // 9.999999999999943° and loses the 10° overflow floor to floating-point error, rendering no text
     // of any kind. Real, and not this change's to fix — see #69.
     { id: "j", title: "🔵 Yoga", startDate: at(6, 15), endDate: at(6, 37), isAllDay: false, fallbackColor },
-    // ⚫ measures 1.21:1 on the dial background, so once elapsed its outline is invisible without
-    // the neutral band beneath it. Placed clear of the cluster so the two stresses stay separable.
+    // ⚫ measures 1.32:1 on the band's own ground, so once elapsed its outline is invisible
+    // without the neutral band beneath it. Placed clear of the cluster so the two stresses
+    // stay separable.
     { id: "x", title: "⚫ Assembly", startDate: at(3, 15), endDate: at(4, 0), isAllDay: false, fallbackColor },
     // Short and ⚫-coloured, so it overflows into a floating label (#29): the one colour whose
     // wash and border are both load-bearing, since it is one of the two the palette itself fails
