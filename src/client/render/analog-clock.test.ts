@@ -160,6 +160,22 @@ describe("analogClock", () => {
       expect(arcsLayer?.firstElementChild?.getAttribute("data-testid")).toBe("window-track");
     });
 
+    it("stays fully under an elapsed arc's outline where the two meet (#74)", () => {
+      // The track is `var(--border)` at half opacity — `#3c4049`, 1.86:1 on the page — and it sits
+      // exactly where an outermost elapsed arc's outline is drawn. Every outline colour measures
+      // ~2.4:1 against it, so a sliver of track peeking out from under one would be a light fringe
+      // halving the contrast the outline is resolved to. It does not: the stroke straddles the rim
+      // by half its width, which is wider than the track, so it hides it. Confirmed by reading the
+      // rendered pixels either side of the outline — `#0c0e12` both ways — but the margin is 0.09
+      // units at the thinnest ring the band can open, so it is worth holding rather than trusting.
+      const trackThickness = OUTER_RADIUS * 0.008;
+      const thinnestRing = ARC_THICKNESS * 0.16;
+      // The stroke is sized from the band, then capped at 0.4 of the ring it is drawn on.
+      const narrowestOutline = Math.min(ARC_THICKNESS * 0.07, thinnestRing * 0.4);
+
+      expect(narrowestOutline / 2).toBeGreaterThan(trackThickness);
+    });
+
     it("spans exactly the current rolling window, in the same angle space as the arcs", () => {
       // MORNING is 4:00, periodStart is midnight, and the window is [1:00, 12:00) — angles 30°
       // (1:00 is 60min past midnight) to 360° (12:00 is 720min past midnight) against the

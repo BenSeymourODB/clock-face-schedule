@@ -888,8 +888,9 @@ describe("eventArc once the event has ended", () => {
   });
 
   it("switches the title to the theme's own pairing, not the event colour", () => {
-    // The text now sits on the dial background; `--card-foreground` is 16:1 on `--card` by
-    // construction, and the event colour would reintroduce exactly the failures above.
+    // The text now sits on the band's own ground; `--card-foreground` is 17.5:1 on `--page` (and
+    // 16:1 on `--card`, which is what it was authored against), and the event colour would
+    // reintroduce exactly the failures above.
     const title = parts().group.querySelector('[data-testid="event-title-e1"] text');
 
     expect(title?.getAttribute("fill")).toBe("var(--card-foreground)");
