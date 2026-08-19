@@ -116,8 +116,9 @@ overlapping.
 
 ## Deferred
 
-- **#77's `reachRatio`** cannot adopt the constant here because it is not on `main` yet. Noted in
-  the PR.
-- **Faces the container cannot install** (Segoe UI on a Windows board, SF Pro, Roboto) are not
-  measured. The emoji floor covers the binding case, but the constant is a bound over what was
-  measurable, and the comment says so.
+- **[#90](https://github.com/BenSeymourODB/clock-face-schedule/issues/90)** — #67's `reachRatio`
+  cannot adopt the constant here because it is not on `main` yet. One expression, once #77 merges.
+- **[#91](https://github.com/BenSeymourODB/clock-face-schedule/issues/91)** — faces the container
+  cannot install (Segoe UI on a Windows board, SF Pro, Roboto) are not measured. The emoji floor
+  covers the binding case, but the constant is a bound over what was measurable, and FreeSans is an
+  existing counter-example at 1.337. Needs the pilot display (#10).
