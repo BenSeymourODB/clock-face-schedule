@@ -247,7 +247,9 @@ describe("the fixture figures README states in prose", () => {
    * written down for a reader.
    */
   it("spans the hours README says it spans", () => {
-    const [, from, to] = readmeSays(/The fixture spans (\d{2}:\d{2}) the previous day to (\d{2}:\d{2})/);
+    const [, from, to] = readmeSays(
+      /The fixture spans (\d{2}:\d{2}) the previous day to (\d{2}:\d{2})/
+    );
     const pinned = new Date(2026, 7, 18, 3, 0, 0);
     const anchor = fixtureAnchor({ origin: pinned, frozen: true, displaced: true }, pinned);
     const events = sampleEvents(anchor);
@@ -263,10 +265,14 @@ describe("the fixture figures README states in prose", () => {
   });
 
   it("quotes the rolling window the counts were measured against", () => {
-    const [, lookbehind, lookahead] = readmeSays(
-      /window of \[now \S (\d+)h, now \S (\d+)h\]/
+    const [, behind, lookbehind, ahead, lookahead] = readmeSays(
+      /window of \[now (\S) (\d+)h, now (\S) (\d+)h\]/
     );
 
+    // The signs carry half the meaning, and a pattern that skipped past them would call
+    // `[now + 3h, now + 8h]` — a window that has not begun yet — a correct description.
+    expect(behind).toMatch(/^[-−–—]$/);
+    expect(ahead).toBe("+");
     expect(Number(lookbehind)).toBe(ROLLING_WINDOW_LOOKBEHIND_HOURS);
     expect(Number(lookahead)).toBe(ROLLING_WINDOW_LOOKAHEAD_HOURS);
   });
