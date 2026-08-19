@@ -12,6 +12,7 @@ import {
   type ClockEvent,
   type FeatherSpan,
   type OccludedSpan,
+  adjustCompositeForContrast,
   adjustForContrast,
   combineTitleWithEmoji,
   compositeOver,
@@ -96,11 +97,45 @@ const EMOJI_FONT_SIZE_RATIO = 0.3;
 const ARC_FILL_OPACITY = 0.85;
 
 /**
+ * Contrast floor for a filled arc's own body, against the band (#66).
+ *
+ * WCAG 1.4.11's floor for a non-text object, and not #27's 4.5:1, because this is about a shape and
+ * not about text. An arc's body is how a viewer reads *how long* a block lasts, and composited at
+ * `ARC_FILL_OPACITY` over the band ⚫ gray-800 measured **1.25:1** — the extent could not be read at
+ * all, and what revealed the arc was incidental: the title on it, and a separator that is itself
+ * 1.15:1 against that fill.
+ *
+ * 4.5 was not simply the safer choice here. `readableTextColor`'s black/white crossover for ⚫ sits
+ * at a floor of 3.34:1, so flooring at 4.5 flips its title from white to black and turns a
+ * one-attribute change into a redesign of the filled state. 3:1 is the largest round floor under
+ * that crossover, and on the whole palette — the nine colour-dots, Google's eleven, and the default
+ * — it moves ⚫ and 🟤 and nothing else.
+ */
+const FILL_MIN_CONTRAST = 3;
+
+/**
+ * The colour an arc's body is actually painted in — the authored colour, floored so its extent can
+ * be read (#66).
+ *
+ * A function rather than an inline call because three separate things have to agree on it: the fill
+ * itself, the title colour picked against it, and the ground a draining title splits on. They read
+ * the painted colour and not the authored one, so a floored ⚫ fill takes a title measured on a
+ * floored ⚫ fill.
+ *
+ * Exported so a spec can ask what is painted instead of keeping its own copy of the floor and the
+ * opacity — the premise is the part these tests keep getting wrong (#74).
+ */
+export function arcFillColor(color: string): string {
+  return adjustCompositeForContrast(color, BAND_BACKGROUND, ARC_FILL_OPACITY, FILL_MIN_CONTRAST);
+}
+
+/**
  * Fill left under an elapsed arc.
  *
  * Zero draws the pure outline #26 specifies. A little body might read better at distance, so this
- * is a constant rather than an omission — but note it can only add *weight*, never contrast: 10% of
- * `#1F2937` over `#0c0e12` is still `#0c0e12` to the eye. Colour legibility is #27's problem.
+ * is a constant rather than an omission — but note it can only add *weight*, never contrast: at 10%
+ * even a ⚫ floored by `arcFillColor` reaches 1.08:1 on the band, against the authored hex's 1.02:1.
+ * Both are nothing to the eye, and #66's floor does not change that. Colour legibility is #27's.
  */
 const ELAPSED_FILL_OPACITY = 0;
 
@@ -350,6 +385,14 @@ export function eventArc({
   const { id, cleanTitle, color, eventEmoji, startAngle, endAngle } = event;
   const displayTitle = combineTitleWithEmoji(cleanTitle, eventEmoji);
 
+  // What the fill is actually painted in, floored once so every measurement below reads the same
+  // colour a viewer does: the fill itself, the title `readableTextColor` picks against it, and the
+  // ground the drain seam splits the title on. The authored `color` is kept for the elapsed
+  // outline, which is #27's and derives from the authored hex — floored, it moves by one 8-bit step
+  // (⚫ `#747b83` → `#747b84`, against the band ground #74 moved that call to), so the elapsed
+  // state does not notice this change at all.
+  const fillColor = arcFillColor(color);
+
   const arcSpan = endAngle - startAngle;
   const midAngle = (startAngle + endAngle) / 2;
   const arcHeight = outerRadius - innerRadius;
@@ -435,7 +478,7 @@ export function eventArc({
       // so a caller can find the fill alone.
       "data-arc-part": "fill",
       d,
-      fill: color,
+      fill: fillColor,
       "fill-opacity": isElapsed ? ELAPSED_FILL_OPACITY : ARC_FILL_OPACITY,
       stroke: "none",
       mask: fillFade,
@@ -547,13 +590,18 @@ export function eventArc({
      * Which colour each copy takes is *measured against the ground that copy lands on*, from the two
      * the theme offers. Deriving it from the authored hex instead — as the live case must, having no
      * composite to measure — picks black for seven of the nine palette colours, and for two of those
-     * black is the worse choice once composited over the band:
+     * black is the worse choice once composited over the band. Measured on the **floored** fill
+     * (#66), which is what is painted:
      *
      * | on its own fill | black | `--card-foreground` |
      * | --- | --- | --- |
      * | 🟡 🟢 🟠 ⚪ 🔵 | 8.11, 6.93, 5.66, 13.85, 4.46 | 2.35, 2.75, 3.37, 1.38, 4.28 |
      * | 🔴 🟣 | 4.31, 4.14 | **4.43, 4.60** |
-     * | ⚫ 🟤 | 1.36, 2.48 | **14.04, 7.69** |
+     * | ⚫ 🟤 | 3.26, 3.27 | **5.85, 5.83** |
+     *
+     * #66 narrows the last row's margin — the light token beat an authored ⚫ by 14.04 to 1.36 — and
+     * changes nothing about which colour wins: a floored fill is lighter, so black gains and the
+     * token loses, and at 3:1 neither crosses. Nine winners, none of them moved.
      *
      * So 🔴 and 🟣 join ⚫ and 🟤 in needing no split at all: one unmasked copy in the colour that
      * reads on both grounds. Their titles do change colour at the moment the event starts draining —
@@ -572,11 +620,17 @@ export function eventArc({
      * - **No feathers.** A title at a window edge is deliberately left unmasked (#22) so the name
      *   stays readable where the band does not; a draining arc must not quietly reverse that.
      */
-    const drainedFill = compositeOver(BAND_BACKGROUND, color, ARC_FILL_OPACITY);
-    const onFill = (text: string) => contrastRatio(text, drainedFill ?? color) ?? 0;
+    const drainedFill = compositeOver(BAND_BACKGROUND, fillColor, ARC_FILL_OPACITY);
+    const onFill = (text: string) => contrastRatio(text, drainedFill ?? fillColor) ?? 0;
     const splitCoverage =
       drain && onFill(BLACK_TEXT) > onFill(BAND_FOREGROUND)
-        ? textFlipCoverage(BAND_BACKGROUND, color, ARC_FILL_OPACITY, BAND_FOREGROUND, BLACK_TEXT)
+        ? textFlipCoverage(
+            BAND_BACKGROUND,
+            fillColor,
+            ARC_FILL_OPACITY,
+            BAND_FOREGROUND,
+            BLACK_TEXT
+          )
         : 1;
     const textSplit =
       drain && splitCoverage < 1 ? computeDrainTextSplit(drain, splitCoverage) : undefined;
@@ -597,7 +651,7 @@ export function eventArc({
       : [
           {
             name: isElapsed || drain ? "spent" : "live",
-            fill: isElapsed || drain ? "var(--card-foreground)" : readableTextColor(color),
+            fill: isElapsed || drain ? "var(--card-foreground)" : readableTextColor(fillColor),
             mask: undefined,
           },
         ];

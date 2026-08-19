@@ -37,6 +37,7 @@ export {
   roundCoord
 } from './clock-utils';
 export {
+  adjustCompositeForContrast,
   adjustForContrast,
   compositeOver,
   contrastRatio,

@@ -182,6 +182,86 @@ export function adjustForContrast(
 }
 
 /**
+ * The nearest variant of `color` that clears `minRatio` against `background` **once painted at
+ * `alpha` over it**, keeping its hue.
+ *
+ * `adjustForContrast` asks whether a colour reads as a foreground. This asks whether a *fill* reads
+ * as a shape, which is a different question with a different answer, because a fill at
+ * `fill-opacity` is never the authored colour by the time a viewer sees it. An arc's body is what
+ * says how long an event lasts, and for the darkest palette colours it said nothing: ⚫ gray-800
+ * composited at 0.85 over the band measures **1.25:1**, so the block's extent could not be read at
+ * all (#66).
+ *
+ * Floors the *composited* value rather than the authored one, since the ground that
+ * `fill-opacity` mixes back in is part of what is on the wall. The two differ by enough to matter —
+ * flooring the *authored* ⚫ at 3:1 gives `#58606a`, which paints at 2.52:1 — still short.
+ *
+ * Callers pass the graphical-object floor (3:1) rather than the text floor `adjustForContrast`
+ * defaults to. That is not a relaxation for its own sake: `readableTextColor`'s black/white
+ * crossover for ⚫ sits at a floor of 3.34:1, so 3:1 is the largest round floor that raises every
+ * palette fill without flipping any title that sits on one — which is the difference between a
+ * one-attribute change and a redesign of the filled state.
+ *
+ * Shares `adjustForContrast`'s search and its guarantees: blends toward the ground's far extreme by
+ * the smallest fraction that clears the ratio, so hue survives and a colour already clearing the
+ * floor is returned untouched; returns the extreme where even that cannot clear `minRatio`; returns
+ * `color` unchanged for anything unparseable. At `alpha` of 1 the composite *is* the colour, so on
+ * any ground where the two agree on a blend target it reduces exactly to `adjustForContrast` — which
+ * the spec asserts rather than assumes, over the palette and the ground the dial actually uses.
+ *
+ * "Far extreme" is measured, not inferred from the ground's luminance. Two ways of inferring it are
+ * both wrong, and both were tried here:
+ *
+ * - **Thresholding luminance at 0.5**, which `adjustForContrast` does. Black and white change places
+ *   at luminance **0.1791**, not 0.5, so every ground between the two — mid-greys, and any light
+ *   theme that is not near-white (#81) — gets white picked when black reaches further. Not merely a
+ *   worse blend: on `#767676` at 0.85, white tops out at 3.78:1 while black reaches 4.12:1, so a 4:1
+ *   floor is reachable and the threshold misses it outright.
+ * - **Asking `readableTextColor`**, which compares the two properly — but at *full* strength. The
+ *   comparison does not survive `alpha`: contrast is not linear in luminance, so on a saturated
+ *   ground the extreme that wins at 1.0 can lose at 0.25. Measured over 20,000 random cases, that
+ *   substitution still missed a reachable floor 122 times; comparing the two *painted* misses none.
+ *
+ * So the target is whichever extreme reaches further **once painted at this alpha**, which is the
+ * only version of the question the caller actually has. `adjustForContrast` keeps the 0.5 threshold
+ * and its latent bug; it is not corrected here because its one caller measures against a ground far
+ * below the crossover, where every rule above agrees. See #95.
+ */
+export function adjustCompositeForContrast(
+  color: string,
+  background: string,
+  alpha: number,
+  minRatio: number = DEFAULT_MIN_CONTRAST
+): string {
+  if (relativeLuminance(background) === null) return color;
+
+  /** The ratio a viewer sees for `candidate` painted at `alpha`, or null if it will not parse. */
+  const painted = (candidate: string): number | null => {
+    const composited = compositeOver(background, candidate, alpha);
+    return composited === null ? null : contrastRatio(composited, background);
+  };
+
+  const current = painted(color);
+  if (current === null) return color;
+  if (current >= minRatio) return color;
+
+  const target = (painted(WHITE) ?? 0) >= (painted(BLACK) ?? 0) ? WHITE : BLACK;
+  if ((painted(target) ?? 0) < minRatio) return target;
+
+  let lo = 0;
+  let hi = 1;
+  for (let step = 0; step < BLEND_SEARCH_STEPS; step += 1) {
+    const mid = (lo + hi) / 2;
+    const candidate = compositeOver(color, target, mid);
+    const ratio = candidate === null ? null : painted(candidate);
+    if (ratio !== null && ratio >= minRatio) hi = mid;
+    else lo = mid;
+  }
+
+  return compositeOver(color, target, hi) ?? target;
+}
+
+/**
  * How much of `tint` has to be over `background` before `tintText` overtakes `baseText` — as a
  * fraction of `alpha`, 0–1.
  *
