@@ -27,7 +27,14 @@ const COLOR_EMOJI_MAP: Record<string, string> = {
 /** Floor on arc width, in degrees — ~15 minutes on a 12-hour dial. */
 const MIN_ARC_DEGREES = 7.5;
 
-/** Minutes in a 12-hour period. */
+/**
+ * Minutes in one revolution of the dial, unless a caller says otherwise.
+ *
+ * 720 is the hour hand's own revolution and the only scale the band had until #34. Every function
+ * below that maps a time onto an angle takes `periodMinutes` as a defaulted trailing parameter, so
+ * a 1-hour scale (60) reuses the same geometry at 6° per minute rather than forking it. See
+ * `scale.ts`, which owns the descriptors.
+ */
 const PERIOD_MINUTES = 720;
 
 /**
@@ -179,9 +186,9 @@ export function filterEventsForPeriod(
   });
 }
 
-/** Default window end: exactly one 12-hour period after `periodStart`. */
-function defaultWindowEnd(periodStart: Date): Date {
-  return new Date(periodStart.getTime() + PERIOD_MINUTES * 60 * 1000);
+/** Default window end: exactly one revolution after `periodStart`. */
+function defaultWindowEnd(periodStart: Date, periodMinutes: number = PERIOD_MINUTES): Date {
+  return new Date(periodStart.getTime() + periodMinutes * 60 * 1000);
 }
 
 /**
@@ -198,14 +205,31 @@ export function eventsToClockEvents(
   events: ClockEventInput[],
   periodStart: Date,
   windowStart: Date = periodStart,
-  windowEnd: Date = defaultWindowEnd(periodStart)
+  windowEnd?: Date,
+  periodMinutes: number = PERIOD_MINUTES
 ): ClockEvent[] {
+  const resolvedEnd = windowEnd ?? defaultWindowEnd(periodStart, periodMinutes);
+
   return events.map((event) => {
     const parsed = parseEventTitle(event.title, event.fallbackColor);
     const start = new Date(event.startDate);
     const end = new Date(event.endDate);
-    const drawn = calculateArcAngles(start, end, periodStart, windowStart, windowEnd);
-    const actual = calculateTrueArcAngles(start, end, periodStart, windowStart, windowEnd);
+    const drawn = calculateArcAngles(
+      start,
+      end,
+      periodStart,
+      windowStart,
+      resolvedEnd,
+      periodMinutes
+    );
+    const actual = calculateTrueArcAngles(
+      start,
+      end,
+      periodStart,
+      windowStart,
+      resolvedEnd,
+      periodMinutes
+    );
 
     return {
       id: event.id,
@@ -232,9 +256,27 @@ export function eventsToClockEvents(
  * (event clamping, the window-gap track) so they all stay in the same unwrapped angle space that
  * `describeArc`/`polarToCartesian` already handle via ordinary trigonometry.
  */
-export function angleForTime(time: Date, periodStart: Date): number {
+export function angleForTime(
+  time: Date,
+  periodStart: Date,
+  periodMinutes: number = PERIOD_MINUTES
+): number {
   const minutes = (time.getTime() - periodStart.getTime()) / (60 * 1000);
-  return (minutes / PERIOD_MINUTES) * 360;
+  return (minutes / periodMinutes) * 360;
+}
+
+/**
+ * An angle reduced to `[0, 360)` — the direction on screen it points in.
+ *
+ * Deliberately **not** what the geometry uses. Angles stay unnormalised everywhere else so that
+ * `describeArc`'s large-arc flag, `assignRings`' ordering and every window boundary keep working
+ * across a wrap (#33). This exists for the small class of decisions that are genuinely about a
+ * direction rather than a position — is this text upside down, does this glyph need
+ * counter-rotating, which of two radii is the higher one on screen — where 519° and 159° are the
+ * same answer and the raw comparison silently gives different ones.
+ */
+export function normaliseAngle(degrees: number): number {
+  return ((degrees % 360) + 360) % 360;
 }
 
 /**
@@ -260,16 +302,20 @@ export function calculateTrueArcAngles(
   eventEnd: Date,
   periodStart: Date,
   windowStart: Date = periodStart,
-  windowEnd: Date = defaultWindowEnd(periodStart)
+  // Resolved in the body rather than as a parameter default: it depends on `periodMinutes`, which
+  // is declared after it and would still be in its temporal dead zone here.
+  windowEnd?: Date,
+  periodMinutes: number = PERIOD_MINUTES
 ): ClampedArcAngles {
+  const end = windowEnd ?? defaultWindowEnd(periodStart, periodMinutes);
   const clampedStart = new Date(Math.max(eventStart.getTime(), windowStart.getTime()));
-  const clampedEnd = new Date(Math.min(eventEnd.getTime(), windowEnd.getTime()));
+  const clampedEnd = new Date(Math.min(eventEnd.getTime(), end.getTime()));
 
   return {
-    startAngle: angleForTime(clampedStart, periodStart),
-    endAngle: angleForTime(clampedEnd, periodStart),
+    startAngle: angleForTime(clampedStart, periodStart, periodMinutes),
+    endAngle: angleForTime(clampedEnd, periodStart, periodMinutes),
     continuesBefore: eventStart.getTime() < windowStart.getTime(),
-    continuesAfter: eventEnd.getTime() > windowEnd.getTime(),
+    continuesAfter: eventEnd.getTime() > end.getTime(),
   };
 }
 
@@ -282,19 +328,22 @@ export function calculateArcAngles(
   eventEnd: Date,
   periodStart: Date,
   windowStart: Date = periodStart,
-  windowEnd: Date = defaultWindowEnd(periodStart)
+  windowEnd?: Date,
+  periodMinutes: number = PERIOD_MINUTES
 ): ArcAngles {
+  const end = windowEnd ?? defaultWindowEnd(periodStart, periodMinutes);
   let { startAngle, endAngle } = calculateTrueArcAngles(
     eventStart,
     eventEnd,
     periodStart,
     windowStart,
-    windowEnd
+    end,
+    periodMinutes
   );
 
   if (endAngle - startAngle < MIN_ARC_DEGREES) {
-    const windowStartAngle = angleForTime(windowStart, periodStart);
-    const windowEndAngle = angleForTime(windowEnd, periodStart);
+    const windowStartAngle = angleForTime(windowStart, periodStart, periodMinutes);
+    const windowEndAngle = angleForTime(end, periodStart, periodMinutes);
 
     endAngle = startAngle + MIN_ARC_DEGREES;
     // Widening past the window's own end would wrap the arc, so pull the start back instead.

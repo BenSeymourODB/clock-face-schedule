@@ -329,6 +329,15 @@ they are the shape of the platform, and several ADRs above exist only to work ar
 `HtmlService` templating; there is no path on an origin we control that serves a `.js` file.
 → ADR 0002.
 
+**`HtmlService` templating is textual, so a scriptlet delimiter inside an HTML comment is still a
+scriptlet.** `createTemplateFromFile` scans the raw bytes for `<?` … `?>` and compiles whatever
+falls between into the generated function; it has no idea what a comment is. So writing
+`<code>&lt;? if ?&gt;</code>` inside `<!-- … -->` to *describe* a scriptlet compiles a bare `if`
+and `template.evaluate()` throws a SyntaxError — the whole page fails to render, on the deployed
+app only. The local preview never shows it, because `scripts/build.mjs` strips `<?…?>` with a
+regex before anything evaluates. Explain templating decisions in the TypeScript that feeds the
+template, never in the template's own markup.
+
 **The client↔server bridge is `google.script.run`, not HTTP.** Callback-based, and typically
 0.5–2 s per round trip. → ADR 0006, and the first-paint ordering it forces.
 

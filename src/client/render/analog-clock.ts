@@ -4,18 +4,20 @@
  */
 import {
   type ClockEventInput,
+  type DialScaleId,
   type Rect,
   angleForTime,
   assignRings,
   calculateTrueArcAngles,
   combineTitleWithEmoji,
   computeArcTitleLayout,
+  dialOrigin,
+  dialScale,
+  dialWindow,
   elapsedEventIds,
   eventsToClockEvents,
   filterEventsForPeriod,
   formatEventDuration,
-  getPeriodStart,
-  getRollingWindow,
   hasEventInProgress,
   rectsOverlap,
   roundCoord,
@@ -110,6 +112,12 @@ export interface AnalogClockParams {
   showSeconds?: boolean;
   /** Fixed time, for tests. Defaults to now. */
   time?: Date;
+  /**
+   * Which time scale the dial runs at (#34): the inherited 12-hour revolution, or a 60-minute one
+   * at twelve times the resolution. Chooses the band's degrees-per-minute, its angle origin, its
+   * drawn window, and which of the face's two scales is emphasised.
+   */
+  scale?: DialScaleId;
 }
 
 export interface AnalogClockHandle {
@@ -129,7 +137,9 @@ export function analogClock({
   arcThickness: arcThicknessOverride,
   showSeconds = false,
   time = new Date(),
+  scale: scaleId = "12h",
 }: AnalogClockParams): AnalogClockHandle {
+  const scale = dialScale(scaleId);
   const cx = size / 2;
   const cy = size / 2;
   const outerRadius = size / 2 - EDGE_MARGIN;
@@ -168,7 +178,7 @@ export function analogClock({
 
   const arcsLayer = svg("g", { "data-testid": "event-arcs-layer" });
   const labelsLayer = svg("g", { "data-testid": "floating-labels-layer" });
-  const face = clockFace({ faceRadius, cx, cy, time, showSeconds });
+  const face = clockFace({ faceRadius, cx, cy, time, showSeconds, scale: scaleId });
 
   // Face last, so the hands paint over any label bleeding toward the centre.
   element.append(arcsLayer, labelsLayer, face.element);
@@ -193,18 +203,20 @@ export function analogClock({
     arcsLayer.textContent = "";
     labelsLayer.textContent = "";
 
-    // periodStart is the angle origin only — it never moves the window, which is now the rolling
-    // 3h-behind/8h-ahead range (#25) rather than the fixed 12-hour period.
-    const periodStart = getPeriodStart(currentTime);
-    const { windowStart, windowEnd } = getRollingWindow(currentTime);
+    // The origin is the angle origin only — it never moves the window, which rolls continuously
+    // with the time (#25) rather than jumping at a period boundary. Both come from the scale
+    // (#34): a 12-hour dial takes the AM/PM boundary and #25's 3h-behind/8h-ahead range, a 1-hour
+    // dial the top of the containing hour and 5 minutes behind / 50 ahead.
+    const periodStart = dialOrigin(currentTime, scale);
+    const { windowStart, windowEnd } = dialWindow(currentTime, scale);
 
     arcsLayer.append(
       windowTrack({
         cx,
         cy,
         outerRadius,
-        windowStartAngle: angleForTime(windowStart, periodStart),
-        windowEndAngle: angleForTime(windowEnd, periodStart),
+        windowStartAngle: angleForTime(windowStart, periodStart, scale.periodMinutes),
+        windowEndAngle: angleForTime(windowEnd, periodStart, scale.periodMinutes),
       })
     );
 
@@ -213,7 +225,8 @@ export function analogClock({
       filterEventsForPeriod(currentEvents, windowStart, windowEnd),
       periodStart,
       windowStart,
-      windowEnd
+      windowEnd,
+      scale.periodMinutes
     );
     renderedCount = resolved.length;
 
@@ -221,7 +234,16 @@ export function analogClock({
     elapsedCount = elapsed.size;
 
     // Same angle space as every event's own start/end: a zero-width "event" sitting at `now`.
-    const nowAngle = calculateTrueArcAngles(currentTime, currentTime, periodStart).startAngle;
+    // On the 1-hour scale that lands exactly where the minute hand points, so the drain boundary
+    // (#28) becomes the minute hand's own edge without anything here having to say so.
+    const nowAngle = calculateTrueArcAngles(
+      currentTime,
+      currentTime,
+      periodStart,
+      windowStart,
+      windowEnd,
+      scale.periodMinutes
+    ).startAngle;
 
     // True angles, not drawn ones: a five-minute event widened to the 7.5° minimum must not
     // appear to clash with a neighbour six minutes later, or every arc on the dial pays for a
@@ -231,7 +253,14 @@ export function analogClock({
         id: event.id,
         startAngle: event.trueStartAngle,
         endAngle: event.trueEndAngle,
-      }))
+      })),
+      // `assignRings` rebases onto this before sorting, and its default of 0 is only a no-op for a
+      // window that stays inside `[0, 360)` — which stopped being true when the window started
+      // rolling (#25) and is never true on the 1-hour scale, where 10:45 gives 240°–570°. Rebased
+      // onto 0, an event at 380° sorts *before* one at 30°, and interval partitioning walked in
+      // the wrong order silently stacks two overlapping events onto the same ring: the later one
+      // is drawn at identical radii, entirely hidden beneath the earlier.
+      angleForTime(windowStart, periodStart, scale.periodMinutes)
     );
 
     const overflowing: { startAngle: number; params: FloatingLabelParams }[] = [];

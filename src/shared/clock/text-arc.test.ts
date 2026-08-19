@@ -54,6 +54,31 @@ describe('describeTextArc', () => {
     expect(parse(describeTextArc(CX, CY, R, start, end)).largeArcFlag).toBe(flag);
   });
 
+  /**
+   * Angles reach past a revolution all over this pipeline and are deliberately never reduced
+   * (#33), so the half-of-the-dial test has to reduce its own copy. Caught by rendering the
+   * 1-hour scale (#34), where every arc past the wrap read upside down; the same arithmetic
+   * fails on the 12-hour dial for any window whose look-ahead crosses the period end (#25).
+   */
+  it.each([
+    [504, 534, '0'],
+    [150, 210, '0'],
+    [-210, -150, '0'],
+    [660, 710, '1'],
+    [300, 350, '1'],
+    [-60, -10, '1']
+  ])('reads the %i°–%i° arc the same way as its unwrapped twin (%s)', (start, end, sweep) => {
+    expect(parse(describeTextArc(CX, CY, R, start, end)).sweepFlag).toBe(sweep);
+  });
+
+  it('still draws the path at the angles it was given, wrapped or not', () => {
+    // Only the reading direction is normalised. The geometry must stay where the caller put it,
+    // or a wrapped arc's text would jump to the other side of the dial.
+    const result = parse(describeTextArc(CX, CY, R, 504, 534));
+    expect(result.start).toEqual(polarToCartesian(CX, CY, R, 534));
+    expect(result.end).toEqual(polarToCartesian(CX, CY, R, 504));
+  });
+
   it('bounds every coordinate to four decimal places', () => {
     const path = describeTextArc(CX, CY, 244, 137, 193);
     for (const token of path.match(/-?\d+(\.\d+)?/g) ?? []) {
