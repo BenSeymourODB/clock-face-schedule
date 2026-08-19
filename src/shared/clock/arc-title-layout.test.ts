@@ -130,10 +130,13 @@ describe('stacked line separation', () => {
     expect(baselineGap).toBeGreaterThan(INK_HEIGHT_RATIO);
   });
 
-  it('would have failed at the em box the old ratio was chosen against', () => {
-    // The property, restated at the value that was wrong — so this test cannot pass by accident if
-    // TITLE_LINE_OFFSET_RATIO ever drifts back toward the em box.
-    expect(2 * 0.55).toBeLessThan(INK_HEIGHT_RATIO);
+  it('is derived from ink rather than from the em box', () => {
+    // 0.55 is what the em box gives: half of 1 em, plus half the same 0.1 em of intended slack.
+    // Naming it here means a drift back to that value fails, which asserting `2 × 0.55 < 1.2`
+    // would not — that compares two literals and holds whatever the ratio is.
+    const emBoxDerived = (1 + 0.1) / 2;
+
+    expect(TITLE_LINE_OFFSET_RATIO).toBeGreaterThan(emBoxDerived);
   });
 });
 

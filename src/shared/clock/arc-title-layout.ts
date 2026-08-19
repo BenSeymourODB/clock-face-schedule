@@ -127,15 +127,16 @@ export function computeArcTitleLayout(params: {
  * **Radial.** Adding the line moves the title outward onto the two-line radii, so both lines and
  * whatever is stroked on the ring's edges have to fit inside the ring. They do not always: an
  * elapsed arc's outline is sized from the whole *band* (#26, deliberately, so its weight does not
- * thin with overlap depth) while the text is sized from this arc's *ring*. Measured against real ink
- * rather than the em box (#78), the 600-unit dial leaves 8.73 units of clearance on a lone arc,
- * 2.70 two deep, **0.68** three deep and **−0.32** four deep — the deepest ring does not fit a
- * stack at all, where the em-box model claimed 0.55 units to spare. The legibility gate happens to
- * cover every one of those cases today, but this is the check that is actually about not drawing
- * text on a stroke, and the two move independently: before #27 retired the neutral halo the same
- * stroke was 0.12 of the band rather than 0.07, and three deep measured **−1.21**.
- * `edgeStrokeWidth` is what the caller draws there, since the elapsed treatment is the renderer's
- * business, not this layout's.
+ * thin with overlap depth) while the text is sized from this arc's *ring*. On the 600-unit dial,
+ * measured the way the gate below decides — `EDGE_CLEARANCE` included, so a negative figure is a
+ * refusal — the em box left 11.98 units on a lone arc, 3.69 two deep, 0.93 three deep and −0.45
+ * four deep. Against real ink (#78) those become **7.73**, **1.70**, **−0.32** and **−1.32**: the
+ * two deepest rings cannot carry a stack, where the em-box model admitted three of the four. The
+ * legibility gate happens to cover every one of those cases today, but this is the check that is
+ * actually about not drawing text on a stroke, and the two move independently: before #27 retired
+ * the neutral halo the same stroke was 0.12 of the band rather than 0.07, and three deep measured
+ * **−2.21**. `edgeStrokeWidth` is what the caller draws there, since the elapsed treatment is the
+ * renderer's business, not this layout's.
  *
  * The gate is checked against that stroke whether or not the event has elapsed yet: a duration that
  * appeared and vanished as an event crossed into elapsed would flicker on the wall.
