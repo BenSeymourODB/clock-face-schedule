@@ -163,6 +163,10 @@ for correctness.
 - DST transition days contain a 23- or 25-hour civil day. One of that day's two periods is not
   12 hours long, so arcs on it are proportionally skewed. NDWC has the same behaviour. Noted,
   not fixed.
+- The client reads "now" through a single time source (`src/shared/clock/time-source.ts`), which
+  `?now=` / `?freeze=1` displace for visual review (#72). That sits **inside** this decision rather
+  than beside it: the pin is browser-side, `doGet` passes the parameter through as authored and
+  parses nothing, and a pinned dial labels itself on screen.
 
 ## ADR 0006 — Poll every 5 minutes, cache server-side for 60 seconds
 

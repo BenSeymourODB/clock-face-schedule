@@ -8,14 +8,20 @@
 import {
   type ClockEventInput,
   type DialScaleId,
+  createTimeSource,
+  describeClockPin,
+  describePinnedInstant,
   dialScale,
   dialWindow,
   getFetchWindow,
   getPeriodBounds,
   parseDialScaleId,
 } from "../shared/clock";
+import { decodePreferences, encodePreferences } from "../shared/preferences";
+import { fixtureAnchor, readClockPin } from "./clock-pin";
+import { type PreferenceStore, preferenceStore, readPreferenceWire } from "./preferences";
 import { analogClock } from "./render/analog-clock";
-import { oneHourSampleEvents, sampleEvents } from "./sample-events";
+import { demoFixture, fixtureCopyIndices, recurringSampleEvents } from "./sample-events";
 import { type ScheduleStatus, describeStatus, nextStatus } from "./schedule-status";
 
 const TICK_INTERVAL_MS = 1_000;
@@ -28,6 +34,19 @@ const POLL_INTERVAL_MS = 5 * 60 * 1_000;
  * by however long it has been since. See `getFetchWindow`.
  */
 const FETCH_MARGIN_HOURS = 1;
+
+const mount = document.querySelector("#dial");
+
+/**
+ * The dial's notion of "now", read through one seam so `?now` / `?freeze` have one place to apply
+ * and every time-dependent state is reachable on purpose rather than by luck (#72).
+ */
+const clockPin = readClockPin(
+  mount instanceof HTMLElement ? mount : null,
+  window.location.search,
+  new Date()
+);
+const now = createTimeSource(clockPin);
 
 /** google.script.run is callback-based; everything downstream wants to await. */
 function callServer<T>(name: string, ...args: unknown[]): Promise<T> {
@@ -48,7 +67,7 @@ function callServer<T>(name: string, ...args: unknown[]): Promise<T> {
 }
 
 function fetchWindow(): Promise<ClockEventInput[]> {
-  const { windowStart, windowEnd } = getFetchWindow(new Date(), FETCH_MARGIN_HOURS);
+  const { windowStart, windowEnd } = getFetchWindow(now(), FETCH_MARGIN_HOURS);
 
   return callServer<ClockEventInput[]>(
     "getEvents",
@@ -58,13 +77,6 @@ function fetchWindow(): Promise<ClockEventInput[]> {
 }
 
 /**
- * Which dial scale to run at (#34).
- *
- * The deployed page is a sandboxed iframe whose own URL carries none of the viewer's query
- * parameters, so `doGet` templates the raw value onto the mount and it is parsed here — the same
- * reason `?demo=1` arrives as a data attribute. The preview has no server to template anything, so
- * the attribute is present but empty there and its own query string answers instead, which is what
- * makes `preview.html?scale=1h` work from disk.
  */
 function chosenScale(mount: Element): DialScaleId {
   const templated = mount instanceof HTMLElement ? mount.dataset["scale"] : undefined;
@@ -73,23 +85,55 @@ function chosenScale(mount: Element): DialScaleId {
   return parseDialScaleId(new URLSearchParams(window.location.search).get("scale"));
 }
 
+/**
+ * Preferences as `doGet` left them, with saves going back over the bridge unawaited.
+ *
+ * A failed save is a log line rather than a status-line failure: the status line is the schedule's,
+ * and a display that cannot remember a setting is still showing the right time with the right
+ * events on it.
+ */
+function displayPreferences(mount: Element): PreferenceStore {
+  return preferenceStore({
+    wire: readPreferenceWire(mount),
+    save: (wire) => {
+      void callServer<string>("savePreferences", wire).catch((error: Error) => {
+        console.warn(`preference not saved — ${error.message}`);
+      });
+    }
+  });
+}
+
 function startDisplay(): void {
-  const mount = document.querySelector("#dial");
   const statusLine = document.querySelector("#status");
   if (!mount) return;
 
+  const preferences = displayPreferences(mount);
   const scale = chosenScale(mount);
-  const clock = analogClock({ events: [], showSeconds: true, time: new Date(), scale });
+
+  const clock = analogClock({
+    events: [],
+    showSeconds: preferences.get().showSeconds,
+    time: now(),
+    scale
+  });
   mount.append(clock.element);
 
   // Hands before data. A google.script.run round trip runs 0.5–2s and the server cache does not
   // help a cold start, so the wall shows a working clock rather than an empty panel.
-  window.setInterval(() => clock.setTime(new Date()), TICK_INTERVAL_MS);
+  window.setInterval(() => clock.setTime(now()), TICK_INTERVAL_MS);
+
+  /**
+   * Standing notices, ahead of whatever the schedule has to say. A pinned clock has to announce
+   * itself for the reason demo mode does: a wall showing a time that is not the time is worse than
+   * one showing invented events, and worse still if it looks ordinary.
+   */
+  const notices = clockPin ? [describeClockPin(clockPin, new Date())] : [];
 
   function setStatusText(text: string | null): void {
     if (!statusLine) return;
-    statusLine.textContent = text ?? "";
-    statusLine.toggleAttribute("hidden", text === null);
+    const parts = text === null ? notices : notices.concat([text]);
+    statusLine.textContent = parts.join(" · ");
+    statusLine.toggleAttribute("hidden", parts.length === 0);
   }
 
   /**
@@ -100,15 +144,38 @@ function startDisplay(): void {
    * real schedule, and the whole point of the mode is that someone is standing in front of it.
    */
   if (mount instanceof HTMLElement && mount.dataset["demo"] === "1") {
-    // Anchored to the drawn window's own start, not periodStart, so the fixture lands inside
-    // whatever window is live at load time regardless of the hour — see sample-events.ts. Each
-    // scale gets its own fixture: a 55-minute window has no room for an eleven-hour schedule, and
-    // the 1-hour mode's whole claim is about events too short for the 12-hour one to show.
-    const { windowStart } = dialWindow(new Date(), dialScale(scale));
-    clock.setEvents(
-      scale === "1h" ? oneHourSampleEvents(windowStart) : sampleEvents(windowStart)
-    );
+    const fixture = demoFixture(scale);
+    const anchor = fixtureAnchor(clockPin, now(), scale);
+    /** Null rather than "", which is what an empty copy list would join to. */
+    let emitted: string | null = null;
+
+    /**
+     * The window keeps moving after load, so a single copy of the fixture scrolls out of it and the
+     * dial empties (#62). The clock re-filters what it holds against the live window on every
+     * render, so the scrolling needs no help — this only hands it copies it has not been given, and
+     * only when the set changes, since `setEvents` redraws every arc.
+     *
+     * Reads the clock the same way the tick above does, and must go on doing so: #72's `?now` /
+     * `?freeze` routes every time read through one seam, and a frozen clock has to freeze the copy
+     * set too. If this kept reading real time while the dial drew a pinned window, the copies would
+     * walk out of that window and leave it blank.
+     *
+     * Both the fixture and the window it is tiled across come from the scale (#34). The 1-hour dial
+     * is what makes this recurrence load-bearing rather than a nicety: its window is 55 minutes, so
+     * a single copy loses its elapsed arc within three minutes, is down to one arc by fifty, and is
+     * empty at seventy — where the 12-hour one takes about thirteen hours to go blank.
+     */
+    function refreshFixture(): void {
+      const view = dialWindow(now(), dialScale(scale));
+      const copies = fixtureCopyIndices(fixture, anchor, view).join(",");
+      if (copies === emitted) return;
+      emitted = copies;
+      clock.setEvents(recurringSampleEvents(fixture, anchor, view));
+    }
+
+    refreshFixture();
     setStatusText("Sample events — not a real calendar");
+    window.setInterval(refreshFixture, POLL_INTERVAL_MS);
     return;
   }
 
@@ -121,7 +188,7 @@ function startDisplay(): void {
   async function refresh(): Promise<void> {
     try {
       clock.setEvents(await fetchWindow());
-      status = nextStatus(status, { ok: true, at: new Date() });
+      status = nextStatus(status, { ok: true, at: now() });
     } catch (error) {
       // Deliberately does not touch the dial: whatever it is showing stays up, marked old.
       status = nextStatus(status, { ok: false, reason: (error as Error).message });
@@ -164,6 +231,43 @@ function browserTimeZone(): string {
   }
 }
 
+/**
+ * Preferences, checked on the device rather than on a workstation: what arrived in the page, and
+ * whether the store is reachable through the bridge at all.
+ *
+ * **Deliberately read-only.** An earlier version sent the resolved values back to prove the write
+ * path, which is a no-op in content and a one-way change in provenance: it copies the deployment's
+ * script-store defaults into the viewer's own store, after which they stop tracking the deployment
+ * and nothing here can unset them (#83). Sending an empty patch exercises the entry point, the patch
+ * parser and the resolution order without storing anything. Until #47 exists the write path has no
+ * production caller anyway, so there is nothing to check that a spec cannot.
+ */
+async function checkPreferences(list: Element): Promise<void> {
+  const wire = readPreferenceWire(document.querySelector("#dial"));
+
+  if (wire === null) {
+    // The attribute is emitted whatever the conditions are, so its absence means templating broke.
+    addRow(list, "preferences", "no data-preferences on the mount", "fail");
+    return;
+  }
+  addRow(list, "preferences", wire === "" ? "none stored — using defaults" : wire, "ok");
+
+  const templated = encodePreferences(decodePreferences(wire));
+  try {
+    const resolved = await callServer<string>("savePreferences", "");
+    // A mismatch is worth seeing rather than hiding: the page and the store disagreeing means the
+    // display is showing something other than what a reload would give it.
+    addRow(
+      list,
+      "preference store",
+      resolved === templated ? "reachable, and agrees with the page" : `reachable, but holds ${resolved}`,
+      resolved === templated ? "ok" : "note"
+    );
+  } catch (error) {
+    addRow(list, "preference store", `unreachable — ${(error as Error).message}`, "fail");
+  }
+}
+
 async function renderDiagnostics(list: Element): Promise<void> {
   list.textContent = "";
   const localZone = browserTimeZone();
@@ -185,9 +289,17 @@ async function renderDiagnostics(list: Element): Promise<void> {
     addRow(list, "browser timezone", localZone, "ok");
   }
 
+  // The device's own clock, deliberately not the dial's: this panel exists to find a display whose
+  // clock is wrong, and a pin would mask exactly that. The pin gets its own row instead, in the
+  // same format as the row above so the two can be read against each other. The status line's
+  // wording is not reused here — it names the time a second time, and the row label already says
+  // what this is.
   addRow(list, "browser time", new Date().toString(), "ok");
+  if (clockPin) {
+    addRow(list, "clock pin", describePinnedInstant(clockPin, now()), "note");
+  }
 
-  const { periodStart, periodEnd } = getPeriodBounds(new Date());
+  const { periodStart, periodEnd } = getPeriodBounds(now());
   try {
     const events = await callServer<ClockEventInput[]>(
       "getEvents",
@@ -199,6 +311,8 @@ async function renderDiagnostics(list: Element): Promise<void> {
   } catch (error) {
     addRow(list, "calendar", `unavailable — ${(error as Error).message}`, "fail");
   }
+
+  await checkPreferences(list);
 }
 
 startDisplay();

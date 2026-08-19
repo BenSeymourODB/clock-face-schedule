@@ -1,5 +1,5 @@
-**Status:** in review
-**Issue:** #27, #64 (halo retirement, folded in)
+**Status:** done
+**Issue:** #27, #64 (halo retirement, folded in) — shipped in #65
 **Docs:** #26 (elapsed outlines — the load-bearing case), #15 (visibility must not depend on a
 calendar-chosen colour), ADR 0007 (theme tokens), `docs/DESIGN.md`
 
@@ -9,8 +9,8 @@ calendar-chosen colour), ADR 0007 (theme tokens), `docs/DESIGN.md`
 
 A pure `adjustForContrast(color, background, minRatio)` in `src/shared/clock/contrast.ts`, and its
 application to the **elapsed-arc outline stroke** in `event-arc.ts`, so an outline's colour clears
-4.5:1 against the dial background while keeping its hue. This closes the ⚫/🟤 (and marginally 🟣)
-failures that #26's outlines currently lean entirely on the neutral halo to survive.
+4.5:1 against the band's own background while keeping its hue. This closes the ⚫/🟤 failures that
+#26's outlines currently lean entirely on the neutral halo to survive.
 
 ## Why this scope, and what is deferred
 
@@ -49,9 +49,11 @@ Deferred, tracked separately:
   that stays uniform at the 4-ring cap, so there is no room worth taking and 0.07 stands.
 - **Filled live arcs are left unchanged** (per the issue's "scope to strokes" decision):
   `readableTextColor` already guarantees their text, and adjusting fills would restyle the dial today.
-  Rendering did show the limit of that reasoning — a filled ⚫ arc composites to `#1e2633`, **1.17:1**
-  against the dial, so its *body* is invisible and only its title and the `var(--card)` separator
-  reveal it. That is about an arc's readable extent rather than its text, it predates this change, and
+  Rendering did show the limit of that reasoning — a filled ⚫ arc composites to `#1c2531`, **1.25:1**
+  against the band (#74 corrects the ground; the figure here was 1.17:1 against `--card`), so its
+  *body* is invisible and only its title and the `var(--card)` separator reveal it — and that
+  separator is itself only 1.09:1 against the band. That is about an arc's readable extent rather
+  than its text, it predates this change, and
   fixing it flips `readableTextColor`'s choice too, so it is filed as #66 rather than patched here.
 
 ## The helper
@@ -66,12 +68,17 @@ Deferred, tracked separately:
 - Built on the primitives already in `contrast.ts` (`relativeLuminance`, `contrastRatio`,
   `compositeOver`). Contrast is monotonic in the blend fraction, so the search is exact.
 
-The dial background is a token (`var(--card)`), and `contrast.ts` needs a hex. Per the issue's
-decision, the hex is declared in TypeScript (`event-arc.ts`, `DIAL_BACKGROUND`) with a comment in
-`Styles.html` pointing at the same value — the trade `EVENT_COLORS` already makes, keeping the maths
-pure and node-testable.
+The background is a token, and `contrast.ts` needs a hex. Per the issue's decision, the hex is
+declared in TypeScript (`event-arc.ts`, `BAND_BACKGROUND`) with a comment in `Styles.html` pointing
+at the same value — the trade `EVENT_COLORS` already makes, keeping the maths pure and
+node-testable.
 
-## Measured (against `--card` #16181d, floor 4.5:1)
+> **Corrected by #74.** This plan shipped measuring against `--card` `#16181d`, on the belief that
+> it was the ground under the arcs. It is the fill of `clock-face-bg`, and the band is drawn outside
+> that circle, over `--page` `#0c0e12`. The table below is superseded; every figure in it is against
+> a ground no arc sits on. See `docs/plans/2026-08-19-band-ground-contrast.md`.
+
+## Measured (superseded — against `--card` #16181d, floor 4.5:1)
 
 | colour | orig | adjusted | r' | hue | sat |
 | --- | --- | --- | --- | --- | --- |
@@ -80,7 +87,20 @@ pure and node-testable.
 | 🟣 purple `#A855F7` | 4.49 | `#a856f7` | 4.52 | 271→271 | (nudge) |
 | 🔴🟠🟡🟢🔵⚪ | ≥4.72 | unchanged | — | — | — |
 
-Only three of the nine emoji colours move on dark, and hue holds within ≤1° in every case.
+## Measured (current — against `--page` #0c0e12, floor 4.5:1)
+
+| colour | orig | adjusted | r' | hue | sat |
+| --- | --- | --- | --- | --- | --- |
+| ⚫ gray-800 `#1F2937` | 1.32 | `#747b83` | 4.51 | 215→212 | 28%→6% |
+| 🟤 amber-800 `#92400E` | 2.72 | `#aa6b44` | 4.50 | 23→23 | 83%→43% |
+| 🟣 purple `#A855F7` | 4.88 | unchanged | 4.88 | 271→271 | 91%→91% |
+| 🔴🟠🟡🟢🔵⚪ | ≥5.13 | unchanged | — | — | — |
+
+Two of the nine emoji colours move on dark rather than three: 🟣 clears the floor against the band's
+own ground and is now returned exactly as authored. 🟤 keeps hue exactly and sheds four points less
+saturation than before. ⚫'s hue reads as moving 3° rather than 1°, which is an artefact of the
+measurement rather than a regression — at 6% saturation HSL hue is barely defined, and the blend
+this uses is hue-preserving by construction.
 
 ## Phases
 

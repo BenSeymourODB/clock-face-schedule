@@ -7,37 +7,42 @@
  * is all that is required. See ADR 0002 and scripts/build.mjs.
  */
 
+import { preferencesWire } from "./preferences";
+
 export { getEvents } from "./calendar";
+export { savePreferences } from "./preferences";
 
 /**
- * Two bring-up switches, both off by default because the display itself must carry no chrome.
+ * Bring-up switches, all off by default because the display itself must carry no chrome.
  *
  * `?check=1` adds the diagnostics — colour emoji, the bridge round trip, and a calendar read.
  * `?demo=1` draws a fixture schedule instead of the calendar, so arc legibility can be judged at
- * distance without waiting for the viewer's own day to contain a useful overlap. It labels itself
- * on screen so a display left in that mode cannot be mistaken for a real one.
+ * distance without waiting for the viewer's own day to contain a useful overlap. `?now=` pins the
+ * dial's clock and `?freeze=1` stops it, so a state that depends on the time — an elapsed arc, a
+ * draining one, a window edge — can be looked at on purpose rather than waited for. Each labels
+ * itself on screen so a display left in one cannot be mistaken for a real one.
  *
- * Both need to be checkable on the device rather than on a workstation, which is why they are URL
- * parameters and not a build flag.
+ * All of them need to be checkable on the device rather than on a workstation, which is why they
+ * are URL parameters and not a build flag. `?scale=1h` selects the 1-hour dial (#34) the same way.
  *
- * `?scale=1h` selects the 1-hour dial (#34), and rides here for a third reason: the deployed page
- * runs inside a sandboxed iframe whose own URL carries none of the viewer's parameters, so a
- * client-side read of `location.search` would see nothing. Passed through raw and unvalidated —
- * the client parses it, which keeps the server the calendar adapter ADR 0003 says it is and keeps
- * the geometry layer's emoji tables out of the server bundle.
+ * `now` and `scale` are both passed through **as authored**: the browser is authoritative for time
+ * (ADR 0005) and the client owns the geometry (ADR 0003), so the server decides neither what
+ * "04:15" means nor what "1h" means. Templated with `<?= ?>` rather than `<?!= ?>`, since they
+ * arrive from the URL. Leaving `scale` unparsed here also keeps the geometry layer's emoji tables
+ * out of the server bundle, which is the trap `shared/clock/index.ts` records.
  *
- * Defaulted to `""` rather than left undefined, because `Index.html` emits `data-scale`
- * unconditionally. Wrapping the attribute in a scriptlet instead would make it permanently *on* in
- * the local preview, which strips the scriptlets but keeps what they guard; present-and-blank lets
- * the preview fall back to its own query string, which it can read because it is a file on disk
- * rather than a sandboxed iframe. (The reasoning lives here and not beside the markup for a hard
- * platform reason — see `docs/DESIGN.md` on scriptlet delimiters inside HTML comments.)
+ * The viewer's stored preferences ride along in the same template (#31). Reading them here costs
+ * nothing — `doGet` is already running server-side — where fetching them over `google.script.run`
+ * would cost the 0.5–2 s of ADR 0006 and a second render once they arrived.
  */
 export function doGet(event?: GoogleAppsScript.Events.DoGet): GoogleAppsScript.HTML.HtmlOutput {
   const template = HtmlService.createTemplateFromFile("Index");
   template["showDiagnostics"] = event?.parameter?.["check"] === "1";
   template["showDemo"] = event?.parameter?.["demo"] === "1";
+  template["pinnedNow"] = event?.parameter?.["now"] ?? "";
+  template["freezeClock"] = event?.parameter?.["freeze"] === "1" ? "1" : "";
   template["scaleParam"] = event?.parameter?.["scale"] ?? "";
+  template["preferences"] = preferencesWire();
 
   return template
     .evaluate()
