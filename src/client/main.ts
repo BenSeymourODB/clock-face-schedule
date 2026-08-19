@@ -12,6 +12,7 @@ import {
   describePinnedInstant,
   getFetchWindow,
   getPeriodBounds,
+  getRollingWindow,
 } from "../shared/clock";
 import { fixtureAnchor, readClockPin } from "./clock-pin";
 import { analogClock } from "./render/analog-clock";
@@ -103,9 +104,7 @@ function startDisplay(): void {
    * real schedule, and the whole point of the mode is that someone is standing in front of it.
    */
   if (mount instanceof HTMLElement && mount.dataset["demo"] === "1") {
-    // Anchored to the rolling window's own start, not periodStart, so the fixture lands inside
-    // whatever window is live at load time regardless of the hour — see sample-events.ts.
-    const anchor = getRollingWindow(new Date()).windowStart;
+    const anchor = fixtureAnchor(clockPin, now());
     /** Null rather than "", which is what an empty copy list would join to. */
     let emitted: string | null = null;
 
@@ -121,7 +120,7 @@ function startDisplay(): void {
      * walk out of that window and leave it blank.
      */
     function refreshFixture(): void {
-      const view = getRollingWindow(new Date());
+      const view = getRollingWindow(now());
       const copies = fixtureCopyIndices(anchor, view).join(",");
       if (copies === emitted) return;
       emitted = copies;

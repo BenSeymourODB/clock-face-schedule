@@ -67,6 +67,13 @@ function peakClusterDepth(
   return Math.max(0, ...[...rings.values()].map((assignment) => assignment.clusterDepth));
 }
 
+/**
+ * The depth the fixture is authored to — a four-deep cluster, as many rings as `maxRings` opens
+ * (see `sample-events.ts`). Measured rather than restated so deepening the fixture cannot leave the
+ * bound below it.
+ */
+const AUTHORED_CLUSTER_DEPTH = peakClusterDepth(sampleEvents(ANCHOR), windowAtPhase(0));
+
 describe("FIXTURE_PERIOD_MINUTES", () => {
   it("is the fixture's own span, so consecutive copies abut exactly", () => {
     const base = sampleEvents(ANCHOR);
@@ -125,9 +132,11 @@ describe("recurringSampleEvents", () => {
       const events = recurringSampleEvents(ANCHOR, view);
 
       expect(inWindow(events, view).length).toBeGreaterThanOrEqual(10);
-      // Three-deep is the authored cluster. A seam that overlapped would open a fourth ring,
-      // thinning every arc in it — the defect #70 is about, arrived at by accident.
-      expect(peakClusterDepth(events, view)).toBeLessThanOrEqual(3);
+      // Measured against the authored cluster rather than a literal: a seam that overlapped would
+      // open a ring past it, thinning every arc in that cluster — the defect #70 is about, arrived
+      // at by accident. Deriving the bound is what keeps it honest when the fixture is deepened,
+      // which is how a hard-coded 3 outlived the three-deep cluster it was written for.
+      expect(peakClusterDepth(events, view)).toBeLessThanOrEqual(AUTHORED_CLUSTER_DEPTH);
     }
   );
 
