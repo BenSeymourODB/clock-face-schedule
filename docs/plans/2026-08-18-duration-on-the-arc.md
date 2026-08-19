@@ -1,6 +1,6 @@
 # Encode duration redundantly, as text
 
-**Status:** done
+**Status:** done — shipped in [#68](https://github.com/BenSeymourODB/clock-face-schedule/pull/68)
 **Issue:** [#35 — Encode duration redundantly on the arc](https://github.com/BenSeymourODB/clock-face-schedule/issues/35)
 **Docs:** [`docs/brainstorms/2026-08-17-two-time-scales.md`](../brainstorms/2026-08-17-two-time-scales.md),
 `docs/DESIGN.md` (ADR 0003, ADR 0004)

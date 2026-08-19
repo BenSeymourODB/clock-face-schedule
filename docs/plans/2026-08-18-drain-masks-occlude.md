@@ -1,6 +1,6 @@
 # Make the drain masks actually drain
 
-**Status:** done
+**Status:** done — shipped in [#73](https://github.com/BenSeymourODB/clock-face-schedule/pull/73)
 **Issue:** [#71](https://github.com/BenSeymourODB/clock-face-schedule/issues/71)
 **Docs:** #28 (the drain this was meant to draw), #26 (the elapsed outline the spent side borrows),
 #27 (outline contrast), #22 (the feather mask this model came from), #72 (pinning the clock — not

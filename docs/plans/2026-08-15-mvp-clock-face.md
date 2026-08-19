@@ -1,5 +1,6 @@
 # MVP — clock-face schedule dial on Apps Script
 
+**Status:** in progress — W1–W9 shipped ([#1](https://github.com/BenSeymourODB/clock-face-schedule/issues/1)–[#9](https://github.com/BenSeymourODB/clock-face-schedule/issues/9) closed); W10 outstanding as [#10](https://github.com/BenSeymourODB/clock-face-schedule/issues/10)
 **Date:** 2026-08-15
 **Goal:** an analog dial on a wall display showing today's current 12-hour period from **one**
 Google Calendar, at full visual parity with what `next-digital-wall-calendar` shipped.
