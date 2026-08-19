@@ -8,7 +8,7 @@ import {
   contrastRatio,
   polarToCartesian,
 } from "../../shared/clock";
-import { eventArc } from "./event-arc";
+import { arcFillColor, eventArc } from "./event-arc";
 
 /** The dial background the outline's colour is made legible against — `--card`, per event-arc.ts. */
 const DIAL_BACKGROUND = "#16181d";
@@ -74,6 +74,86 @@ describe("eventArc", () => {
     it("fills with the event colour", () => {
       expect(path?.getAttribute("fill")).toBe("#22c55e");
       expect(path?.getAttribute("fill-opacity")).toBe("0.85");
+    });
+
+    describe("a fill a viewer can read the extent of (#66)", () => {
+      /** What the fill is once `fill-opacity` has mixed the band back into it — what is on screen. */
+      const painted = (color: string) =>
+        contrastRatio(
+          compositeOver(
+            BAND_BACKGROUND,
+            render({ color }).querySelector('[data-testid="event-arc-e1"]')!.getAttribute("fill")!,
+            0.85
+          )!,
+          BAND_BACKGROUND
+        )!;
+
+      it.each([
+        ["⚫ gray-800", "#1F2937", 1.25, "#666d77"],
+        ["🟤 amber-800", "#92400E", 2.28, "#a25b30"],
+      ])(
+        "raises %s, whose body painted at %f:1 and could not be told from the band",
+        (_label, color, before, expected) => {
+          // The defect: an event's *extent* is read off where its body starts and stops, and for
+          // these two there was no body to read. What revealed a ⚫ arc was incidental — the title
+          // on it, and a separator only 1.15:1 against it. Pinning the hex as well as the ratio,
+          // because the floor's whole justification is that this particular value keeps the title
+          // white; a future floor that clears 3:1 by a different route would need re-deriving.
+          expect(contrastRatio(compositeOver(BAND_BACKGROUND, color, 0.85)!, BAND_BACKGROUND)).
+            toBeCloseTo(before, 2);
+
+          const fill = render({ color }).querySelector('[data-testid="event-arc-e1"]');
+          expect(fill?.getAttribute("fill")).toBe(expected);
+          expect(painted(color)).toBeGreaterThanOrEqual(3);
+        }
+      );
+
+      it.each([
+        ["🟢 green-500", "#22C55E"],
+        ["🔴 red-500", "#EF4444"],
+        ["🟣 purple-500", "#A855F7"],
+        ["⚪ gray-100", "#F3F4F6"],
+        ["a calendar's own hex", "#5484ed"],
+      ])("paints %s exactly as authored, having nothing to fix", (_label, color) => {
+        // The floor is a floor and not a restyle: seven of the nine colour-dots, all eleven of
+        // Google's, and the default already clear 3:1 and must come through byte-identical.
+        expect(painted(color)).toBeGreaterThanOrEqual(3);
+        expect(
+          render({ color }).querySelector('[data-testid="event-arc-e1"]')?.getAttribute("fill")
+        ).toBe(color);
+      });
+
+      it("keeps the separator meaningful against the fill it borders", () => {
+        // `var(--card)` measures 1.15:1 on an authored ⚫ fill, so on the fixture ⚫ Staff Debrief
+        // read as a dark *gap* beside 🟤 ⚽ rather than as a block. #74's plan records why the
+        // obvious fix — a boundary stroke resolved against the band — is worse than the defect: it
+        // gives a live arc the exact colour an elapsed one's outline takes. Flooring the fill needs
+        // no such trade, and this is the number that says so.
+        const fill = render({ color: "#1F2937" })
+          .querySelector('[data-testid="event-arc-e1"]')!
+          .getAttribute("fill")!;
+        const painted = compositeOver(BAND_BACKGROUND, fill, 0.85)!;
+
+        expect(contrastRatio("#16181d", painted)).toBeGreaterThan(2.5);
+      });
+
+      it("leaves the elapsed outline reading the authored colour, not the floored one", () => {
+        // The two are one 8-bit step apart (⚫ `#747b83` against `#747b84`), so the elapsed state
+        // does not notice this change — and the outline is #27/#74's to move, not this one's.
+        const color = "#1F2937";
+        const group = eventArc({
+          event: makeEvent({ color }),
+          cx: CX,
+          cy: CY,
+          innerRadius: INNER,
+          outerRadius: OUTER,
+          isElapsed: true,
+        });
+
+        expect(
+          group.querySelector('[data-testid="event-arc-outline-e1"]')?.getAttribute("stroke")
+        ).toBe(adjustForContrast(color, DIAL_BACKGROUND, 4.5));
+      });
     });
 
     it("separates adjacent arcs with a token, not a literal", () => {
@@ -1225,8 +1305,11 @@ describe("eventArc while the event is draining", () => {
     });
 
     it.each([
-      ["⚫ gray-800", "#1F2937", 14.04],
-      ["🟤 amber-800", "#92400E", 7.69],
+      // Measured on the **floored** fill (#66) — the one painted. Flooring narrows these two
+      // margins sharply (14.04 and 7.69 on the authored hex) without moving the winner: a lighter
+      // fill gains for black and loses for the token, and at a 3:1 floor neither crosses.
+      ["⚫ gray-800", "#1F2937", 5.85],
+      ["🟤 amber-800", "#92400E", 5.83],
       // These two take a *black* title while live, derived from the authored hex — but measured on
       // the composited fill the light token beats it (4.43 against 4.31, 4.60 against 4.14), so they
       // need no split either, and the copy they get is the one they keep once elapsed.
@@ -1238,8 +1321,9 @@ describe("eventArc while the event is draining", () => {
         // Splitting a title that needs no split costs two nodes and invites a seam artefact for
         // nothing.
         expect(titles(color)).toEqual([{ fill: "var(--card-foreground)", mask: null }]);
-        // And the claim in that sentence, measured rather than asserted.
-        const fill = compositeOver(BAND_BACKGROUND, color, 0.85)!;
+        // And the claim in that sentence, measured rather than asserted — on `arcFillColor`, so
+        // the ground measured here is the ground the renderer actually paints.
+        const fill = compositeOver(BAND_BACKGROUND, arcFillColor(color), 0.85)!;
         expect(contrastRatio("#f2f4f8", fill)).toBeCloseTo(onFill, 1);
         expect(contrastRatio("#f2f4f8", fill)!).toBeGreaterThan(contrastRatio("#000000", fill)!);
       }
