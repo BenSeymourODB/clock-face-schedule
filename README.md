@@ -145,10 +145,58 @@ block in `static/appsscript.json`, not from the container type.
 generated output. Edits made in the Apps Script online editor are overwritten by the next push.
 
 **`build/preview.html`** resolves the HtmlService `include()` templating into a standalone page,
-so the UI can be opened straight from disk. This is the fast loop for visual work — no push, no
+so the UI can be opened straight from disk — `file://` renders it pixel-identically to serving it,
+because every asset it needs is inlined. This is the fast loop for visual work — no push, no
 deployment. Nothing server-side runs, so anything behind `google.script.run` shows its failure
 state; it is a complement to checking the deployed app, not a replacement. `.claspignore` keeps
 it out of the pushed project.
+
+**CI keeps that page**, so looking at what a branch draws costs no checkout: every run attaches
+`build/` as an artifact — `preview-pr-<n>` on a pull request, `preview-main-<sha>` on `main`, kept
+14 days. Download it from the run's summary page, unzip, open `preview.html`, and add `?now=` from
+the table below to reach the state you want. The `main` copy is the "before" half of a rendered
+comparison. The artifact is uploaded immediately after the build, so a run that goes red on
+`check-types` or `npm test` still leaves you the picture.
+
+### Pinning the clock, to see a state that depends on the time
+
+Most of what is worth looking at depends on what time it is — an arc that has already happened, one
+draining as it runs, the window's leading edge. Two parameters set the dial's clock, on the preview
+and on the deployed app alike:
+
+| | |
+| --- | --- |
+| `?now=04:15` | The dial reads 04:15 and **runs on** from there, so the tick loop still rebuilds. |
+| `?now=2026-08-18T04:15` | The same, on a named day. `HH:MM`, `HH:MM:SS`, and a full date-time are all accepted, with an optional `Z` or `±HH:MM` offset. |
+| `&freeze=1` | The clock holds still, so a screenshot is reproducible. Works alone, to stop the real clock where it stands. |
+
+`build/preview.html?now=04:15&freeze=1` needs no server. A pinned clock says so on screen, and an
+unreadable time falls back to the real clock rather than inventing one.
+
+**The times below exercise the demo fixture's states**, and are what the fixture's offsets mean once
+a pin anchors them to midnight — measured by rendering, not predicted:
+
+| `?now=` | What it shows |
+| --- | --- |
+| `03:00` | The unpinned picture exactly: ⚪ Breakfast Club elapsed and crossing the leading edge, the three-deep cluster elapsed, **nothing draining**. |
+| `01:30` | The three-deep cluster mid-drain — 🎮 Game Time and 🔴 Deadline draining, 🟣 Study still live. |
+| `04:15` | ⚫ Staff Debrief and 🟤 ⚽ draining, ⚫ Assembly elapsed: the two palette colours that fail contrast on the dial, in both treatments at once. |
+| `08:30` | 🟣 Free Play draining, with 📚 Reading — the ten-minute event held open by the minimum span — elapsed beside it. |
+| `11:00` | 🟢 Aftercare draining and running past the window's end, with every other event already finished. |
+
+Note the first row: **unpinned, the fixture never has an event in progress**, at any time of day.
+It is anchored to the rolling window's own start, so every event's offset from "now" is a constant.
+That is why the preview had never drawn a draining arc before this existed.
+
+Two consequences of that anchoring worth knowing before you pin something:
+
+- **`?freeze=1` on its own does not move the fixture.** It holds the real clock still, so the dial
+  keeps the picture it already had. Only `?now=` re-anchors.
+- **A pinned time is useful in the morning, and empty by the evening.** The fixture spans 23:10 the
+  previous day to 13:15, against a window of `[now − 3h, now + 8h]`, so arcs drop away through the
+  afternoon: **16** arcs at 03:00, 11 at 06:00, 6 at 09:00, 3 at 12:00, and **none from 17:00**.
+  That is what the fixture covers, not a fault in the pin — `?now=19:00` correctly shows an empty
+  dial, because the fixture has nothing at seven in the evening.
 
 ### The manifest is the source of truth
 

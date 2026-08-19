@@ -13,15 +13,21 @@ export { getEvents } from "./calendar";
 export { savePreferences } from "./preferences";
 
 /**
- * Two bring-up switches, both off by default because the display itself must carry no chrome.
+ * Bring-up switches, all off by default because the display itself must carry no chrome.
  *
  * `?check=1` adds the diagnostics — colour emoji, the bridge round trip, and a calendar read.
  * `?demo=1` draws a fixture schedule instead of the calendar, so arc legibility can be judged at
- * distance without waiting for the viewer's own day to contain a useful overlap. It labels itself
- * on screen so a display left in that mode cannot be mistaken for a real one.
+ * distance without waiting for the viewer's own day to contain a useful overlap. `?now=` pins the
+ * dial's clock and `?freeze=1` stops it, so a state that depends on the time — an elapsed arc, a
+ * draining one, a window edge — can be looked at on purpose rather than waited for. Each labels
+ * itself on screen so a display left in one cannot be mistaken for a real one.
  *
- * Both need to be checkable on the device rather than on a workstation, which is why they are URL
- * parameters and not a build flag.
+ * All of them need to be checkable on the device rather than on a workstation, which is why they
+ * are URL parameters and not a build flag.
+ *
+ * `now` is passed through **as authored**: the browser is authoritative for time (ADR 0005) and the
+ * server has no business deciding what "04:15" means. Templated with `<?= ?>` rather than
+ * `<?!= ?>`, since it arrives from the URL.
  *
  * The viewer's stored preferences ride along in the same template (#31). Reading them here costs
  * nothing — `doGet` is already running server-side — where fetching them over `google.script.run`
@@ -31,6 +37,8 @@ export function doGet(event?: GoogleAppsScript.Events.DoGet): GoogleAppsScript.H
   const template = HtmlService.createTemplateFromFile("Index");
   template["showDiagnostics"] = event?.parameter?.["check"] === "1";
   template["showDemo"] = event?.parameter?.["demo"] === "1";
+  template["pinnedNow"] = event?.parameter?.["now"] ?? "";
+  template["freezeClock"] = event?.parameter?.["freeze"] === "1" ? "1" : "";
   template["preferences"] = preferencesWire();
 
   return template

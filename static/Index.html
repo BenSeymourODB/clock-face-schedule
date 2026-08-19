@@ -8,21 +8,29 @@
   <body>
     <main id="display">
       <!--
-        Preferences arrive as a templated value, not behind a conditional scriptlet the way data-demo
-        is, because a guarded attribute would be absent on every real load: the guard here is
-        showDemo, and a display showing a real calendar would carry no preferences at all while the
-        preview — which keeps guarded content — looked perfectly correct. Verified both ways rather
-        than reasoned about; the preview line is byte-identical either way.
+        The pin's two attributes and the preference wire are emitted unconditionally with a
+        templated *value*, not behind a conditional scriptlet the way data-demo is. The preview
+        builder strips scriptlets while keeping what they guard — which is how demo mode is always on
+        in the preview — so a guarded `data-freeze="1"` would freeze every preview permanently, and a
+        guarded `data-preferences` would be absent on every real load while the preview looked
+        perfectly correct. Templated values strip to "", which the client reads as absent and falls
+        back to its own query string. Verified both ways rather than reasoned about; the preview line
+        is byte-identical either way.
 
-        Escaped output, not raw, because the value comes out of a store. It needs no escaping —
-        every encoded preference is [A-Za-z0-9;=], which shared/preferences.test.ts asserts — but
-        escaping it anyway keeps that a property of the format rather than a hope.
+        Escaped output, not raw, because the preference value comes out of a store. It needs no
+        escaping — every encoded preference is [A-Za-z0-9;=], which shared/preferences.test.ts
+        asserts — but escaping it anyway keeps that a property of the format rather than a hope.
 
         Nothing in this comment may use scriptlet delimiters: HtmlService compiles them wherever
         they appear, HTML comments included, so a fragment written as illustration would be
         evaluated as code and fail the whole page.
       -->
-      <div id="dial"<? if (showDemo) { ?> data-demo="1"<? } ?> data-preferences="<?= preferences ?>"></div>
+      <div
+        id="dial"<? if (showDemo) { ?> data-demo="1"<? } ?>
+        data-now="<?= pinnedNow ?>"
+        data-freeze="<?= freezeClock ?>"
+        data-preferences="<?= preferences ?>"
+      ></div>
       <p id="status" role="status" hidden></p>
     </main>
 

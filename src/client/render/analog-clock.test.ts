@@ -120,6 +120,25 @@ describe("analogClock", () => {
       expect(gap).toBeLessThan(ARC_THICKNESS / 2);
     });
 
+    it("draws every arc outside the face circle, so the band's ground is the page (#74)", () => {
+      // The geometric fact `event-arc.ts` used to deny: it measured elapsed outlines against
+      // `--card`, which is `clock-face-bg`'s fill, while the band it draws them on sits beyond
+      // that circle over `--page`. The error was safe — the real ground is darker — but it moved
+      // every adjusted colour further from its authored hue than it had to. If the band is ever
+      // moved inside the face, this fails and BAND_BACKGROUND is the thing to revisit.
+      const { element } = build(
+        // Stacked as deep as the band will go, so the innermost ring is the one measured.
+        Array.from({ length: MAX_RINGS + 1 }, (_, index) => input(`deep-${index}`, 2, 5))
+      );
+      const faceRadius = Number(
+        element.querySelector('[data-testid="clock-face-bg"]')?.getAttribute("r")
+      );
+      const innermost = Math.min(...arcs(element).map((arc) => arcRadii(arc).inner));
+
+      expect(arcs(element).length).toBeGreaterThan(1);
+      expect(innermost).toBeGreaterThanOrEqual(faceRadius);
+    });
+
     it("gives the arc band a share of the radius, not a fixed pixel width", () => {
       // Guards #20: a fixed 48-unit band could not be widened for a room without editing code,
       // and did not track the dial at all.
@@ -139,6 +158,22 @@ describe("analogClock", () => {
       const arcsLayer = element.querySelector('[data-testid="event-arcs-layer"]');
 
       expect(arcsLayer?.firstElementChild?.getAttribute("data-testid")).toBe("window-track");
+    });
+
+    it("stays fully under an elapsed arc's outline where the two meet (#74)", () => {
+      // The track is `var(--border)` at half opacity — `#3c4049`, 1.86:1 on the page — and it sits
+      // exactly where an outermost elapsed arc's outline is drawn. Every outline colour measures
+      // ~2.4:1 against it, so a sliver of track peeking out from under one would be a light fringe
+      // halving the contrast the outline is resolved to. It does not: the stroke straddles the rim
+      // by half its width, which is wider than the track, so it hides it. Confirmed by reading the
+      // rendered pixels either side of the outline — `#0c0e12` both ways — but the margin is 0.09
+      // units at the thinnest ring the band can open, so it is worth holding rather than trusting.
+      const trackThickness = OUTER_RADIUS * 0.008;
+      const thinnestRing = ARC_THICKNESS * 0.16;
+      // The stroke is sized from the band, then capped at 0.4 of the ring it is drawn on.
+      const narrowestOutline = Math.min(ARC_THICKNESS * 0.07, thinnestRing * 0.4);
+
+      expect(narrowestOutline / 2).toBeGreaterThan(trackThickness);
     });
 
     it("spans exactly the current rolling window, in the same angle space as the arcs", () => {
@@ -264,6 +299,43 @@ describe("analogClock", () => {
         expect(outer).toBeGreaterThan(inner);
         expect(inner).toBeGreaterThanOrEqual(CLOCK_RADIUS - 1e-6);
       }
+    });
+
+    /**
+     * #67: the dial derives each arc's title layout before the arc renders, so it is the dial that
+     * has to hand the layout the stroke that arc will draw on its own ring edges. Miss it and a
+     * two-line title on a four-deep ring sits 0.55 units from the outline — inside the one unit
+     * below which two marks stop reading as two — and every number here still looks right in
+     * isolation, which is why this measures the rendered attributes against each other.
+     */
+    it("keeps a stacked ring's two-line title clear of its own elapsed outline", () => {
+      // Four mutually overlapping events; "a" takes the outermost ring and a title long enough to
+      // wrap at that ring's font size. All four have ended by MORNING, so the outline is drawn.
+      const wrapping = "Parent Teacher Conference Planning Committee Meeting Notes and Actions";
+      const { element } = build([
+        input("a", 2, 3, { title: wrapping }),
+        input("b", 2, 4),
+        input("c", 2.2, 4),
+        input("d", 2.4, 4),
+      ]);
+
+      const group = element.querySelector('[data-testid="event-arc-group-a"]');
+      const { inner, outer } = arcRadii(group!.querySelector('[data-arc-part="fill"]')!);
+      const radii = [...group!.querySelectorAll("defs > path")].map((node) =>
+        Number(/A ([\d.]+) /.exec(node.getAttribute("d") ?? "")?.[1])
+      );
+      const fontSize = Number(
+        group!.querySelector('[data-testid="event-title-a"] text')?.getAttribute("font-size")
+      );
+      const strokeReach =
+        Number(group!.querySelector('[data-arc-part="outline"]')?.getAttribute("stroke-width")) / 2;
+
+      // The premise: four rings deep, and a title that really did take two lines.
+      expect(outer - inner).toBeCloseTo((ARC_THICKNESS - 3 * RING_GAP) / 4, 4);
+      expect(radii).toHaveLength(2);
+
+      expect(Math.max(...radii) + fontSize / 2).toBeLessThanOrEqual(outer - strokeReach - 1);
+      expect(Math.min(...radii) - fontSize / 2).toBeGreaterThanOrEqual(inner + strokeReach + 1);
     });
   });
 
