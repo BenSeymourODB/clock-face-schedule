@@ -76,10 +76,12 @@ targeted assertion capturing the specific property that was wrong.
 ## The fixture is the stress case
 
 `src/client/sample-events.ts` drives `build/preview.html` and the deployed `?demo=1`. It deliberately
-contains a three-deep cluster, an isolated arc beside it, a ten-minute event held open by the minimum
-span, an overflowing title, a two-line title carrying an emoji, an event crossing each end of the
-period, and a `⚫` event whose colour measures **1.21:1** on the dial background. Add to it when your
-change has a stress case none of those covers; do not quietly make it easier.
+contains a four-deep cluster — as many rings as `maxRings` opens — carrying a two-line title on its
+innermost ring and one-line titles beside it, an isolated arc beside the cluster, a ten-minute event
+held open by the minimum span, an overflowing title, a two-line title carrying an emoji, an event
+crossing each end of the period, and a `⚫` event whose colour measures **1.21:1** on the dial
+background. Add to it when your change has a stress case none of those covers; do not quietly make
+it easier.
 
 A demo mode that ships to production was a deliberate call: legibility has to be judged on the smart
 board, and waiting for someone's real day to contain a useful overlap is not a plan.

@@ -1,13 +1,17 @@
 import { describe, expect, it } from "vitest";
 import {
   FEATHER_DEGREES,
+  TITLE_EDGE_CLEARANCE,
+  TITLE_FONT_SIZE_RATIO,
   type ClockEvent,
   adjustForContrast,
+  arcCharBudget,
   compositeOver,
   computeArcTitleLayout,
   contrastRatio,
   polarToCartesian,
 } from "../../shared/clock";
+import { ARC_BAND_RATIO, RING_GAP_MIN, RING_GAP_RATIO } from "./analog-clock";
 import { eventArc } from "./event-arc";
 
 /** The dial background the outline's colour is made legible against — `--card`, per event-arc.ts. */
@@ -906,6 +910,127 @@ describe("eventArc once the event has ended", () => {
     // The live band and the elapsed outline mean two different things; showing both at once on a
     // fully-spent arc would say "still live" and "already over" in the same breath.
     expect(parts().separator).toBeNull();
+  });
+});
+
+/**
+ * #67: the outline is sized from the whole band, deliberately, so its weight does not thin with
+ * overlap depth (#26) — while the text is sized from this arc's own ring, equally deliberately. Both
+ * rules are right and on a thin ring they disagree, so the two have to be compared somewhere.
+ *
+ * Asserted on rendered attributes rather than on the layout, because that is where the two meet: the
+ * `d` of each baseline against the `stroke-width` the outline actually carries. A test computing
+ * both from the same constants would encode the assumption that put the text on the stroke.
+ */
+describe("eventArc's title against what is stroked on its ring", () => {
+  const BAND = OUTER * ARC_BAND_RATIO;
+  const RING_GAP = Math.max(RING_GAP_MIN, BAND * RING_GAP_RATIO);
+
+  /** The outermost ring of a `depth`-deep cluster, as the dial divides the band. */
+  function ring(depth: number) {
+    const gap = depth > 1 ? RING_GAP : 0;
+    const thickness = (BAND - (depth - 1) * gap) / depth;
+    return { innerRadius: OUTER - thickness, outerRadius: OUTER, bandThickness: BAND };
+  }
+
+  /**
+   * A title that wraps onto two lines on this ring *and* fits — two words that each fit a line alone
+   * and cannot share one.
+   *
+   * Derived from the ring's own budget rather than written out, because a fixed string is a two-line
+   * fit on a thin ring and a truncated one-liner on a thick one. That distinction matters here: an
+   * overflowing title is routed to a floating label with `forceHideTitle`, so a truncated case would
+   * be asserting clearance on a configuration the dial never renders.
+   */
+  function wrappingTitle(depth: number, arcSpan: number) {
+    const shape = ring(depth);
+    const probe = computeArcTitleLayout({ ...shape, title: "x", arcSpan });
+    const budget = arcCharBudget(arcSpan, probe.titleRadius, probe.titleFontSize);
+    const word = "a".repeat(Math.max(1, Math.floor(budget / 2) + 1));
+
+    return `${word} ${word}`;
+  }
+
+  function measure(depth: number, cleanTitle: string, arcSpan = 30) {
+    const shape = ring(depth);
+    const group = eventArc({
+      event: makeEvent({ cleanTitle, startAngle: 0, endAngle: arcSpan }),
+      cx: CX,
+      cy: CY,
+      isElapsed: true,
+      ...shape,
+    });
+
+    const radii = [...group.querySelectorAll("defs > path")].map((node) =>
+      arcRadius(node.getAttribute("d") ?? "")
+    );
+    const fontSize = Number(
+      group.querySelector('[data-testid="event-title-e1"] text')?.getAttribute("font-size")
+    );
+    const strokeWidth = Number(
+      group.querySelector('[data-arc-part="outline"]')?.getAttribute("stroke-width")
+    );
+
+    // A stroke straddles its path, so it reaches half its width back into the ring from each edge.
+    return {
+      radii,
+      fontSize,
+      strokeWidth,
+      outward: shape.outerRadius - strokeWidth / 2 - (Math.max(...radii) + fontSize / 2),
+      inward: Math.min(...radii) - fontSize / 2 - (shape.innerRadius + strokeWidth / 2),
+    };
+  }
+
+  it.each([[1], [2], [3], [4]])("clears both edges %i deep, on two lines", (depth) => {
+    const { radii, outward, inward } = measure(depth, wrappingTitle(depth, 30));
+
+    expect(radii).toHaveLength(2);
+    expect(outward).toBeGreaterThanOrEqual(TITLE_EDGE_CLEARANCE);
+    expect(inward).toBeGreaterThanOrEqual(TITLE_EDGE_CLEARANCE);
+  });
+
+  it.each([[2], [3], [4]])("clears both edges %i deep, on one line", (depth) => {
+    const { radii, outward, inward } = measure(depth, "Lunch");
+
+    expect(radii).toHaveLength(1);
+    expect(outward).toBeGreaterThanOrEqual(TITLE_EDGE_CLEARANCE);
+    expect(inward).toBeGreaterThanOrEqual(TITLE_EDGE_CLEARANCE);
+  });
+
+  it("clears both edges when #35's duration line makes the second line", () => {
+    // A lone arc's one-line title gains a duration line beneath it, so the stack is two lines the
+    // font size was not held to. `fitDurationLine` applies the same clearance to the same font and
+    // declines where the pair would not fit, which is what keeps this in bounds — depth 1 is the only
+    // depth it survives, since its own legibility gate wants the whole band.
+    const { radii, outward, inward } = measure(1, "Lunch");
+
+    expect(radii).toHaveLength(2);
+    expect(outward).toBeGreaterThanOrEqual(TITLE_EDGE_CLEARANCE);
+    expect(inward).toBeGreaterThanOrEqual(TITLE_EDGE_CLEARANCE);
+  });
+
+  it("is the four-deep ring that binds, and it yields only the text", () => {
+    // Where the fix shows: four deep the stack wanted 4.58 units of half-height in the 4.12 the
+    // outline leaves, so the font gives up 10%. The outline is untouched — it *is* the arc once the
+    // fill is gone, and capping it by the ring is the inversion #26's band-sizing exists to prevent.
+    const stacked = measure(4, wrappingTitle(4, 30));
+    const three = measure(3, wrappingTitle(3, 30));
+
+    expect(stacked.fontSize).toBeLessThan((ring(4).outerRadius - ring(4).innerRadius) * TITLE_FONT_SIZE_RATIO);
+    expect(stacked.strokeWidth).toBe(measure(1, "Lunch").strokeWidth);
+    expect(three.fontSize).toBeCloseTo(
+      (ring(3).outerRadius - ring(3).innerRadius) * TITLE_FONT_SIZE_RATIO,
+      2
+    );
+  });
+
+  it("leaves a one-line title on the same ring at full size", () => {
+    // The room a line that is not drawn does not get to take: charging two-line reach to every arc
+    // wider than the two-line span threshold cost this title 10% of its size for nothing, on the ring
+    // that can least afford it (#70).
+    const arcHeight = ring(4).outerRadius - ring(4).innerRadius;
+
+    expect(measure(4, "Lunch").fontSize).toBeCloseTo(arcHeight * TITLE_FONT_SIZE_RATIO, 2);
   });
 });
 
