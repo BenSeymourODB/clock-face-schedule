@@ -134,7 +134,7 @@ describe("what the anchor leaves on the dial", () => {
 
   it("keeps the fixture on the dial at every hour when unpinned", () => {
     for (let hour = 0; hour < 24; hour += 1) {
-      expect(drawnArcs("", new Date(2026, 7, 18, hour, 0)), `${hour}:00`).toBe(13);
+      expect(drawnArcs("", new Date(2026, 7, 18, hour, 0)), `${hour}:00`).toBe(15);
     }
   });
 
@@ -147,8 +147,8 @@ describe("what the anchor leaves on the dial", () => {
   it("puts the fixture on the dial for a morning pin and off it for an evening one", () => {
     const at = new Date(2026, 7, 18, 14, 37);
 
-    expect(drawnArcs("?now=03:00&freeze=1", at)).toBe(13);
-    expect(drawnArcs("?now=09:00&freeze=1", at)).toBe(5);
+    expect(drawnArcs("?now=03:00&freeze=1", at)).toBe(15);
+    expect(drawnArcs("?now=09:00&freeze=1", at)).toBe(6);
     expect(drawnArcs("?now=12:00&freeze=1", at)).toBe(3);
     expect(drawnArcs("?now=17:00&freeze=1", at)).toBe(0);
   });
