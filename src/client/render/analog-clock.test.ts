@@ -732,6 +732,27 @@ describe("analogClock at the 1-hour scale", () => {
     expect(arcSpanDegrees(arcs(wrapping.element)[0])).toBeCloseTo(90, 3);
   });
 
+  /**
+   * `assignRings` rebases every angle onto the window's start before sorting, and defaults that
+   * origin to 0 — a no-op only while the window stays inside `[0, 360)`. A 1-hour window at 10:45
+   * runs 240°–570°, so rebased onto 0 an event past the wrap sorts *before* one before it, and
+   * interval partitioning walked in the wrong order puts two overlapping events on the same ring.
+   * The later one is then drawn at identical radii and is invisible — the worst failure this dial
+   * has, since an event that is not there cannot be read at any size.
+   */
+  it("stacks two events that overlap across the top of the hour", () => {
+    const wrapping = analogClock({
+      events: [input("a", 10 + 50 / 60, 11 + 10 / 60), input("b", 11, 11 + 5 / 60)],
+      time: new Date(2026, 7, 15, 10, 45, 0),
+      scale: "1h",
+    });
+
+    const radii = arcs(wrapping.element).map((arc) => arcRadii(arc));
+    expect(radii).toHaveLength(2);
+    expect(radii[0].outer).not.toBeCloseTo(radii[1].outer, 3);
+    expect(radii[0].inner).not.toBeCloseTo(radii[1].inner, 3);
+  });
+
   it("keeps rebuilding as the window rolls", () => {
     const clock = oneHour([input("a", 4 + 30 / 60, 4 + 45 / 60)]);
     const before = clock.element.querySelector('[data-testid="window-track"]')?.getAttribute("d");

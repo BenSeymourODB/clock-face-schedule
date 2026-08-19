@@ -22,6 +22,7 @@ import {
   describeTextArc,
   fitDurationLine,
   formatEventDuration,
+  normaliseAngle,
   polarToCartesian,
   readableTextColor,
   roundCoord,
@@ -272,7 +273,12 @@ export function eventArc({
   const displayTitle = combineTitleWithEmoji(cleanTitle, eventEmoji);
 
   const arcSpan = endAngle - startAngle;
-  const midAngle = (startAngle + endAngle) / 2;
+  // Normalised, because every use below asks which *direction* this arc points rather than where
+  // it sits: whether the emoji needs counter-rotating, which radius is the higher line on screen,
+  // and the point the glyph is placed at (where 519° and 159° are the same point anyway). Left
+  // raw, the first two silently fail for every arc past a revolution — the whole of the 1-hour
+  // scale's wrapped half (#34), and the 12-hour dial's evening (#25).
+  const midAngle = normaliseAngle((startAngle + endAngle) / 2);
   const arcHeight = outerRadius - innerRadius;
 
   // Announced whatever the radial budget allows, unlike the drawn line below: a listener has no

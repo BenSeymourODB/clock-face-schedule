@@ -2,7 +2,7 @@
  * Baseline path for curved arc text.
  * Extracted from next-digital-wall-calendar's `event-arc.tsx`.
  */
-import { polarToCartesian } from './clock-utils';
+import { normaliseAngle, polarToCartesian } from './clock-utils';
 
 /**
  * SVG path for a single arc used as a `<textPath>` baseline (not a donut).
@@ -26,7 +26,7 @@ export function describeTextArc(
   startAngle: number,
   endAngle: number
 ): string {
-  const midAngle = (((startAngle + endAngle) / 2) % 360 + 360) % 360;
+  const midAngle = normaliseAngle((startAngle + endAngle) / 2);
   const isBottomHalf = midAngle > 90 && midAngle < 270;
 
   const fromAngle = isBottomHalf ? endAngle : startAngle;

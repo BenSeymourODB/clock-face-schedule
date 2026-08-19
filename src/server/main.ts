@@ -25,6 +25,13 @@ export { getEvents } from "./calendar";
  * client-side read of `location.search` would see nothing. Passed through raw and unvalidated —
  * the client parses it, which keeps the server the calendar adapter ADR 0003 says it is and keeps
  * the geometry layer's emoji tables out of the server bundle.
+ *
+ * Defaulted to `""` rather than left undefined, because `Index.html` emits `data-scale`
+ * unconditionally. Wrapping the attribute in a scriptlet instead would make it permanently *on* in
+ * the local preview, which strips the scriptlets but keeps what they guard; present-and-blank lets
+ * the preview fall back to its own query string, which it can read because it is a file on disk
+ * rather than a sandboxed iframe. (The reasoning lives here and not beside the markup for a hard
+ * platform reason — see `docs/DESIGN.md` on scriptlet delimiters inside HTML comments.)
  */
 export function doGet(event?: GoogleAppsScript.Events.DoGet): GoogleAppsScript.HTML.HtmlOutput {
   const template = HtmlService.createTemplateFromFile("Index");

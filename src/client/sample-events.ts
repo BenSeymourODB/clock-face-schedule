@@ -103,6 +103,13 @@ export function sampleEvents(windowStart: Date): ClockEventInput[] {
  *
  * `at` counts minutes from the window's leading edge, which is 5 minutes behind now — so `at(5)`
  * is the moment the page loads and anything spanning it is in progress.
+ *
+ * **Anchored once, at load.** #62 records this for the 12-hour fixture; here it bites far harder,
+ * because the window is 55 minutes rather than eleven hours. The elapsed and feathered case walks
+ * out of view about three minutes in, the draining event about thirty, and the dial is empty
+ * inside the hour while still captioned "Sample events". Fine for the legibility check this exists
+ * for, which is made standing in front of the board; not fine for a display left in demo mode, and
+ * that is #62's to fix for both fixtures rather than this one's to solve twice.
  */
 export function oneHourSampleEvents(windowStart: Date): ClockEventInput[] {
   const at = (minutes: number) =>

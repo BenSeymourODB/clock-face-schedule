@@ -198,6 +198,13 @@ describe("eventArc", () => {
       // SVG takes any rotation — but it is why these read 360 and 390 rather than 0 and 30.
       ["six o'clock", 180, 360],
       ["seven o'clock", 210, 390],
+      // Past a revolution, which the 1-hour scale reaches on every window that wraps and the
+      // 12-hour dial reaches most evenings (#25, #34). The decision is about a *direction*, so it
+      // has to answer the same as its unwrapped twin two rows up — left raw it says "top half"
+      // and the glyph renders very nearly upside down.
+      ["seven o'clock past the wrap", 570, 390],
+      ["one-thirty past the wrap", 405, 45],
+      ["four-thirty two revolutions on", 855, 315],
     ])("rotates the %s glyph upright", (_label, midAngle, expected) => {
       const group = render({
         startAngle: midAngle - NARROW,
@@ -265,6 +272,33 @@ describe("eventArc", () => {
 
       const offset = layout.titleFontSize * 0.55;
       expect(radii).toEqual([layout.titleRadius + offset, layout.titleRadius - offset]);
+    });
+
+    /**
+     * Which radius carries line one flips with the half of the dial — further out is higher at the
+     * top and lower at the bottom — and getting it wrong is how lower-half titles came to read
+     * bottom-up once before. The test that missed it asserted only the top-half case, so a
+     * wrapped arc, whose mid-angle is past 360°, was read as top-half and stacked upside down.
+     */
+    it.each([
+      ["the bottom half", 150, 210],
+      ["the bottom half past the wrap", 510, 570],
+    ])("puts the first line above the second on %s", (_label, startAngle, endAngle) => {
+      const cleanTitle = "Parent Teacher Conference Planning Session Extra Words Here To Wrap";
+      const layout = computeArcTitleLayout({
+        title: cleanTitle,
+        arcSpan: endAngle - startAngle,
+        innerRadius: INNER,
+        outerRadius: OUTER,
+      });
+      expect(layout.fit.lines).toHaveLength(2);
+
+      const radii = [
+        ...render({ cleanTitle, startAngle, endAngle }).querySelectorAll("defs path"),
+      ].map((node) => arcRadius(node.getAttribute("d") ?? ""));
+
+      // Below the horizontal the smaller radius is the higher line on screen.
+      expect(radii[0]).toBeLessThan(radii[1]);
     });
 
     /**

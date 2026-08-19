@@ -246,7 +246,14 @@ export function analogClock({
         id: event.id,
         startAngle: event.trueStartAngle,
         endAngle: event.trueEndAngle,
-      }))
+      })),
+      // `assignRings` rebases onto this before sorting, and its default of 0 is only a no-op for a
+      // window that stays inside `[0, 360)` — which stopped being true when the window started
+      // rolling (#25) and is never true on the 1-hour scale, where 10:45 gives 240°–570°. Rebased
+      // onto 0, an event at 380° sorts *before* one at 30°, and interval partitioning walked in
+      // the wrong order silently stacks two overlapping events onto the same ring: the later one
+      // is drawn at identical radii, entirely hidden beneath the earlier.
+      angleForTime(windowStart, periodStart, scale.periodMinutes)
     );
 
     const overflowing: { startAngle: number; params: FloatingLabelParams }[] = [];

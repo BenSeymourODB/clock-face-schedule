@@ -30,6 +30,7 @@ export {
   getPeriodStart,
   getRollingWindow,
   hasEventInProgress,
+  normaliseAngle,
   parseEventTitle,
   polarToCartesian,
   roundCoord

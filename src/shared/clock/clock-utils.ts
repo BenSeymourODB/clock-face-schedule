@@ -266,6 +266,20 @@ export function angleForTime(
 }
 
 /**
+ * An angle reduced to `[0, 360)` — the direction on screen it points in.
+ *
+ * Deliberately **not** what the geometry uses. Angles stay unnormalised everywhere else so that
+ * `describeArc`'s large-arc flag, `assignRings`' ordering and every window boundary keep working
+ * across a wrap (#33). This exists for the small class of decisions that are genuinely about a
+ * direction rather than a position — is this text upside down, does this glyph need
+ * counter-rotating, which of two radii is the higher one on screen — where 519° and 159° are the
+ * same answer and the raw comparison silently gives different ones.
+ */
+export function normaliseAngle(degrees: number): number {
+  return ((degrees % 360) + 360) % 360;
+}
+
+/**
  * The event's actual extent within a window, in degrees against the fixed `periodStart` origin —
  * clamped to the window but **not** widened to the minimum visible width.
  *

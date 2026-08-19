@@ -7,12 +7,6 @@
   </head>
   <body>
     <main id="display">
-      <!--
-        `data-scale` is emitted unconditionally and may be empty. The build's preview strips the
-        scriptlets but keeps what they guard, so a `<? if ?>`-wrapped attribute would be *always*
-        on there; leaving the attribute present and blank lets the preview fall back to its own
-        query string, which it can read because it is a plain file rather than a sandboxed iframe.
-      -->
       <div id="dial"<? if (showDemo) { ?> data-demo="1"<? } ?> data-scale="<?= scaleParam ?>"></div>
       <p id="status" role="status" hidden></p>
     </main>
