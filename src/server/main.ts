@@ -7,7 +7,10 @@
  * is all that is required. See ADR 0002 and scripts/build.mjs.
  */
 
+import { preferencesWire } from "./preferences";
+
 export { getEvents } from "./calendar";
+export { savePreferences } from "./preferences";
 
 /**
  * Bring-up switches, all off by default because the display itself must carry no chrome.
@@ -25,6 +28,10 @@ export { getEvents } from "./calendar";
  * `now` is passed through **as authored**: the browser is authoritative for time (ADR 0005) and the
  * server has no business deciding what "04:15" means. Templated with `<?= ?>` rather than
  * `<?!= ?>`, since it arrives from the URL.
+ *
+ * The viewer's stored preferences ride along in the same template (#31). Reading them here costs
+ * nothing — `doGet` is already running server-side — where fetching them over `google.script.run`
+ * would cost the 0.5–2 s of ADR 0006 and a second render once they arrived.
  */
 export function doGet(event?: GoogleAppsScript.Events.DoGet): GoogleAppsScript.HTML.HtmlOutput {
   const template = HtmlService.createTemplateFromFile("Index");
@@ -32,6 +39,7 @@ export function doGet(event?: GoogleAppsScript.Events.DoGet): GoogleAppsScript.H
   template["showDemo"] = event?.parameter?.["demo"] === "1";
   template["pinnedNow"] = event?.parameter?.["now"] ?? "";
   template["freezeClock"] = event?.parameter?.["freeze"] === "1" ? "1" : "";
+  template["preferences"] = preferencesWire();
 
   return template
     .evaluate()

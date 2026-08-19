@@ -68,8 +68,28 @@ poll that keeps the last good schedule on screen — marked with when it was las
 blanking when a fetch fails.
 
 Adding `?check=1` to the URL shows bring-up diagnostics: colour emoji rendering, the
-`google.script.run` round trip, and a calendar read. Off by default, because the display itself
-carries no chrome.
+`google.script.run` round trip, a calendar read, and the viewer's stored preferences with a
+write-and-echo check on them. Off by default, because the display itself carries no chrome.
+
+**Preferences persist in `PropertiesService`, not in the browser** (#31). The page's origin rotates
+between sessions, so cookies and `localStorage` outlive nothing here; a user-scoped property store
+does. `doGet` templates the resolved values into the page, so reading them costs no round trip, and
+only a change writes one. A user property wins over a script property, which wins over the code's
+default — so a forked school instance sets deployment-wide defaults in the script store.
+
+Nothing on the display sets a preference yet — that arrives with the timer's control surface (#47) —
+so today they move only from the Apps Script property editor, which needs both the `pref.` prefix and
+the stored encoding to have any effect:
+
+| Property | Values | Default |
+| --- | --- | --- |
+| `pref.showSeconds` | `1` / `0` | `1` |
+| `pref.timerMuted` | `1` / `0` | `0` |
+| `pref.timerDurationSeconds` | whole seconds, 60–43200 | `300` |
+
+Anything else is ignored rather than rejected: an unprefixed key is not a preference, and
+`showSeconds = false` is not `0`. Both fall back silently, which is deliberate — a store written by
+an older version of the code must not be able to blank the display.
 
 What remains is mostly **legibility tuning for the intended viewing distance** — the ported
 proportions were designed for a kitchen wall at a few feet, not a classroom projector. See the open

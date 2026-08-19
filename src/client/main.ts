@@ -14,7 +14,9 @@ import {
   getPeriodBounds,
   getRollingWindow,
 } from "../shared/clock";
+import { decodePreferences, encodePreferences } from "../shared/preferences";
 import { fixtureAnchor, readClockPin } from "./clock-pin";
+import { type PreferenceStore, preferenceStore, readPreferenceWire } from "./preferences";
 import { analogClock } from "./render/analog-clock";
 import { fixtureCopyIndices, recurringSampleEvents } from "./sample-events";
 import { type ScheduleStatus, describeStatus, nextStatus } from "./schedule-status";
@@ -71,11 +73,35 @@ function fetchWindow(): Promise<ClockEventInput[]> {
   );
 }
 
+/**
+ * Preferences as `doGet` left them, with saves going back over the bridge unawaited.
+ *
+ * A failed save is a log line rather than a status-line failure: the status line is the schedule's,
+ * and a display that cannot remember a setting is still showing the right time with the right
+ * events on it.
+ */
+function displayPreferences(mount: Element): PreferenceStore {
+  return preferenceStore({
+    wire: readPreferenceWire(mount),
+    save: (wire) => {
+      void callServer<string>("savePreferences", wire).catch((error: Error) => {
+        console.warn(`preference not saved — ${error.message}`);
+      });
+    }
+  });
+}
+
 function startDisplay(): void {
   const statusLine = document.querySelector("#status");
   if (!mount) return;
 
-  const clock = analogClock({ events: [], showSeconds: true, time: now() });
+  const preferences = displayPreferences(mount);
+
+  const clock = analogClock({
+    events: [],
+    showSeconds: preferences.get().showSeconds,
+    time: now()
+  });
   mount.append(clock.element);
 
   // Hands before data. A google.script.run round trip runs 0.5–2s and the server cache does not
@@ -185,6 +211,43 @@ function browserTimeZone(): string {
   }
 }
 
+/**
+ * Preferences, checked on the device rather than on a workstation: what arrived in the page, and
+ * whether the store is reachable through the bridge at all.
+ *
+ * **Deliberately read-only.** An earlier version sent the resolved values back to prove the write
+ * path, which is a no-op in content and a one-way change in provenance: it copies the deployment's
+ * script-store defaults into the viewer's own store, after which they stop tracking the deployment
+ * and nothing here can unset them (#83). Sending an empty patch exercises the entry point, the patch
+ * parser and the resolution order without storing anything. Until #47 exists the write path has no
+ * production caller anyway, so there is nothing to check that a spec cannot.
+ */
+async function checkPreferences(list: Element): Promise<void> {
+  const wire = readPreferenceWire(document.querySelector("#dial"));
+
+  if (wire === null) {
+    // The attribute is emitted whatever the conditions are, so its absence means templating broke.
+    addRow(list, "preferences", "no data-preferences on the mount", "fail");
+    return;
+  }
+  addRow(list, "preferences", wire === "" ? "none stored — using defaults" : wire, "ok");
+
+  const templated = encodePreferences(decodePreferences(wire));
+  try {
+    const resolved = await callServer<string>("savePreferences", "");
+    // A mismatch is worth seeing rather than hiding: the page and the store disagreeing means the
+    // display is showing something other than what a reload would give it.
+    addRow(
+      list,
+      "preference store",
+      resolved === templated ? "reachable, and agrees with the page" : `reachable, but holds ${resolved}`,
+      resolved === templated ? "ok" : "note"
+    );
+  } catch (error) {
+    addRow(list, "preference store", `unreachable — ${(error as Error).message}`, "fail");
+  }
+}
+
 async function renderDiagnostics(list: Element): Promise<void> {
   list.textContent = "";
   const localZone = browserTimeZone();
@@ -228,6 +291,8 @@ async function renderDiagnostics(list: Element): Promise<void> {
   } catch (error) {
     addRow(list, "calendar", `unavailable — ${(error as Error).message}`, "fail");
   }
+
+  await checkPreferences(list);
 }
 
 startDisplay();
