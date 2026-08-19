@@ -59,6 +59,12 @@ That last one is the sharpest lesson: the test written alongside it asserted `el
 and passed, because it used a full-band arc. **A test can encode the same wrong assumption as the
 code.** Rendering is what breaks the tie.
 
+**A state that depends on the time is not a state you have to wait for.** `?now=04:15&freeze=1`
+pins the dial's clock, on the preview and the deployed app alike; README has the parameters and a
+table of which times show which fixture states. Unpinned, the fixture has *nothing in progress* at
+any time of day, so a draining arc only appears if you ask for one — which is how a drain that
+never drained shipped through two releases.
+
 So: for any change to rendered output, `npm run build`, serve `build/preview.html`, screenshot it,
 and look. Query the DOM for the attributes you changed as a cross-check — but measurement confirms
 what you intended, and screenshots find what you did not. Look at the neighbours of what you
