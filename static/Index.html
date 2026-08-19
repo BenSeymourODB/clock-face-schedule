@@ -8,11 +8,12 @@
   <body>
     <main id="display">
       <!--
-        The pin's two attributes and the preference wire are emitted unconditionally with a
-        templated *value*, not behind a conditional scriptlet the way data-demo is. The preview
+        The pin's two attributes, the scale and the preference wire are emitted unconditionally with
+        a templated *value*, not behind a conditional scriptlet the way data-demo is. The preview
         builder strips scriptlets while keeping what they guard — which is how demo mode is always on
-        in the preview — so a guarded `data-freeze="1"` would freeze every preview permanently, and a
-        guarded `data-preferences` would be absent on every real load while the preview looked
+        in the preview — so a guarded `data-freeze="1"` would freeze every preview permanently, a
+        guarded `data-scale="1h"` would put every preview on the 1-hour dial, and a guarded
+        `data-preferences` would be absent on every real load while the preview looked
         perfectly correct. Templated values strip to "", which the client reads as absent and falls
         back to its own query string. Verified both ways rather than reasoned about; the preview line
         is byte-identical either way.
@@ -29,6 +30,7 @@
         id="dial"<? if (showDemo) { ?> data-demo="1"<? } ?>
         data-now="<?= pinnedNow ?>"
         data-freeze="<?= freezeClock ?>"
+        data-scale="<?= scaleParam ?>"
         data-preferences="<?= preferences ?>"
       ></div>
       <p id="status" role="status" hidden></p>

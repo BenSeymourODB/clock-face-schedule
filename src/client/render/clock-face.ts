@@ -5,7 +5,7 @@
  * Returns a handle rather than a bare element so the per-second tick can re-point the hands
  * without rebuilding anything, and without the caller having to query the tree for them.
  */
-import { polarToCartesian, roundCoord } from "../../shared/clock";
+import { type DialScaleId, polarToCartesian, roundCoord } from "../../shared/clock";
 import { svg } from "../svg";
 
 const FONT_STACK = "system-ui, -apple-system, sans-serif";
@@ -27,6 +27,20 @@ const RADIUS = {
   // to count across a room, and counting them is the point of having them.
   minuteTickInner: 0.905,
   numeral: 0.72,
+  /**
+   * The 1-hour scale's outer ring, pulled in 0.02 from the 12-hour one.
+   *
+   * Not cosmetic. Every 5-minute value except 0 is **two digits**, and at three and nine o'clock a
+   * numeral's width adds straight onto its radius — so the clearance to the hour marker's inner
+   * end fell from 13.65 units to 3.75, and the marker read as a dash welded to the number
+   * ("—45"). At twelve and six the same extra digit costs almost nothing, because there the width
+   * is perpendicular to the radius; this is why the 12-hour dial never showed it, its only
+   * two-digit numeral being "12" at the top.
+   *
+   * 0.70 puts the worst case back at 7.82 units — wider than the 12-hour dial's own tightest
+   * numeral, which is that "12" at 6.32.
+   */
+  numeralOneHour: 0.7,
   periodIndicator: 0.35,
   /**
    * Hand lengths, each reaching the thing it is read against.
@@ -42,6 +56,16 @@ const RADIUS = {
    * hand outreaching the second hand would swap their identities at a glance.
    */
   hourHand: 0.64,
+  /**
+   * The 1-hour scale's second numeral ring — the hour numbers, pulled inward and greyed while the
+   * outer ring carries 5-minute values (#34).
+   *
+   * Placed by measuring rather than by eye, at the shipped `faceRadius` of 204.4. Digits have no
+   * descenders, so their ink is roughly cap height — about 0.35em either side of the baseline
+   * rather than the 0.5em the em box claims (#78): the ring's glyphs occupy 95.0–109.4, leaving
+   * 20.6 units to the outer numerals' own ink at 130.0 and 17.1 to the AM/PM indicator's at 78.0.
+   */
+  hourNumeralInner: 0.5,
   minuteHand: 0.9,
   secondHand: 0.93,
   /** The second hand overhangs the centre by this much, as a counterweight. */
@@ -49,9 +73,29 @@ const RADIUS = {
   centreDot: 0.035,
 } as const;
 
+/**
+ * Hour-hand length on the 1-hour scale, as a fraction of the face radius.
+ *
+ * The issue asked only for the hand to be greyed. Greying alone re-creates the defect `RADIUS`
+ * above was written to remove: with the hour numerals pulled inward, a hand still reaching 130.8
+ * crosses its own numerals mid-shaft and points past them at nothing, which is exactly the "small
+ * act of inference this dial exists to remove". So the hand comes in with them and keeps the
+ * relationship it has on the 12-hour dial — a tip stopping just inside the glyph it indicates.
+ *
+ * 0.43 puts the tip at 87.9, seven units inside the inner ring's ink at 95.0.
+ */
+const ONE_HOUR_HOUR_HAND_RADIUS = 0.43;
+
 /** Type sizes and hand widths, as fractions of the face radius. */
 const SCALE = {
   numeral: 0.14,
+  /**
+   * The 1-hour scale's inner hour numerals: quieter than the outer ring but deliberately not as
+   * quiet as the AM/PM indicator, which #70 measures as the smallest text the dial asks a room to
+   * read. This ring is the answer to "which hour is it" — the anchor #34 worried about losing —
+   * and it cannot be the thing nobody can read.
+   */
+  hourNumeralInner: 0.1,
   periodIndicator: 0.09,
   hourHandWidth: 0.045,
   minuteHandWidth: 0.028,
@@ -97,6 +141,12 @@ export interface ClockFaceParams {
   cy: number;
   time: Date;
   showSeconds?: boolean;
+  /**
+   * Which scale the dial is currently *about* (#34). Both scales stay drawn either way — the face
+   * never withholds the time — so this only moves the emphasis: which numerals sit on the outer
+   * ring, and which hand is the quiet one.
+   */
+  scale?: DialScaleId;
 }
 
 export interface ClockFaceHandle {
@@ -122,9 +172,18 @@ export function clockFace({
   cy,
   time,
   showSeconds = false,
+  scale = "12h",
 }: ClockFaceParams): ClockFaceHandle {
   const rotateAbout = (angle: number) => `rotate(${roundCoord(angle)}, ${cx}, ${cy})`;
   const stroke = (ratio: number) => roundCoord(faceRadius * ratio);
+
+  /**
+   * On the 1-hour scale the band runs at 6° per minute, so the outer numerals become the minute
+   * values the band is actually divided by and the hour numbers move to a ring of their own. The
+   * 60 minute ticks come out right without touching them: 6° is one minute at this scale, so the
+   * tick track *is* a minute scale, and the hour markers at 30° fall on the five-minute values.
+   */
+  const isMinuteScale = scale === "1h";
 
   const element = svg("g", { "data-testid": "clock-face" });
 
@@ -167,7 +226,12 @@ export function clockFace({
       faceRadius * (isQuarter ? RADIUS.markerInnerQuarter : RADIUS.markerInner),
       angle
     );
-    const numeral = polarToCartesian(cx, cy, faceRadius * RADIUS.numeral, angle);
+    const numeral = polarToCartesian(
+      cx,
+      cy,
+      faceRadius * (isMinuteScale ? RADIUS.numeralOneHour : RADIUS.numeral),
+      angle
+    );
 
     element.append(
       svg("line", {
@@ -183,6 +247,8 @@ export function clockFace({
       svg(
         "text",
         {
+          // Named for the *position*, not for what it says: the twelve positions are fixed and
+          // only the value on them changes with the scale.
           "data-testid": `hour-number-${hour}`,
           x: numeral.x,
           y: numeral.y,
@@ -193,9 +259,35 @@ export function clockFace({
           fill: "var(--card-foreground)",
           "font-family": FONT_STACK,
         },
-        [String(hour)]
+        // 0, 5, 10 … 55 — the twelve position carries 0 rather than 60, so the minute hand reads
+        // against the same zero it starts each hour from.
+        [String(isMinuteScale ? (hour % 12) * 5 : hour)]
       )
     );
+
+    if (isMinuteScale) {
+      const inner = polarToCartesian(cx, cy, faceRadius * RADIUS.hourNumeralInner, angle);
+
+      element.append(
+        svg(
+          "text",
+          {
+            "data-testid": `hour-number-inner-${hour}`,
+            x: inner.x,
+            y: inner.y,
+            "text-anchor": "middle",
+            "dominant-baseline": "central",
+            "font-size": roundCoord(faceRadius * SCALE.hourNumeralInner),
+            "font-weight": isQuarter ? 700 : 500,
+            // The same grey as the hour hand, which is the point: sharing one colour is what says
+            // the hand and these numbers are one scale, and the outer ring and minute hand another.
+            fill: "var(--muted-foreground)",
+            "font-family": FONT_STACK,
+          },
+          [String(hour)]
+        )
+      );
+    }
   }
 
   const periodIndicator = svg(
@@ -255,12 +347,29 @@ export function clockFace({
     return [halo, line] as const;
   }
 
+  /**
+   * Exactly one hand is the quiet one, and it is the hand belonging to the scale the band is not
+   * currently drawn at (#34). Both stay drawn and both keep their true angle — the dial never
+   * lies about the time, it only says which scale it is about — so a viewer is never left to work
+   * out which one they are looking at, which is constraint 5 of the two-time-scales brainstorm.
+   *
+   * On the 12-hour dial that is the minute hand: the band runs at 0.5° per minute there, so a
+   * minute hand sweeping twelve times faster than the arcs is the one pointer a viewer cannot
+   * usefully read the band against.
+   */
+  const emphasis = {
+    hour: isMinuteScale ? "var(--muted-foreground)" : "var(--card-foreground)",
+    minute: isMinuteScale ? "var(--card-foreground)" : "var(--muted-foreground)",
+  };
+
   const [hourHalo, hourHand] = handWithHalo(
     "hour-hand",
     cy,
-    roundCoord(cy - faceRadius * RADIUS.hourHand),
+    roundCoord(
+      cy - faceRadius * (isMinuteScale ? ONE_HOUR_HOUR_HAND_RADIUS : RADIUS.hourHand)
+    ),
     faceRadius * SCALE.hourHandWidth,
-    "var(--card-foreground)",
+    emphasis.hour,
     angles.hour
   );
 
@@ -269,7 +378,7 @@ export function clockFace({
     cy,
     roundCoord(cy - faceRadius * RADIUS.minuteHand),
     faceRadius * SCALE.minuteHandWidth,
-    "var(--card-foreground)",
+    emphasis.minute,
     angles.minute
   );
 

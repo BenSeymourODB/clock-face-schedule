@@ -9,7 +9,14 @@
  * scriptlets, so the templated attributes arrive **empty** and the query string is the only source
  * left. Both paths matter, and empty is the common case rather than an edge one.
  */
-import { type ClockPin, getDayStart, getRollingWindow, parseClockPin } from "../shared/clock";
+import {
+  type ClockPin,
+  type DialScaleId,
+  dialScale,
+  dialWindow,
+  getDayStart,
+  parseClockPin
+} from "../shared/clock";
 
 /** Empty is absent: a stripped `data-now="<?= pinnedNow ?>"` leaves the attribute behind. */
 function firstPresent(...values: (string | null | undefined)[]): string | null {
@@ -65,6 +72,15 @@ export function readClockPin(
  * them for a reader, `clock-pin.test.ts` computes them, and a third copy in a comment is a copy
  * nothing checks — this one had already gone stale twice over by the time #103 counted them.
  */
-export function fixtureAnchor(pin: ClockPin | null, now: Date): Date {
-  return pin?.displaced ? getDayStart(now) : getRollingWindow(now).windowStart;
+export function fixtureAnchor(
+  pin: ClockPin | null,
+  now: Date,
+  scale: DialScaleId = "12h"
+): Date {
+  // The unpinned rule is "the window's own leading edge", which is a different instant per scale —
+  // `now − 3h` on the 12-hour dial and `now − 5min` on the 1-hour one (#34). Reading it from the
+  // scale rather than from `getRollingWindow` is what keeps the fixture landing inside whatever
+  // window is actually live; the displaced rule needs no such adjustment, since midnight is
+  // midnight and it is the phase between `now` and the anchor that the pin is there to move.
+  return pin?.displaced ? getDayStart(now) : dialWindow(now, dialScale(scale)).windowStart;
 }

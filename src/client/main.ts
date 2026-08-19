@@ -7,18 +7,21 @@
  */
 import {
   type ClockEventInput,
+  type DialScaleId,
   createTimeSource,
   describeClockPin,
   describePinnedInstant,
+  dialScale,
+  dialWindow,
   getFetchWindow,
   getPeriodBounds,
-  getRollingWindow,
+  parseDialScaleId,
 } from "../shared/clock";
 import { decodePreferences, encodePreferences } from "../shared/preferences";
 import { fixtureAnchor, readClockPin } from "./clock-pin";
 import { type PreferenceStore, preferenceStore, readPreferenceWire } from "./preferences";
 import { analogClock } from "./render/analog-clock";
-import { fixtureCopyIndices, recurringSampleEvents } from "./sample-events";
+import { demoFixture, fixtureCopyIndices, recurringSampleEvents } from "./sample-events";
 import { type ScheduleStatus, describeStatus, nextStatus } from "./schedule-status";
 
 const TICK_INTERVAL_MS = 1_000;
@@ -74,6 +77,15 @@ function fetchWindow(): Promise<ClockEventInput[]> {
 }
 
 /**
+ */
+function chosenScale(mount: Element): DialScaleId {
+  const templated = mount instanceof HTMLElement ? mount.dataset["scale"] : undefined;
+  if (templated) return parseDialScaleId(templated);
+
+  return parseDialScaleId(new URLSearchParams(window.location.search).get("scale"));
+}
+
+/**
  * Preferences as `doGet` left them, with saves going back over the bridge unawaited.
  *
  * A failed save is a log line rather than a status-line failure: the status line is the schedule's,
@@ -96,11 +108,13 @@ function startDisplay(): void {
   if (!mount) return;
 
   const preferences = displayPreferences(mount);
+  const scale = chosenScale(mount);
 
   const clock = analogClock({
     events: [],
     showSeconds: preferences.get().showSeconds,
-    time: now()
+    time: now(),
+    scale
   });
   mount.append(clock.element);
 
@@ -130,7 +144,8 @@ function startDisplay(): void {
    * real schedule, and the whole point of the mode is that someone is standing in front of it.
    */
   if (mount instanceof HTMLElement && mount.dataset["demo"] === "1") {
-    const anchor = fixtureAnchor(clockPin, now());
+    const fixture = demoFixture(scale);
+    const anchor = fixtureAnchor(clockPin, now(), scale);
     /** Null rather than "", which is what an empty copy list would join to. */
     let emitted: string | null = null;
 
@@ -144,13 +159,18 @@ function startDisplay(): void {
      * `?freeze` routes every time read through one seam, and a frozen clock has to freeze the copy
      * set too. If this kept reading real time while the dial drew a pinned window, the copies would
      * walk out of that window and leave it blank.
+     *
+     * Both the fixture and the window it is tiled across come from the scale (#34). The 1-hour dial
+     * is what makes this recurrence load-bearing rather than a nicety: its window is 55 minutes, so
+     * a single copy loses its elapsed arc within three minutes, is down to one arc by fifty, and is
+     * empty at seventy — where the 12-hour one takes about thirteen hours to go blank.
      */
     function refreshFixture(): void {
-      const view = getRollingWindow(now());
-      const copies = fixtureCopyIndices(anchor, view).join(",");
+      const view = dialWindow(now(), dialScale(scale));
+      const copies = fixtureCopyIndices(fixture, anchor, view).join(",");
       if (copies === emitted) return;
       emitted = copies;
-      clock.setEvents(recurringSampleEvents(anchor, view));
+      clock.setEvents(recurringSampleEvents(fixture, anchor, view));
     }
 
     refreshFixture();

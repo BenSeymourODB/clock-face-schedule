@@ -21,7 +21,7 @@
  * time after load, one copy of the fixture scrolls out of view over about thirteen hours, so
  * `recurringSampleEvents` tiles copies of it end to end rather than re-anchoring the one (#62).
  */
-import type { ClockEventInput } from "../shared/clock";
+import type { ClockEventInput, DialScaleId } from "../shared/clock";
 
 export function sampleEvents(windowStart: Date): ClockEventInput[] {
   const at = (hours: number, minutes: number) =>
@@ -116,45 +116,145 @@ export function sampleEvents(windowStart: Date): ClockEventInput[] {
   ];
 }
 
-/** Minutes from the anchor to the fixture's earliest start and its latest end. */
-function fixtureBounds(): { firstStartMinutes: number; lastEndMinutes: number } {
+/**
+ * Fixture schedule for the 1-hour scale (#34), anchored to that mode's own window start.
+ *
+ * A separate set rather than a reuse: the 12-hour fixture spans eleven hours, so inside a
+ * 55-minute window all but one or two of its events fall outside it and the survivors are drawn as
+ * full-band arcs continuing past both edges — which exercises nothing the mode is about. The whole
+ * claim of the 1-hour scale is that **sub-hour events become legible**, so its fixture has to be
+ * made of sub-hour events or it cannot be judged at all.
+ *
+ * Deliberately carries, at this scale: a three-deep cluster; an event already running at load, so
+ * the drain (#28) is visible in the preview without waiting for luck (which is #76's complaint
+ * about the 12-hour fixture); an event crossing each end of the window; a five-minute event, which
+ * the 12-hour dial floors into the same 7.5° sliver as a fifteen-minute one and this dial draws at
+ * 30°; a one-minute event, which is short enough to still need that floor even here; an emoji-only
+ * title; a title too long for its arc; and a ⚫, whose fill measures 1.21:1 on the dial.
+ *
+ * `at` counts minutes from the window's leading edge, which is 5 minutes behind now — so `at(5)`
+ * is the moment the page loads and anything spanning it is in progress.
+ *
+ * **Recurs, via the same tiling as the 12-hour fixture (#62)** — and needs it far more, because
+ * the window is 55 minutes rather than eleven hours. Measured on a single copy: nine arcs at load,
+ * eight three minutes later once the elapsed one has gone, one by fifty minutes, and none at
+ * seventy. Its span is 78 minutes, so consecutive copies abut and at most two are ever in view.
+ */
+export function oneHourSampleEvents(windowStart: Date): ClockEventInput[] {
+  const at = (minutes: number) =>
+    new Date(windowStart.getTime() + minutes * 60_000).toISOString();
+  const fallbackColor = "#3b82f6";
+
+  return [
+    // Began before the window and finished two minutes before load, so it is feathered at the
+    // leading edge *and* elapsed — the two states the 5-minute look-behind exists to show. A
+    // leading-edge crosser can never be wider than that look-behind, so 18° is its natural size.
+    { id: "p", title: "⚪ Register", startDate: at(-8), endDate: at(3), isAllDay: false, fallbackColor },
+    // Running at load, so the preview always opens with a draining arc rather than waiting for a
+    // real day to oblige (#76). Starts a minute clear of "p": with the two states on neighbouring
+    // arcs they can be judged against each other (#66), without a one-minute overlap halving the
+    // thickness of a half-hour arc for its whole length.
+    //
+    // Also the outer arc of the three-deep cluster, which runs +15 to +22.
+    { id: "q", title: "🟢 🎮 Maths Starter", startDate: at(4), endDate: at(30), isAllDay: false, fallbackColor },
+    { id: "r", title: "🔴 Spelling Test", startDate: at(12), endDate: at(26), isAllDay: false, fallbackColor },
+    { id: "s", title: "🟣 Reading", startDate: at(15), endDate: at(22), isAllDay: false, fallbackColor },
+    // One minute is 6° even here, so the minimum-span floor still has something to hold open —
+    // the floor is angular and does not scale with the mode, which is the behaviour to keep sight of.
+    { id: "n", title: "🟠 Bell", startDate: at(31), endDate: at(32), isAllDay: false, fallbackColor },
+    // Five minutes: identical to a fifteen-minute event on the 12-hour dial, 30° of readable arc here.
+    { id: "t", title: "🟡 🍽️ Break", startDate: at(33), endDate: at(38), isAllDay: false, fallbackColor },
+    // Six minutes of arc carrying a title far too long for it, in the one colour the palette
+    // itself fails contrast for once filled (#26/#27) — so it overflows onto a ⚫-washed card.
+    { id: "u", title: "⚫ Assembly Notes and Reminders", startDate: at(39), endDate: at(45), isAllDay: false, fallbackColor },
+    // Two minutes is 12°: past the emoji floor, short of the title floor, and its title is the
+    // emoji alone — the one shape that still draws a standalone radial glyph.
+    { id: "v", title: "🟤 ⚽", startDate: at(46), endDate: at(48), isAllDay: false, fallbackColor },
+    // Runs on past the window's end, so the dial must not claim it finishes there. Its 👩‍🏫 is a ZWJ
+    // sequence: one glyph across several code points, which must never be sliced apart by a wrap.
+    { id: "w", title: "🔵 👩‍🏫 Parent Drop-in and Book Fair", startDate: at(49), endDate: at(70), isAllDay: false, fallbackColor },
+  ];
+}
+
+/**
+ * A fixture and the tiling facts derived from it (#62).
+ *
+ * Two fixtures now recur — the 12-hour one and #34's 1-hour one — and neither's period may be
+ * written down: it has to be *derived* from the fixture's own span, or it stops being right the
+ * moment an event moves. Bundling the fixture with its bounds is what lets one piece of tiling
+ * arithmetic serve both without either carrying the other's numbers.
+ */
+export interface DemoFixture {
+  /** Which dial scale this fixture is authored for. */
+  scale: DialScaleId;
+  /** The fixture itself, seeded from a window start. */
+  events: (windowStart: Date) => ClockEventInput[];
+  /** Minutes from the anchor to the fixture's earliest start and its latest end. */
+  firstStartMinutes: number;
+  lastEndMinutes: number;
+  /**
+   * How far apart consecutive copies sit — the fixture's own span, whatever it is.
+   *
+   * Derived rather than chosen, and that is the whole of why the tiling works. At exactly the span,
+   * a copy's first event begins at the instant the previous copy's last event ends: the seam adds
+   * no concurrency, so peak overlap stays the depth the fixture was authored around, and the window
+   * at load reaches neither neighbour, so the picture every screenshot judged is unchanged. A
+   * hand-written period would do neither.
+   */
+  periodMinutes: number;
+}
+
+function demoFixtureOf(
+  scale: DialScaleId,
+  events: (windowStart: Date) => ClockEventInput[]
+): DemoFixture {
   const anchor = new Date(0);
-  const minutesFromAnchor = (iso: string) =>
-    (new Date(iso).getTime() - anchor.getTime()) / 60_000;
-  const events = sampleEvents(anchor);
+  const minutesFromAnchor = (iso: string) => (new Date(iso).getTime() - anchor.getTime()) / 60_000;
+  const seeded = events(anchor);
+
+  const firstStartMinutes = Math.min(...seeded.map((event) => minutesFromAnchor(event.startDate)));
+  const lastEndMinutes = Math.max(...seeded.map((event) => minutesFromAnchor(event.endDate)));
 
   return {
-    firstStartMinutes: Math.min(...events.map((event) => minutesFromAnchor(event.startDate))),
-    lastEndMinutes: Math.max(...events.map((event) => minutesFromAnchor(event.endDate))),
+    scale,
+    events,
+    firstStartMinutes,
+    lastEndMinutes,
+    periodMinutes: lastEndMinutes - firstStartMinutes,
   };
 }
 
-const { firstStartMinutes, lastEndMinutes } = fixtureBounds();
+export const TWELVE_HOUR_FIXTURE = demoFixtureOf("12h", sampleEvents);
+export const ONE_HOUR_FIXTURE = demoFixtureOf("1h", oneHourSampleEvents);
+
+/** The fixture the dial should draw at a given scale. */
+export function demoFixture(scale: DialScaleId): DemoFixture {
+  return scale === "1h" ? ONE_HOUR_FIXTURE : TWELVE_HOUR_FIXTURE;
+}
 
 /**
- * How far apart consecutive copies of the fixture sit — the fixture's own span, whatever it is.
+ * How far apart consecutive copies of the 12-hour fixture sit.
  *
- * Derived rather than chosen, and that is the whole of why the tiling works. At exactly the span,
- * a copy's first event begins at the instant the previous copy's last event ends: the seam adds no
- * concurrency, so peak overlap stays the three rings the fixture was authored around, and the
- * window at load reaches neither neighbour, so the picture every screenshot judged is unchanged.
- * A hand-written period would do neither, and would stop being right the moment an event moved.
+ * Kept as a named export because the README's figures and the recurrence suite are both written
+ * against this one fixture specifically; `DemoFixture.periodMinutes` is the general form.
  */
-export const FIXTURE_PERIOD_MINUTES = lastEndMinutes - firstStartMinutes;
+export const FIXTURE_PERIOD_MINUTES = TWELVE_HOUR_FIXTURE.periodMinutes;
 
 /**
- * Which copies of the fixture reach `[windowStart, windowEnd)`, as offsets in whole periods from
- * the load-time anchor.
+ * Which copies of `fixture` reach `[windowStart, windowEnd)`, as offsets in whole periods from the
+ * load-time anchor.
  *
  * Usually one, two across a seam. `main.ts` re-emits only when this changes, so it must be stable
  * between advances rather than recomputed into a new-looking value every poll.
  *
- * A copy is bounded by its span, and the fixture is not contiguous — its largest internal gap is 55
- * minutes. So a window narrower than that gap could be handed a copy with nothing actually in view;
- * harmless while the caller's window is the rolling 11 hours, and the reason this returns candidate
- * copies rather than claiming each one is drawn.
+ * A copy is bounded by its span, and a fixture need not be contiguous — the 12-hour one's largest
+ * internal gap is 55 minutes. So a window narrower than that gap could be handed a copy with
+ * nothing actually in view; that is the reason this returns candidate copies rather than claiming
+ * each one is drawn. Worth noting the 1-hour fixture is the case that makes the caution concrete
+ * and then defuses it: its window is 55 minutes, but its largest internal gap is one.
  */
 export function fixtureCopyIndices(
+  fixture: DemoFixture,
   anchor: Date,
   { windowStart, windowEnd }: { windowStart: Date; windowEnd: Date }
 ): number[] {
@@ -163,8 +263,8 @@ export function fixtureCopyIndices(
 
   // Copy k spans [k·P + firstStart, k·P + lastEnd], and overlap is strict at both ends to match
   // filterEventsForPeriod — an event ending exactly at windowStart is not in view.
-  const first = Math.floor((start - lastEndMinutes) / FIXTURE_PERIOD_MINUTES) + 1;
-  const last = Math.ceil((end - firstStartMinutes) / FIXTURE_PERIOD_MINUTES) - 1;
+  const first = Math.floor((start - fixture.lastEndMinutes) / fixture.periodMinutes) + 1;
+  const last = Math.ceil((end - fixture.firstStartMinutes) / fixture.periodMinutes) - 1;
 
   const indices: number[] = [];
   for (let index = first; index <= last; index += 1) indices.push(index);
@@ -174,24 +274,27 @@ export function fixtureCopyIndices(
 /**
  * The fixture, recurring: every copy that reaches the given window (#62).
  *
- * A display left on `?demo=1` outlives one copy — the rolling window walks off it in about
- * thirteen hours and the dial goes blank. Re-anchoring the single copy to the current window would
- * fix the blankness by freezing the picture instead: the anchor is `now − 3h`, so every event's
- * offset from `now` would be constant and nothing would ever elapse or drain (#76 measured that
- * invariance). Tiling keeps time moving — events age out at the leading edge exactly as they do
- * now, and the next copy arrives at the trailing one.
+ * A display left on `?demo=1` outlives one copy — the rolling window walks off the 12-hour fixture
+ * in about thirteen hours and the dial goes blank, and off the 1-hour one inside the hour, since
+ * that window is 55 minutes wide rather than eleven hours (#34). Re-anchoring the single copy to
+ * the current window would fix the blankness by freezing the picture instead: the anchor is the
+ * window's own start, so every event's offset from `now` would be constant and nothing would ever
+ * elapse or drain (#76 measured that invariance). Tiling keeps time moving — events age out at the
+ * leading edge exactly as they do now, and the next copy arrives at the trailing one.
  *
  * Copy 0 keeps its bare ids, because they reach the DOM as `data-testid="event-arc-<id>"` and are
  * what every existing reference to the fixture names.
  */
 export function recurringSampleEvents(
+  fixture: DemoFixture,
   anchor: Date,
   view: { windowStart: Date; windowEnd: Date }
 ): ClockEventInput[] {
-  return fixtureCopyIndices(anchor, view).flatMap((index) => {
-    const shifted = new Date(anchor.getTime() + index * FIXTURE_PERIOD_MINUTES * 60_000);
-    return sampleEvents(shifted).map((event) =>
+  return fixtureCopyIndices(fixture, anchor, view).flatMap((index) => {
+    const shifted = new Date(anchor.getTime() + index * fixture.periodMinutes * 60_000);
+    return fixture.events(shifted).map((event) =>
       index === 0 ? event : { ...event, id: `${event.id}@${index}` }
     );
   });
 }
+
