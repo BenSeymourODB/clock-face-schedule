@@ -14,11 +14,17 @@ jobs:
   quality-gate:
     name: quality-gate
     runs-on: ubuntu-latest
+    # Checkout, install, and npm scripts. Nothing here writes to the repository.
+    permissions:
+      contents: read
+    # The gate runs in about a minute; the realistic failure is a hang, not a slow run.
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
 
-      # The engines floor, not the maintainer's local version: a newer-than-ES2019 API that
-      # tsc misses should fail here rather than on someone else's machine.
+      # The engines floor rather than the maintainer's local version, so CI proves the version
+      # the package claims to support still runs. ES2019 conformance is check-types' job, via
+      # the tsconfigs' lib setting — Node 20 has replaceAll and would not catch it.
       - uses: actions/setup-node@v7
         with:
           node-version: "20"
