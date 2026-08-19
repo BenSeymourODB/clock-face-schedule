@@ -49,14 +49,18 @@ describe("the stripped Index template", () => {
  *
  * A `<script src>`, a stylesheet `<link>` or a webfont `@import` would keep working on the deployed
  * app and keep every other test here green, while quietly making a downloaded preview depend on a
- * network the reviewer may not have. Inline `data:` payloads are fine — they travel with the file.
+ * network the reviewer may not have.
+ *
+ * Inline `data:` payloads and `url(#…)` fragments are both fine — they travel with the file, and the
+ * dial's gradients and masks are referenced that way, so a blanket ban on `url(` would fail the day
+ * one of them moved from the client bundle into the stylesheet.
  */
 const SUBRESOURCE = [
   ["a script from elsewhere", /<script[^>]*\ssrc\s*=/i],
   ["a linked stylesheet or icon", /<link[^>]*\shref\s*=/i],
   ["an image or media file", /<(?:img|image|video|audio|source|iframe|embed)[^>]*\ssrc\s*=/i],
   ["a CSS import", /@import/i],
-  ["a CSS url() that is not inline data", /url\(\s*['"]?(?!data:)/i],
+  ["a CSS url() that is neither inline data nor a fragment", /url\(\s*['"]?(?!data:|#)/i],
 ] as const;
 
 describe("the preview's self-containment", () => {
