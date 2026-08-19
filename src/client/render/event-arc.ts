@@ -12,7 +12,6 @@ import {
   type ClockEvent,
   type FeatherSpan,
   type OccludedSpan,
-  TITLE_LINE_OFFSET_RATIO,
   adjustForContrast,
   combineTitleWithEmoji,
   compositeOver,
