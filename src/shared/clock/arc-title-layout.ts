@@ -34,11 +34,43 @@ export const TITLE_RADIUS_RATIO = 0.5;
 export const TITLE_FONT_SIZE_RATIO = 0.28;
 
 /**
- * Half the gap between two curved baselines, as a fraction of font size. `central`
- * dominant-baseline puts each glyph band at ±fontSize/2 around its centre, so 2 × 0.55 clears
- * them with a hair to spare.
+ * Radial extent of one line of band text, as a multiple of font size (#78).
+ *
+ * `dominant-baseline: central` centres the *em box* on the baseline point, and every radial
+ * clearance here used to be derived from that box — `±fontSize / 2`. Ink reaches further, because a
+ * face's ascent plus descent exceeds its em, and the shortfall scales with font size so it bites
+ * hardest where the band has least room to give.
+ *
+ * Measured in the preview's own Chromium at `font-size: 1000`, over printable ASCII, the accented
+ * Latin forms a calendar title plausibly carries, and the emoji the dial inlines into titles (#23).
+ * Reach either side of the anchor, in ems:
+ *
+ * | resolved face | em box | above | below |
+ * | --- | --- | --- | --- |
+ * | `system-ui` → DejaVu Sans | 1.164 | 0.591 | 0.596 |
+ * | Liberation Sans | 1.117 | 0.591 | 0.597 |
+ *
+ * A bound over the faces a container can install, not a fact about the smart board's — `system-ui`
+ * resolves differently there. What makes a static number defensible anyway is that **the emoji is
+ * what binds**: colour emoji come from the fallback face rather than the text face, so ±0.59 em is
+ * carried whatever `system-ui` turns out to be. Note also that the em box is not a conservative
+ * approximation of ink but a smaller one — accented capitals overshoot the ascent on every face
+ * measured.
  */
-export const TITLE_LINE_OFFSET_RATIO = 0.55;
+export const INK_HEIGHT_RATIO = 1.2;
+
+/** Ink left between two stacked lines — the "hair to spare" `TITLE_LINE_OFFSET_RATIO` is chosen for. */
+const TITLE_LINE_GAP_RATIO = 0.1;
+
+/**
+ * Half the gap between two curved baselines, as a fraction of font size.
+ *
+ * Derived rather than chosen, so the separation claim is arithmetic the code performs instead of
+ * prose it contradicts: the previous 0.55 was picked against the em box and put the baselines
+ * 1.10 em apart while the ink covered 1.19, so every two-line stack on the dial overlapped itself by
+ * 0.09 em — 1.96 units at a lone arc's 21.26 font size.
+ */
+export const TITLE_LINE_OFFSET_RATIO = (INK_HEIGHT_RATIO + TITLE_LINE_GAP_RATIO) / 2;
 
 /**
  * Clearance a stacked line must keep from whatever is drawn on the ring's edges.
@@ -95,13 +127,15 @@ export function computeArcTitleLayout(params: {
  * **Radial.** Adding the line moves the title outward onto the two-line radii, so both lines and
  * whatever is stroked on the ring's edges have to fit inside the ring. They do not always: an
  * elapsed arc's outline is sized from the whole *band* (#26, deliberately, so its weight does not
- * thin with overlap depth) while the text is sized from this arc's *ring*. On the 600-unit dial that
- * leaves 12.98 units of clearance on a lone arc, 4.69 two deep, **1.93** three deep and **0.55**
- * four deep. The legibility gate happens to cover every one of those cases today, but this is the
- * check that is actually about not drawing text on a stroke, and the two move independently:
- * before #27 retired the neutral halo the same stroke was 0.12 of the band rather than 0.07, and
- * three deep measured **0.03**. `edgeStrokeWidth` is what the caller draws there, since the elapsed
- * treatment is the renderer's business, not this layout's.
+ * thin with overlap depth) while the text is sized from this arc's *ring*. Measured against real ink
+ * rather than the em box (#78), the 600-unit dial leaves 8.73 units of clearance on a lone arc,
+ * 2.70 two deep, **0.68** three deep and **−0.32** four deep — the deepest ring does not fit a
+ * stack at all, where the em-box model claimed 0.55 units to spare. The legibility gate happens to
+ * cover every one of those cases today, but this is the check that is actually about not drawing
+ * text on a stroke, and the two move independently: before #27 retired the neutral halo the same
+ * stroke was 0.12 of the band rather than 0.07, and three deep measured **−1.21**.
+ * `edgeStrokeWidth` is what the caller draws there, since the elapsed treatment is the renderer's
+ * business, not this layout's.
  *
  * The gate is checked against that stroke whether or not the event has elapsed yet: a duration that
  * appeared and vanished as an event crossed into elapsed would flicker on the wall.
@@ -155,7 +189,7 @@ export function fitDurationLine(params: {
 
   // A stroke straddles its path, so it reaches half its width into the ring from either edge.
   const reach = edgeStrokeWidth / 2 + EDGE_CLEARANCE;
-  const lineHalfHeight = fontSize * TITLE_LINE_OFFSET_RATIO + fontSize / 2;
+  const lineHalfHeight = fontSize * TITLE_LINE_OFFSET_RATIO + (fontSize * INK_HEIGHT_RATIO) / 2;
   if (titleRadius + lineHalfHeight > outerRadius - reach) return undefined;
   if (titleRadius - lineHalfHeight < innerRadius + reach) return undefined;
 
