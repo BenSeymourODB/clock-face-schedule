@@ -1,6 +1,6 @@
 # A 1-hour scale mode
 
-**Status:** in progress
+**Status:** in review — PR #86
 **Issue:** #34 (sub-issue of epic #32)
 **Docs:** `docs/brainstorms/2026-08-17-two-time-scales.md`, ADR 0005, ADR 0007, ADR 0008
 
@@ -138,3 +138,26 @@ crosser can never be wider than the 5-minute look-behind, so 18° is its natural
 
 Each has a test alongside it. The clearance test was checked by reverting `numeralOneHour` to 0.72
 and confirming it fails.
+
+## What review found after that
+
+A `/code-review` pass turned up three more, all the same root cause as the first — a decision made
+against an angle nothing normalises — plus one platform trap:
+
+- **`assignRings` was rebasing onto 0.** It reduces modulo 360 before sorting, so its default
+  origin is a no-op only while the window stays inside `[0, 360)`. That stopped being true when
+  the window started rolling (#25) and is never true here. Two overlapping events either side of
+  the hour top were assigned the same ring and drawn at identical radii — the later one entirely
+  invisible, which is the worst failure this dial has.
+- **`eventArc` carried two more copies of the same test**, for the standalone emoji's
+  counter-rotation and for which radius holds the first line of a two-line title. The second is
+  exactly how lower-half titles came to read bottom-up once before.
+- **A scriptlet delimiter inside an HTML comment is still a scriptlet.** The comment written to
+  explain why `data-scale` is emitted unconditionally contained the delimiters it was explaining,
+  which would have thrown a SyntaxError out of `template.evaluate()` and taken the deployed page
+  down while the local preview stayed perfect. Recorded in `docs/DESIGN.md`.
+
+The shape of it is worth keeping: **`normaliseAngle` now exists precisely so this class of
+decision has one home.** Angles stay unnormalised everywhere else, deliberately (#33) — but "which
+direction does this point" and "where does this sit" are different questions, and four separate
+places had been answering the first with the second's number.
