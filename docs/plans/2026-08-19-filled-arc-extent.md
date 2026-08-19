@@ -105,9 +105,11 @@ against:
   constant `main` holds.
 - **The separator's own colour (#66's second option).** Rejected above and by #74's plan; the
   floored fill is what makes it unnecessary.
-- **A floating label's connector**, which strokes the authored colour on the page ground at
-  `CONNECTOR_OPACITY`. Same class of defect, different element, and it is not the arc's extent —
-  measured and filed separately rather than folded in here.
+- **A floating label's connector** (#93), which strokes the authored colour on the page ground at
+  `CONNECTOR_OPACITY = 0.6`. Same class of defect, different element, and it is not the arc's
+  extent — measured (⚫ **1.15:1**, 🟤 1.68, 🟣 2.46, 🔵 2.60) and filed rather than folded in.
+  It needs its own call at its own alpha, not the arc's floored value: 0.6 mixes back more ground
+  than 0.85 does, so reusing the fill's answer would under-correct.
 - **Theme-awareness of the ground (#81).** `BAND_BACKGROUND` is still a literal.
 
 ## Phases
