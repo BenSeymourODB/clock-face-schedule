@@ -11,7 +11,9 @@ import {
   getPeriodBounds,
   getRollingWindow,
 } from "../shared/clock";
+import { decodePreferences, encodePreferences } from "../shared/preferences";
 import { analogClock } from "./render/analog-clock";
+import { type PreferenceStore, preferenceStore, readPreferenceWire } from "./preferences";
 import { sampleEvents } from "./sample-events";
 import { type ScheduleStatus, describeStatus, nextStatus } from "./schedule-status";
 
@@ -54,12 +56,36 @@ function fetchWindow(): Promise<ClockEventInput[]> {
   );
 }
 
+/**
+ * Preferences as `doGet` left them, with saves going back over the bridge unawaited.
+ *
+ * A failed save is a log line rather than a status-line failure: the status line is the schedule's,
+ * and a display that cannot remember a setting is still showing the right time with the right
+ * events on it.
+ */
+function displayPreferences(mount: Element): PreferenceStore {
+  return preferenceStore({
+    wire: readPreferenceWire(mount),
+    save: (wire) => {
+      void callServer<string>("savePreferences", wire).catch((error: Error) => {
+        console.warn(`preference not saved — ${error.message}`);
+      });
+    }
+  });
+}
+
 function startDisplay(): void {
   const mount = document.querySelector("#dial");
   const statusLine = document.querySelector("#status");
   if (!mount) return;
 
-  const clock = analogClock({ events: [], showSeconds: true, time: new Date() });
+  const preferences = displayPreferences(mount);
+
+  const clock = analogClock({
+    events: [],
+    showSeconds: preferences.get().showSeconds,
+    time: new Date()
+  });
   mount.append(clock.element);
 
   // Hands before data. A google.script.run round trip runs 0.5–2s and the server cache does not
@@ -139,6 +165,39 @@ function browserTimeZone(): string {
   }
 }
 
+/**
+ * Preferences, checked on the device rather than on a workstation.
+ *
+ * Reports what arrived in the page, then writes the values **already in effect** straight back and
+ * confirms the server echoes them. Storing what is already resolved makes the write a no-op in
+ * content, so running the diagnostic cannot change how the display behaves — while still exercising
+ * the half of the path a page load never touches. Until #47 exists, this is the only way to find out
+ * on the board whether `PropertiesService` is reachable at all.
+ */
+async function checkPreferences(list: Element): Promise<void> {
+  const wire = readPreferenceWire(document.querySelector("#dial"));
+
+  if (wire === null) {
+    // The attribute is templated unconditionally, so its absence means doGet's templating broke.
+    addRow(list, "preferences", "no data-preferences on the mount", "fail");
+    return;
+  }
+  addRow(list, "preferences", wire === "" ? "none stored — using defaults" : wire, "ok");
+
+  const resolved = encodePreferences(decodePreferences(wire));
+  try {
+    const echoed = await callServer<string>("savePreferences", resolved);
+    addRow(
+      list,
+      "preference write",
+      echoed === resolved ? "stored and echoed back" : `stored, resolved to ${echoed}`,
+      echoed === resolved ? "ok" : "note"
+    );
+  } catch (error) {
+    addRow(list, "preference write", `unavailable — ${(error as Error).message}`, "fail");
+  }
+}
+
 async function renderDiagnostics(list: Element): Promise<void> {
   list.textContent = "";
   const localZone = browserTimeZone();
@@ -174,6 +233,8 @@ async function renderDiagnostics(list: Element): Promise<void> {
   } catch (error) {
     addRow(list, "calendar", `unavailable — ${(error as Error).message}`, "fail");
   }
+
+  await checkPreferences(list);
 }
 
 startDisplay();

@@ -68,8 +68,16 @@ poll that keeps the last good schedule on screen — marked with when it was las
 blanking when a fetch fails.
 
 Adding `?check=1` to the URL shows bring-up diagnostics: colour emoji rendering, the
-`google.script.run` round trip, and a calendar read. Off by default, because the display itself
-carries no chrome.
+`google.script.run` round trip, a calendar read, and the viewer's stored preferences with a
+write-and-echo check on them. Off by default, because the display itself carries no chrome.
+
+**Preferences persist in `PropertiesService`, not in the browser** (#31). The page's origin rotates
+between sessions, so cookies and `localStorage` outlive nothing here; a user-scoped property store
+does. `doGet` templates the resolved values into the page, so reading them costs no round trip, and
+only a change writes one. Nothing on the display sets a preference yet — that arrives with the
+timer's control surface (#47) — so the registered keys (`showSeconds`, `timerMuted`,
+`timerDurationSeconds`) currently move only from the Apps Script property editor or the `?check=1`
+diagnostics.
 
 What remains is mostly **legibility tuning for the intended viewing distance** — the ported
 proportions were designed for a kitchen wall at a few feet, not a classroom projector. See the open
