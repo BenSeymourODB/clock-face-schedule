@@ -1,4 +1,4 @@
-**Status:** in review
+**Status:** done
 **Issue:** #27, #64 (halo retirement, folded in)
 **Docs:** #26 (elapsed outlines — the load-bearing case), #15 (visibility must not depend on a
 calendar-chosen colour), ADR 0007 (theme tokens), `docs/DESIGN.md`
