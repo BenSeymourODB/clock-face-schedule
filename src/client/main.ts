@@ -12,10 +12,11 @@ import {
   describePinnedInstant,
   getFetchWindow,
   getPeriodBounds,
+  getRollingWindow,
 } from "../shared/clock";
 import { fixtureAnchor, readClockPin } from "./clock-pin";
 import { analogClock } from "./render/analog-clock";
-import { sampleEvents } from "./sample-events";
+import { fixtureCopyIndices, recurringSampleEvents } from "./sample-events";
 import { type ScheduleStatus, describeStatus, nextStatus } from "./schedule-status";
 
 const TICK_INTERVAL_MS = 1_000;
@@ -103,8 +104,32 @@ function startDisplay(): void {
    * real schedule, and the whole point of the mode is that someone is standing in front of it.
    */
   if (mount instanceof HTMLElement && mount.dataset["demo"] === "1") {
-    clock.setEvents(sampleEvents(fixtureAnchor(clockPin, now())));
+    const anchor = fixtureAnchor(clockPin, now());
+    /** Null rather than "", which is what an empty copy list would join to. */
+    let emitted: string | null = null;
+
+    /**
+     * The window keeps moving after load, so a single copy of the fixture scrolls out of it and the
+     * dial empties (#62). The clock re-filters what it holds against the live window on every
+     * render, so the scrolling needs no help — this only hands it copies it has not been given, and
+     * only when the set changes, since `setEvents` redraws every arc.
+     *
+     * Reads the clock the same way the tick above does, and must go on doing so: #72's `?now` /
+     * `?freeze` routes every time read through one seam, and a frozen clock has to freeze the copy
+     * set too. If this kept reading real time while the dial drew a pinned window, the copies would
+     * walk out of that window and leave it blank.
+     */
+    function refreshFixture(): void {
+      const view = getRollingWindow(now());
+      const copies = fixtureCopyIndices(anchor, view).join(",");
+      if (copies === emitted) return;
+      emitted = copies;
+      clock.setEvents(recurringSampleEvents(anchor, view));
+    }
+
+    refreshFixture();
     setStatusText("Sample events — not a real calendar");
+    window.setInterval(refreshFixture, POLL_INTERVAL_MS);
     return;
   }
 
