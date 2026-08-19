@@ -1,6 +1,6 @@
 # Pin the dial to a chosen time
 
-**Status:** in review
+**Status:** done — shipped in [#75](https://github.com/BenSeymourODB/clock-face-schedule/pull/75)
 **Issue:** [#72](https://github.com/BenSeymourODB/clock-face-schedule/issues/72)
 **Docs:** ADR 0005 (browser-local time is authoritative), ADR 0003 (no geometry server-side),
 #25 (the rolling window the fixture is anchored to), #28 (the drain this makes reviewable),
