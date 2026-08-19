@@ -7,7 +7,10 @@
  * is all that is required. See ADR 0002 and scripts/build.mjs.
  */
 
+import { preferencesWire } from "./preferences";
+
 export { getEvents } from "./calendar";
+export { savePreferences } from "./preferences";
 
 /**
  * Two bring-up switches, both off by default because the display itself must carry no chrome.
@@ -19,11 +22,16 @@ export { getEvents } from "./calendar";
  *
  * Both need to be checkable on the device rather than on a workstation, which is why they are URL
  * parameters and not a build flag.
+ *
+ * The viewer's stored preferences ride along in the same template (#31). Reading them here costs
+ * nothing — `doGet` is already running server-side — where fetching them over `google.script.run`
+ * would cost the 0.5–2 s of ADR 0006 and a second render once they arrived.
  */
 export function doGet(event?: GoogleAppsScript.Events.DoGet): GoogleAppsScript.HTML.HtmlOutput {
   const template = HtmlService.createTemplateFromFile("Index");
   template["showDiagnostics"] = event?.parameter?.["check"] === "1";
   template["showDemo"] = event?.parameter?.["demo"] === "1";
+  template["preferences"] = preferencesWire();
 
   return template
     .evaluate()

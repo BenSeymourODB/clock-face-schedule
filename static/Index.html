@@ -7,7 +7,21 @@
   </head>
   <body>
     <main id="display">
-      <div id="dial"<? if (showDemo) { ?> data-demo="1"<? } ?>></div>
+      <!--
+        Preferences arrive as a templated value rather than behind a conditional scriptlet the way
+        data-demo is. The preview builder strips scriptlets and keeps whatever they guarded, so a
+        guarded attribute would be baked into every preview; a templated value strips to "", which
+        the client reads as "nothing stored" and answers with the defaults.
+
+        Escaped output, not raw, because the value comes out of a store. It needs no escaping —
+        every encoded preference is [A-Za-z0-9;=], which shared/preferences.test.ts asserts — but
+        escaping it anyway keeps that a property of the format rather than a hope.
+
+        Nothing in this comment may use scriptlet delimiters: HtmlService compiles them wherever
+        they appear, HTML comments included, so a fragment written as illustration would be
+        evaluated as code and fail the whole page.
+      -->
+      <div id="dial"<? if (showDemo) { ?> data-demo="1"<? } ?> data-preferences="<?= preferences ?>"></div>
       <p id="status" role="status" hidden></p>
     </main>
 
