@@ -7,10 +7,7 @@ import {
   contrastRatio,
   polarToCartesian,
 } from "../../shared/clock";
-import { eventArc } from "./event-arc";
-
-/** The dial background the outline's colour is made legible against — `--card`, per event-arc.ts. */
-const DIAL_BACKGROUND = "#16181d";
+import { BAND_BACKGROUND, eventArc } from "./event-arc";
 
 const CX = 300;
 const CY = 300;
@@ -761,15 +758,33 @@ describe("eventArc once the event has ended", () => {
     expect(outline?.getAttribute("fill")).toBe("none");
   });
 
-  it("makes the outline colour contrast-safe against the dial, not the raw event colour (#27)", () => {
-    // ⚫ gray-800 is invisible on the dial as a raw outline (1.21:1). The renderer must hand the
-    // colour through adjustForContrast against the dial background — the specific defect #26 left
+  it("makes the outline colour contrast-safe against the band, not the raw event colour (#27)", () => {
+    // ⚫ gray-800 is invisible on the band as a raw outline (1.32:1). The renderer must hand the
+    // colour through adjustForContrast against the band's ground — the specific defect #26 left
     // and this issue closes. Whether the *result* clears the floor is proven in contrast.test.ts.
     const color = "#1F2937";
     const { outline } = parts({ color });
 
-    expect(outline?.getAttribute("stroke")).toBe(adjustForContrast(color, DIAL_BACKGROUND, 4.5));
+    expect(outline?.getAttribute("stroke")).toBe(adjustForContrast(color, BAND_BACKGROUND, 4.5));
     expect(outline?.getAttribute("stroke")).not.toBe(color);
+  });
+
+  it("measures against the ground the band has, not the one the face has (#74)", () => {
+    // The premise, not the assertion, was what was wrong before: this spec kept its own copy of
+    // `#16181d` and asserted the outline cleared 4.5:1 against it — true, and against a ground the
+    // band never sits on. Pinning the constant is what stops that drifting back; the geometric half
+    // of the claim — that no arc is drawn inside the face circle — is asserted in analog-clock.test.
+    expect(BAND_BACKGROUND).toBe("#0c0e12");
+    expect(BAND_BACKGROUND).not.toBe("#16181d");
+  });
+
+  it("leaves a colour that already clears the floor on the band exactly as authored", () => {
+    // 🟣 purple-500 is the case the correction freed: 4.49:1 against the face's ground, so it was
+    // nudged to `#a856f7`, but 4.88:1 against the band's, so it needs no adjustment at all. The
+    // whole point of #27's minimal blend is that a passing colour is returned untouched.
+    const color = "#A855F7";
+
+    expect(parts({ color }).outline?.getAttribute("stroke")).toBe(color);
   });
 
   it("draws no outline layer while the event is still to come", () => {
@@ -777,8 +792,8 @@ describe("eventArc once the event has ended", () => {
   });
 
   it.each([
-    ["⚫ gray-800, which measures 1.21:1 on the dial", "#1F2937"],
-    ["🟤 amber-800, which measures 2.50:1", "#92400E"],
+    ["⚫ gray-800, which measures 1.32:1 on the band", "#1F2937"],
+    ["🟤 amber-800, which measures 2.72:1", "#92400E"],
     ["🟡 yellow, which needs no help", "#EAB308"],
   ])("carries %s at a contrast-safe weight, with no neutral band beneath", (_label, color) => {
     // #26 backed the outline with a `var(--border)` band because the event's colour could not be
@@ -787,7 +802,7 @@ describe("eventArc once the event has ended", () => {
     const { halo, outline } = parts({ color });
 
     expect(halo).toBeNull();
-    expect(contrastRatio(outline!.getAttribute("stroke")!, DIAL_BACKGROUND)).toBeGreaterThanOrEqual(
+    expect(contrastRatio(outline!.getAttribute("stroke")!, BAND_BACKGROUND)).toBeGreaterThanOrEqual(
       4.5
     );
   });

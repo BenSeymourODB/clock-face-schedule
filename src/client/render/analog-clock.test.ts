@@ -120,6 +120,25 @@ describe("analogClock", () => {
       expect(gap).toBeLessThan(ARC_THICKNESS / 2);
     });
 
+    it("draws every arc outside the face circle, so the band's ground is the page (#74)", () => {
+      // The geometric fact `event-arc.ts` used to deny: it measured elapsed outlines against
+      // `--card`, which is `clock-face-bg`'s fill, while the band it draws them on sits beyond
+      // that circle over `--page`. The error was safe — the real ground is darker — but it moved
+      // every adjusted colour further from its authored hue than it had to. If the band is ever
+      // moved inside the face, this fails and BAND_BACKGROUND is the thing to revisit.
+      const { element } = build(
+        // Stacked as deep as the band will go, so the innermost ring is the one measured.
+        Array.from({ length: MAX_RINGS + 1 }, (_, index) => input(`deep-${index}`, 2, 5))
+      );
+      const faceRadius = Number(
+        element.querySelector('[data-testid="clock-face-bg"]')?.getAttribute("r")
+      );
+      const innermost = Math.min(...arcs(element).map((arc) => arcRadii(arc).inner));
+
+      expect(arcs(element).length).toBeGreaterThan(1);
+      expect(innermost).toBeGreaterThanOrEqual(faceRadius);
+    });
+
     it("gives the arc band a share of the radius, not a fixed pixel width", () => {
       // Guards #20: a fixed 48-unit band could not be widened for a room without editing code,
       // and did not track the dial at all.

@@ -31,17 +31,24 @@ import { svg } from "../svg";
 const FONT_STACK = "system-ui, -apple-system, sans-serif";
 
 /**
- * The dial's own background, as a hex `contrast.ts` can measure against — the value `--card` holds
- * in `Styles.html`, duplicated here because the renderer knows only the token name (ADR 0007).
- * Keep the two in sync; `Styles.html` carries a comment pointing back.
+ * The ground the arc band is drawn on, as a hex `contrast.ts` can measure against — the value
+ * `--page` holds in `Styles.html`, duplicated here because the renderer knows only the token name
+ * (ADR 0007). Keep the two in sync; `Styles.html` carries a comment pointing back.
+ *
+ * `--page` and not `--card`: `--card` fills `clock-face-bg`, and the band is drawn *outside* that
+ * circle — `analog-clock.ts` stops the face at `clockRadius − outerRadius × FACE_GAP_RATIO` while
+ * the band runs from `clockRadius` out. Measuring against the face's ground instead was #74: it
+ * erred safe, since the real ground is darker, but it left every adjusted colour further from its
+ * authored hue than it needed to be. Exported so the spec measures against the same one value
+ * rather than a second copy of the hex — the premise is the part that was wrong.
  */
-const DIAL_BACKGROUND = "#16181d";
+export const BAND_BACKGROUND = "#0c0e12";
 
 /**
- * Contrast floor for an elapsed outline's own colour, against the dial (#27).
+ * Contrast floor for an elapsed outline's own colour, against the band (#27).
  *
  * Outlined, an event colour is the foreground rather than the fill, so it has to clear a threshold
- * it never had to when filled — and ⚫ (1.21:1) and 🟤 (2.50:1) fail it outright. 4.5:1 is WCAG AA
+ * it never had to when filled — and ⚫ (1.32:1) and 🟤 (2.72:1) fail it outright. 4.5:1 is WCAG AA
  * for text rather than the 3:1 graphical-object floor, because this dial is read across a room.
  */
 const OUTLINE_MIN_CONTRAST = 4.5;
@@ -72,7 +79,7 @@ const ARC_FILL_OPACITY = 0.85;
  *
  * Zero draws the pure outline #26 specifies. A little body might read better at distance, so this
  * is a constant rather than an omission — but note it can only add *weight*, never contrast: 10% of
- * `#1F2937` over `#16181d` is still `#16181d` to the eye. Colour legibility is #27's problem.
+ * `#1F2937` over `#0c0e12` is still `#0c0e12` to the eye. Colour legibility is #27's problem.
  */
 const ELAPSED_FILL_OPACITY = 0;
 
@@ -97,7 +104,7 @@ const ARC_SEPARATOR_MIN = 1;
  * dial now carries the same weight.
  *
  * #26 drew this as a 0.07 coloured line inside a 0.12 neutral `var(--border)` band, because an
- * event's colour could not be trusted to contrast — ⚫ gray-800 measures 1.21:1 on `--card`, which
+ * event's colour could not be trusted to contrast — ⚫ gray-800 measures 1.32:1 on the band, which
  * is not a faint edge but no edge. Now that #27 resolves the colour itself to 4.5:1 the neutral band
  * has nothing left to carry and is gone, leaving one coloured outline that reads on its own.
  *
@@ -388,9 +395,9 @@ export function eventArc({
         d,
         fill: "none",
         // The outline carries both the event's identity and its legibility, with no neutral band
-        // beneath it, so the colour has to clear contrast against the dial on its own (#27).
-        // Preserves hue, so a ⚫ or 🟤 event stays recognisably itself while becoming visible.
-        stroke: adjustForContrast(color, DIAL_BACKGROUND, OUTLINE_MIN_CONTRAST),
+        // beneath it, so the colour has to clear contrast against the band's ground on its own
+        // (#27). Preserves hue, so a ⚫ or 🟤 event stays recognisably itself while becoming visible.
+        stroke: adjustForContrast(color, BAND_BACKGROUND, OUTLINE_MIN_CONTRAST),
         "stroke-width": stroke(ELAPSED_BORDER_RATIO),
         mask: spentFade,
       })
