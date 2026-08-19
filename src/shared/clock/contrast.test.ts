@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  adjustCompositeForContrast,
   adjustForContrast,
   compositeOver,
   contrastRatio,
@@ -39,6 +40,15 @@ const PALETTE = [
 ] as const;
 
 const AA_NORMAL_TEXT = 4.5;
+
+/** WCAG 1.4.11's floor for a non-text object — what an arc's *body* has to clear (#66). */
+const AA_GRAPHICAL_OBJECT = 3;
+
+/** The ground the arc band is painted on (`--page`), which is not the face's (#74). */
+const BAND = "#0c0e12";
+
+/** The arcs' own `fill-opacity`, kept here so the composited figures are the painted ones. */
+const ARC_FILL_OPACITY = 0.85;
 
 describe("relativeLuminance", () => {
   it.each([
@@ -191,6 +201,122 @@ describe("adjustForContrast", () => {
   it("makes the minimal move — a lower floor leaves a colour that clears it untouched", () => {
     // ⚫ fails 4.5 but clears 1.0 trivially, so at a 1.0 floor it is returned as-is.
     expect(adjustForContrast("#1F2937", CARD, 1)).toBe("#1F2937");
+  });
+});
+
+describe("adjustCompositeForContrast", () => {
+  /** The ratio a viewer sees for `color` painted at the arcs' own `fill-opacity` over the band. */
+  const painted = (color: string, alpha = ARC_FILL_OPACITY) =>
+    contrastRatio(compositeOver(BAND, color, alpha)!, BAND)!;
+
+  it("returns a fill that already reads as a shape untouched", () => {
+    // 🟡 paints at 7.46:1 — far above the graphical floor, so byte-identical output.
+    expect(painted("#EAB308")).toBeGreaterThanOrEqual(AA_GRAPHICAL_OBJECT);
+    expect(adjustCompositeForContrast("#EAB308", BAND, ARC_FILL_OPACITY, AA_GRAPHICAL_OBJECT)).toBe(
+      "#EAB308"
+    );
+  });
+
+  it("passes an unparseable colour or background straight through", () => {
+    expect(adjustCompositeForContrast("papayawhip", BAND, ARC_FILL_OPACITY, 3)).toBe("papayawhip");
+    expect(adjustCompositeForContrast("#fff", "papayawhip", ARC_FILL_OPACITY, 3)).toBe("#fff");
+  });
+
+  it("is adjustForContrast at full alpha, where there is no composite to speak of", () => {
+    // The two must not be able to drift: at alpha 1 the painted colour *is* the authored one, so
+    // any difference here would mean one of the two searches is wrong.
+    for (const [, color] of PALETTE) {
+      expect(adjustCompositeForContrast(color, BAND, 1, AA_NORMAL_TEXT)).toBe(
+        adjustForContrast(color, BAND, AA_NORMAL_TEXT)
+      );
+    }
+  });
+
+  describe("every palette colour reads as a shape once floored", () => {
+    it.each(PALETTE)("on %s", (_name, color) => {
+      const floored = adjustCompositeForContrast(color, BAND, ARC_FILL_OPACITY, AA_GRAPHICAL_OBJECT);
+
+      expect(painted(floored)).toBeGreaterThanOrEqual(AA_GRAPHICAL_OBJECT);
+    });
+  });
+
+  describe("the two fills whose extent could not be read at all (#66)", () => {
+    it.each([
+      ["⚫ near-black", "#1F2937", 1.25],
+      ["🟤 brown", "#92400E", 2.28],
+    ])("%s painted at %d:1 before, and clears the floor after", (_name, color, before) => {
+      expect(painted(color)).toBeCloseTo(before, 2);
+
+      const floored = adjustCompositeForContrast(color, BAND, ARC_FILL_OPACITY, AA_GRAPHICAL_OBJECT);
+      expect(floored).not.toBe(color);
+      expect(painted(floored)).toBeGreaterThanOrEqual(AA_GRAPHICAL_OBJECT);
+    });
+
+    it("floors what is painted, not what is authored — the distinction is worth 0.48 of a ratio", () => {
+      // The defect this function exists for. `adjustForContrast` floors the authored hex, and the
+      // 15% of ground `fill-opacity` mixes back in then drags the result under the floor again:
+      // ⚫ floored that way gives `#58606a`, which paints at 2.52:1 and is still short of 3.
+      const authored = adjustForContrast("#1F2937", BAND, AA_GRAPHICAL_OBJECT);
+      expect(painted(authored)).toBeLessThan(AA_GRAPHICAL_OBJECT);
+
+      expect(
+        painted(adjustCompositeForContrast("#1F2937", BAND, ARC_FILL_OPACITY, AA_GRAPHICAL_OBJECT))
+      ).toBeGreaterThanOrEqual(AA_GRAPHICAL_OBJECT);
+    });
+
+    it("keeps hue while lightening, so a floored 🟤 is still recognisably brown", () => {
+      const brown = "#92400E";
+      const floored = adjustCompositeForContrast(brown, BAND, ARC_FILL_OPACITY, AA_GRAPHICAL_OBJECT);
+
+      expect(hue(floored)).toBeCloseTo(hue(brown) as number, 0);
+      expect(relativeLuminance(floored)!).toBeGreaterThan(relativeLuminance(brown)!);
+    });
+  });
+
+  it("leaves every title where it was — 3:1 is below the black/white crossover", () => {
+    // Why the floor is the graphical one and not #27's 4.5. `readableTextColor`'s crossover for ⚫
+    // sits at a floor of 3.34:1; flooring at 3.5 or at #27's 4.5 flips its title to black, which
+    // makes the change a redesign of the filled state rather than one attribute moving.
+    for (const [, color] of PALETTE) {
+      const floored = adjustCompositeForContrast(color, BAND, ARC_FILL_OPACITY, AA_GRAPHICAL_OBJECT);
+
+      expect(readableTextColor(floored)).toBe(readableTextColor(color));
+    }
+
+    expect(
+      readableTextColor(adjustCompositeForContrast("#1F2937", BAND, ARC_FILL_OPACITY, 3.5))
+    ).toBe("#000000");
+  });
+
+  it("darkens toward black on a light ground instead", () => {
+    // The mirror direction, exercising the theme-general path ahead of #81's light theme.
+    const pale = "#F3F4F6";
+    const floored = adjustCompositeForContrast(pale, "#ffffff", ARC_FILL_OPACITY, 3);
+
+    expect(
+      contrastRatio(compositeOver("#ffffff", floored, ARC_FILL_OPACITY)!, "#ffffff")
+    ).toBeGreaterThanOrEqual(3);
+    expect(relativeLuminance(floored)!).toBeLessThan(relativeLuminance(pale)!);
+  });
+
+  it("floors an arbitrary calendar colour no table could enumerate", () => {
+    // One calendar per class, each a custom hex — the case a curated palette cannot cover.
+    const teal = "#0f766e";
+    expect(painted(teal)).toBeLessThan(AA_GRAPHICAL_OBJECT);
+    expect(
+      painted(adjustCompositeForContrast(teal, BAND, ARC_FILL_OPACITY, AA_GRAPHICAL_OBJECT))
+    ).toBeGreaterThanOrEqual(AA_GRAPHICAL_OBJECT);
+  });
+
+  it("makes the minimal move — a lower floor leaves a fill that clears it untouched", () => {
+    expect(adjustCompositeForContrast("#1F2937", BAND, ARC_FILL_OPACITY, 1)).toBe("#1F2937");
+  });
+
+  it("returns the ground's far extreme where no variant can clear the floor", () => {
+    // At 0.2 alpha even pure white paints at 1.81:1, so 4.5 is unreachable. The honest answer is
+    // the lightest thing available rather than a search that silently stops short of the target.
+    expect(painted("#ffffff", 0.2)).toBeLessThan(AA_NORMAL_TEXT);
+    expect(adjustCompositeForContrast("#1F2937", BAND, 0.2, AA_NORMAL_TEXT)).toBe("#ffffff");
   });
 });
 
