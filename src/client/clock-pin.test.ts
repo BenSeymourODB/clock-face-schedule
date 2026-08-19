@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { filterEventsForPeriod, getRollingWindow } from "../shared/clock";
+import readme from "../../README.md?raw";
+import {
+  ROLLING_WINDOW_LOOKAHEAD_HOURS,
+  ROLLING_WINDOW_LOOKBEHIND_HOURS,
+  filterEventsForPeriod,
+  getRollingWindow
+} from "../shared/clock";
 import { fixtureAnchor, readClockPin } from "./clock-pin";
 import { sampleEvents } from "./sample-events";
 
@@ -148,7 +154,7 @@ describe("what the anchor leaves on the dial", () => {
 
   /**
    * A displaced pin trades that guarantee for control, and the range it holds over is a fact about
-   * what the fixture covers (22:50 the previous day to 13:15) rather than about the anchoring.
+   * what the fixture covers (23:10 the previous day to 13:15) rather than about the anchoring.
    * Pinned to the afternoon the window has walked off the fixture entirely — documented in README
    * and asserted here so the boundary cannot move without someone noticing.
    */
@@ -159,5 +165,109 @@ describe("what the anchor leaves on the dial", () => {
     expect(drawnArcs("?now=09:00&freeze=1", at)).toBe(6);
     expect(drawnArcs("?now=12:00&freeze=1", at)).toBe(3);
     expect(drawnArcs("?now=17:00&freeze=1", at)).toBe(0);
+  });
+});
+
+/**
+ * README states the same coverage facts in prose, and prose is the copy nothing checks: #77 added
+ * one fixture event, the assertion above went red as it should, and README's figure went stale
+ * silently. That was the second time in two days — #73 was the first — so the missing piece is not
+ * a derivation but a *link* between the two copies.
+ *
+ * Read through `?raw` rather than `node:fs`, for the reason `raw.d.ts` gives: the client tsconfig
+ * carries no node types on purpose, and a test is not a reason to relax it.
+ */
+const README = readme.replace(/[*`]/g, "").replace(/\s+/g, " ");
+
+/**
+ * A regex that matched nothing would leave a green test asserting on an empty list — the exact
+ * failure mode this guards against, one level up. So every pattern is required to have matched
+ * before anything is derived from it.
+ */
+function readmeSays(pattern: RegExp): RegExpExecArray {
+  const found = pattern.exec(README);
+
+  if (!found) {
+    throw new Error(
+      `README no longer carries ${pattern} — the sentence moved or was reworded, so this guard is ` +
+        `asserting nothing. Fix the pattern or restore the figures.`
+    );
+  }
+  return found;
+}
+
+function hhmm(at: Date): string {
+  const pad = (value: number) => String(value).padStart(2, "0");
+
+  return `${pad(at.getHours())}:${pad(at.getMinutes())}`;
+}
+
+describe("the fixture figures README states in prose", () => {
+  const at = new Date(2026, 7, 18, 14, 37);
+
+  /**
+   * The figure #77 broke. README's numbers are the expected values here — the test carries none of
+   * its own, so this adds a reader of README beside the literals above rather than a third copy of
+   * them.
+   */
+  it("counts the same arcs at each hour README names", () => {
+    const [, list] = readmeSays(/arcs drop away through the afternoon: ([^.]*)\./);
+    const stated = /(\d+|none) (?:arcs )?(?:at|from) (\d{2}:\d{2})/g;
+    const pairs: Array<[string, number]> = [];
+
+    for (let found = stated.exec(list); found; found = stated.exec(list)) {
+      pairs.push([found[2] as string, found[1] === "none" ? 0 : Number(found[1])]);
+    }
+
+    // Every clock time in that sentence must have been parsed, or a figure would go unchecked
+    // while the test stayed green — which is the whole defect, one level down.
+    expect(pairs.map(([hour]) => hour)).toEqual(list.match(/\d{2}:\d{2}/g));
+
+    // A floor, not today's figures: measured against a mutated README, every other assertion here
+    // bites, but *deleting* the offending hour goes green — which makes "drop the line" the cheap
+    // way past a red count. Add hours freely; removing one has to be deliberate.
+    expect(pairs.length).toBeGreaterThanOrEqual(5);
+
+    // The two claims the sentence actually makes, asserted rather than left to the prose: arcs
+    // "drop away through the afternoon", and the dial is "empty by the evening".
+    const counts = pairs.map(([, count]) => count);
+    expect(counts.slice().sort((left, right) => right - left)).toEqual(counts);
+    expect(counts[counts.length - 1]).toBe(0);
+
+    for (const [hour, count] of pairs) {
+      expect(drawnArcs(`?now=${hour}&freeze=1`, at), `README says ${count} arcs at ${hour}`).toBe(
+        count
+      );
+    }
+  });
+
+  /**
+   * The span in the same sentence, and the reason the pinned counts are literals rather than
+   * derived: they are a fact about what the fixture *covers*, and this is where that fact is
+   * written down for a reader.
+   */
+  it("spans the hours README says it spans", () => {
+    const [, from, to] = readmeSays(/The fixture spans (\d{2}:\d{2}) the previous day to (\d{2}:\d{2})/);
+    const pinned = new Date(2026, 7, 18, 3, 0, 0);
+    const anchor = fixtureAnchor({ origin: pinned, frozen: true, displaced: true }, pinned);
+    const events = sampleEvents(anchor);
+    const earliest = new Date(Math.min(...events.map((event) => Date.parse(event.startDate))));
+    const latest = new Date(Math.max(...events.map((event) => Date.parse(event.endDate))));
+
+    expect(hhmm(earliest)).toBe(from);
+    expect(hhmm(latest)).toBe(to);
+    // "the previous day" is load-bearing: 23:10 on the anchor's own day would be a fixture that
+    // starts after it ends, and the times alone cannot tell the difference.
+    expect(anchor.getTime() - earliest.getTime()).toBeGreaterThan(0);
+    expect(latest.getDate()).toBe(anchor.getDate());
+  });
+
+  it("quotes the rolling window the counts were measured against", () => {
+    const [, lookbehind, lookahead] = readmeSays(
+      /window of \[now \S (\d+)h, now \S (\d+)h\]/
+    );
+
+    expect(Number(lookbehind)).toBe(ROLLING_WINDOW_LOOKBEHIND_HOURS);
+    expect(Number(lookahead)).toBe(ROLLING_WINDOW_LOOKAHEAD_HOURS);
   });
 });
