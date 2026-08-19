@@ -54,12 +54,12 @@ export function readClockPin(
  *
  * **Displaced, not merely pinned.** `?freeze=1` alone holds the real clock still without moving
  * it, so re-anchoring for it would empty the dial for no reason a viewer asked for: at 14:37 the
- * fixture drops from thirteen arcs to one, because midnight anchoring puts the whole fixture
+ * fixture drops from fifteen arcs to one, because midnight anchoring puts the whole fixture
  * behind the window.
  *
  * The same arithmetic bounds where a displaced pin is useful at all. The fixture spans 22:50 the
  * previous day to 13:15, against a window of `[now − 3h, now + 8h]`, so arcs on the dial fall away
- * through the afternoon — 13 at 03:00, 5 at 09:00, 3 at 12:00, and **none from 17:00**. That is a
+ * through the afternoon — 15 at 03:00, 6 at 09:00, 3 at 12:00, and **none from 17:00**. That is a
  * property of what the fixture covers rather than of the anchoring, and it is why midnight
  * anchoring is not made unconditional: #25 moved away from exactly this.
  */

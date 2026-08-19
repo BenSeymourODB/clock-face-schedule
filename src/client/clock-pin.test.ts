@@ -121,7 +121,7 @@ describe("what the anchor leaves on the dial", () => {
   /**
    * The defect this exists for: keying the anchor on `pin !== null` rather than on the clock
    * having been *moved* re-anchored the fixture for `?freeze=1` alone, which drops the dial from
-   * thirteen arcs to one at 14:37. Every earlier `fixtureAnchor` assertion passed, because they
+   * fifteen arcs to one at 14:37. Every earlier `fixtureAnchor` assertion passed, because they
    * all used a displaced pin at an hour where midnight anchoring happens to work.
    */
   it("leaves the unpinned picture alone when only the clock is frozen", () => {
@@ -132,9 +132,17 @@ describe("what the anchor leaves on the dial", () => {
     }
   });
 
+  /**
+   * Expected value derived rather than written: the property is that the filter drops *nothing*,
+   * and a literal is only today's encoding of it. A hard-coded count is what let #73's two new
+   * fixture events turn `main` red — the branches were green apart, and no test ran between the
+   * merge and the day someone looked.
+   */
   it("keeps the fixture on the dial at every hour when unpinned", () => {
     for (let hour = 0; hour < 24; hour += 1) {
-      expect(drawnArcs("", new Date(2026, 7, 18, hour, 0)), `${hour}:00`).toBe(13);
+      const at = new Date(2026, 7, 18, hour, 0);
+
+      expect(drawnArcs("", at), `${hour}:00`).toBe(sampleEvents(fixtureAnchor(null, at)).length);
     }
   });
 
@@ -147,8 +155,8 @@ describe("what the anchor leaves on the dial", () => {
   it("puts the fixture on the dial for a morning pin and off it for an evening one", () => {
     const at = new Date(2026, 7, 18, 14, 37);
 
-    expect(drawnArcs("?now=03:00&freeze=1", at)).toBe(13);
-    expect(drawnArcs("?now=09:00&freeze=1", at)).toBe(5);
+    expect(drawnArcs("?now=03:00&freeze=1", at)).toBe(15);
+    expect(drawnArcs("?now=09:00&freeze=1", at)).toBe(6);
     expect(drawnArcs("?now=12:00&freeze=1", at)).toBe(3);
     expect(drawnArcs("?now=17:00&freeze=1", at)).toBe(0);
   });
