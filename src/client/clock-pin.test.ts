@@ -139,10 +139,9 @@ describe("what the anchor leaves on the dial", () => {
   });
 
   /**
-   * Expected value derived rather than written: the property is that the filter drops *nothing*,
-   * and a literal is only today's encoding of it. A hard-coded count is what let #73's two new
-   * fixture events turn `main` red — the branches were green apart, and no test ran between the
-   * merge and the day someone looked.
+   * Derived, not literal: the property is that the filter drops *nothing*, so growing the fixture
+   * must not read as a regression. The pinned counts below stay literal — those are facts about
+   * the span the fixture covers, which nothing can derive honestly.
    */
   it("keeps the fixture on the dial at every hour when unpinned", () => {
     for (let hour = 0; hour < 24; hour += 1) {

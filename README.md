@@ -125,10 +125,18 @@ block in `static/appsscript.json`, not from the container type.
 generated output. Edits made in the Apps Script online editor are overwritten by the next push.
 
 **`build/preview.html`** resolves the HtmlService `include()` templating into a standalone page,
-so the UI can be opened straight from disk. This is the fast loop for visual work — no push, no
+so the UI can be opened straight from disk — `file://` renders it pixel-identically to serving it,
+because every asset it needs is inlined. This is the fast loop for visual work — no push, no
 deployment. Nothing server-side runs, so anything behind `google.script.run` shows its failure
 state; it is a complement to checking the deployed app, not a replacement. `.claspignore` keeps
 it out of the pushed project.
+
+**CI keeps that page**, so looking at what a branch draws costs no checkout: every run attaches
+`build/` as an artifact — `preview-pr-<n>` on a pull request, `preview-main-<sha>` on `main`, kept
+14 days. Download it from the run's summary page, unzip, open `preview.html`, and add `?now=` from
+the table below to reach the state you want. The `main` copy is the "before" half of a rendered
+comparison. The artifact is uploaded immediately after the build, so a run that goes red on
+`check-types` or `npm test` still leaves you the picture.
 
 ### Pinning the clock, to see a state that depends on the time
 
