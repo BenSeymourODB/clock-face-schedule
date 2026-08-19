@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { defaultPreferences, encodePreferences } from "../shared/preferences";
 import {
+  type PreferenceStoreSource,
   type PreferenceStores,
   type PropertyBag,
   preferencesWire,
@@ -20,37 +21,50 @@ function bag(initial: { [key: string]: string } = {}): FakeBag {
   return {
     stored,
     getProperties: () => ({ ...stored }),
-    setProperty(key, value) {
-      stored[key] = value;
+    setProperties(properties) {
+      // Merging, as `Properties.setProperties` does when not told to clear the rest.
+      for (const key of Object.keys(properties)) stored[key] = properties[key] as string;
     }
   };
+}
+
+interface FakeStores extends PreferenceStores {
+  user: FakeBag;
+  script: FakeBag;
 }
 
 function stores(
   user: { [key: string]: string } = {},
   script: { [key: string]: string } = {}
-): PreferenceStores & { user: FakeBag; script: FakeBag } {
+): FakeStores {
   return { user: bag(user), script: bag(script) };
 }
 
+/** The injection point is a factory, not the stores, so acquisition itself can be made to fail. */
+const from = (live: PreferenceStores): PreferenceStoreSource => () => live;
+
 describe("reading", () => {
   it("gives the defaults when nothing is stored", () => {
-    expect(readStoredPreferences(stores())).toEqual(defaultPreferences());
+    expect(readStoredPreferences(from(stores()))).toEqual(defaultPreferences());
   });
 
   it("takes a value from the user's own store", () => {
-    expect(readStoredPreferences(stores({ "pref.showSeconds": "0" })).showSeconds).toBe(false);
+    const resolved = readStoredPreferences(from(stores({ "pref.showSeconds": "0" })));
+
+    expect(resolved.showSeconds).toBe(false);
   });
 
   it("takes a value from the script store where the user has none", () => {
-    const resolved = readStoredPreferences(stores({}, { "pref.timerDurationSeconds": "600" }));
+    const resolved = readStoredPreferences(
+      from(stores({}, { "pref.timerDurationSeconds": "600" }))
+    );
 
     expect(resolved.timerDurationSeconds).toBe(600);
   });
 
   it("prefers the user's value over the deployment's", () => {
     const resolved = readStoredPreferences(
-      stores({ "pref.timerDurationSeconds": "120" }, { "pref.timerDurationSeconds": "600" })
+      from(stores({ "pref.timerDurationSeconds": "120" }, { "pref.timerDurationSeconds": "600" }))
     );
 
     expect(resolved.timerDurationSeconds).toBe(120);
@@ -59,37 +73,56 @@ describe("reading", () => {
   it("ignores a property that is not under the preference prefix", () => {
     // Something else's `showSeconds` key must not become this store's, which is the whole reason
     // for the prefix.
-    expect(readStoredPreferences(stores({ showSeconds: "0" })).showSeconds).toBe(true);
+    const resolved = readStoredPreferences(from(stores({ showSeconds: "0" })));
+
+    expect(resolved.showSeconds).toBe(true);
   });
 
-  it("returns the defaults, and says so, when the store itself fails", () => {
+  it("returns the defaults, and says so, when reading a store fails", () => {
     // doGet reads on every page load: a throwing PropertiesService must cost a preference, not the
     // whole display.
     const logged = vi.spyOn(console, "error").mockImplementation(() => undefined);
     const broken: PropertyBag = {
       getProperties: () => {
-        throw new Error("quota exceeded");
+        throw new Error("read quota exceeded");
       },
-      setProperty: () => undefined
+      setProperties: () => undefined
     };
 
-    const resolved = readStoredPreferences({ user: broken, script: broken });
+    const resolved = readStoredPreferences(from({ user: broken, script: broken }));
 
     expect(resolved).toEqual(defaultPreferences());
-    expect(logged).toHaveBeenCalledWith(expect.stringContaining("quota exceeded"));
+    expect(logged).toHaveBeenCalledWith(expect.stringContaining("read quota exceeded"));
+    logged.mockRestore();
+  });
+
+  it("returns the defaults when obtaining the stores fails at all", () => {
+    // `PropertiesService.getUserProperties()` can fail on its own — no effective user, an internal
+    // error — and that happens *before* any bag exists to throw from. A default parameter would
+    // have been evaluated outside the try, so this case is the reason the seam is a factory.
+    const logged = vi.spyOn(console, "error").mockImplementation(() => undefined);
+
+    const resolved = readStoredPreferences(() => {
+      throw new Error("no effective user");
+    });
+
+    expect(resolved).toEqual(defaultPreferences());
+    expect(logged).toHaveBeenCalledWith(expect.stringContaining("no effective user"));
     logged.mockRestore();
   });
 });
 
 describe("the wire form doGet templates", () => {
-  it("is the resolved set, encoded", () => {
-    const live = stores({ "pref.showSeconds": "0" });
-
-    expect(preferencesWire(live)).toBe(encodePreferences(readStoredPreferences(live)));
+  it("is the encoded resolved set", () => {
+    expect(preferencesWire(from(stores({ "pref.showSeconds": "0" })))).toBe(
+      "showSeconds=0;timerMuted=0;timerDurationSeconds=300"
+    );
   });
 
-  it("carries a stored override", () => {
-    expect(preferencesWire(stores({ "pref.timerMuted": "1" }))).toContain("timerMuted=1");
+  it("is the encoded defaults when nothing is stored", () => {
+    expect(preferencesWire(from(stores()))).toBe(
+      "showSeconds=1;timerMuted=0;timerDurationSeconds=300"
+    );
   });
 });
 
@@ -97,7 +130,7 @@ describe("saving", () => {
   it("writes an accepted value to the user store under its prefixed key", () => {
     const live = stores();
 
-    savePreferences("timerMuted=1", live);
+    savePreferences("timerMuted=1", from(live));
 
     expect(live.user.stored).toEqual({ "pref.timerMuted": "1" });
   });
@@ -105,26 +138,51 @@ describe("saving", () => {
   it("never writes to the script store, which holds the deployment's own defaults", () => {
     const live = stores();
 
-    savePreferences("showSeconds=0;timerDurationSeconds=600", live);
+    savePreferences("showSeconds=0;timerDurationSeconds=600", from(live));
 
     expect(live.script.stored).toEqual({});
+  });
+
+  it("writes the whole patch in one call, because write quota is per call", () => {
+    const live = stores();
+    const batched = vi.spyOn(live.user, "setProperties");
+
+    savePreferences("showSeconds=0;timerMuted=1;timerDurationSeconds=600", from(live));
+
+    expect(batched).toHaveBeenCalledTimes(1);
+    expect(batched).toHaveBeenCalledWith({
+      "pref.showSeconds": "0",
+      "pref.timerMuted": "1",
+      "pref.timerDurationSeconds": "600"
+    });
   });
 
   it("leaves the keys the patch does not mention alone", () => {
     // A second tab sending one preference must not undo what the first one changed.
     const live = stores({ "pref.showSeconds": "0" });
 
-    savePreferences("timerMuted=1", live);
+    savePreferences("timerMuted=1", from(live));
 
     expect(live.user.stored["pref.showSeconds"]).toBe("0");
   });
 
   it("stores nothing at all for a patch it cannot use", () => {
     const live = stores();
+    const batched = vi.spyOn(live.user, "setProperties");
 
-    savePreferences("scaleMode=1h;timerDurationSeconds=0;showSeconds=maybe", live);
+    savePreferences("scaleMode=1h;timerDurationSeconds=0;showSeconds=maybe", from(live));
 
     expect(live.user.stored).toEqual({});
+    expect(batched).not.toHaveBeenCalled();
+  });
+
+  it("does not touch the store for an empty patch, so a read-only caller stays read-only", () => {
+    // The `?check=1` row relies on this: it sends nothing and reads the echo.
+    const live = stores({ "pref.showSeconds": "0" });
+    const batched = vi.spyOn(live.user, "setProperties");
+
+    expect(savePreferences("", from(live))).toBe("showSeconds=0;timerMuted=0;timerDurationSeconds=300");
+    expect(batched).not.toHaveBeenCalled();
   });
 
   it("stores the schema's own encoding rather than the string it was sent", () => {
@@ -132,7 +190,7 @@ describe("saving", () => {
     // happens to parse loosely cannot be persisted in a form nothing else reads.
     const live = stores();
 
-    savePreferences("timerDurationSeconds=0600", live);
+    savePreferences("timerDurationSeconds=0600", from(live));
 
     expect(live.user.stored["pref.timerDurationSeconds"]).toBe("600");
   });
@@ -140,7 +198,7 @@ describe("saving", () => {
   it("reports back the resolved set, including what it just wrote", () => {
     const live = stores();
 
-    expect(savePreferences("showSeconds=0", live)).toBe(
+    expect(savePreferences("showSeconds=0", from(live))).toBe(
       encodePreferences({ ...defaultPreferences(), showSeconds: false })
     );
   });
@@ -148,10 +206,10 @@ describe("saving", () => {
   it("lets a failing write reach the caller", () => {
     // The opposite of the read path: only the caller knows a preference did not stick.
     const live = stores();
-    live.user.setProperty = () => {
+    live.user.setProperties = () => {
       throw new Error("write quota exceeded");
     };
 
-    expect(() => savePreferences("timerMuted=1", live)).toThrow("write quota exceeded");
+    expect(() => savePreferences("timerMuted=1", from(live))).toThrow("write quota exceeded");
   });
 });

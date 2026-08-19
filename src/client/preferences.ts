@@ -9,6 +9,11 @@
  * a save that fails costs the next reload's memory of a setting, which is not worth interrupting a
  * lesson over. The store applies the change locally regardless, so the display is never out of step
  * with the control the viewer just used.
+ *
+ * Known limit, filed as #84: two saves fired in quick succession can land out of order, leaving the
+ * store holding the earlier value. Unfixed here deliberately — the remedy (a single-flight queue, a
+ * per-key debounce, or both) needs `save` to report completion, and belongs with the first control
+ * that can actually fire twice in a second (#47's duration field).
  */
 import {
   type Preferences,
@@ -20,12 +25,7 @@ import {
 export interface PreferenceStore {
   /** The preferences in effect. A copy: the store's own state is not handed out. */
   get(): Preferences;
-  /**
-   * Apply and persist some preferences, ignoring any the schema rejects.
-   *
-   * Only the keys given are sent, so one tab changing one preference cannot overwrite another's
-   * work with its own stale copy of the rest.
-   */
+  /** Apply and persist some preferences, ignoring any the schema rejects. */
   set(patch: Partial<Preferences>): void;
 }
 

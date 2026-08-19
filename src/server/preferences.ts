@@ -35,7 +35,8 @@ const PROPERTY_PREFIX = "pref.";
  */
 export interface PropertyBag {
   getProperties(): { [key: string]: string };
-  setProperty(key: string, value: string): unknown;
+  /** Merges: `Properties.setProperties` only clears absent keys when told to, which it never is. */
+  setProperties(properties: { [key: string]: string }): unknown;
 }
 
 export interface PreferenceStores {
@@ -45,12 +46,19 @@ export interface PreferenceStores {
   script: PropertyBag;
 }
 
-function propertiesServiceStores(): PreferenceStores {
-  return {
-    user: PropertiesService.getUserProperties(),
-    script: PropertiesService.getScriptProperties()
-  };
-}
+/**
+ * How the stores are obtained, rather than the stores themselves.
+ *
+ * Deliberately a factory: `PropertiesService.getUserProperties()` can itself fail, and a default
+ * *parameter* would evaluate outside `readStoredPreferences`'s own `try` — leaving the one guarantee
+ * that matters (see below) covering only failures inside `getProperties`, and untestable at that.
+ */
+export type PreferenceStoreSource = () => PreferenceStores;
+
+const propertiesServiceStores: PreferenceStoreSource = () => ({
+  user: PropertiesService.getUserProperties(),
+  script: PropertiesService.getScriptProperties()
+});
 
 /** One store's prefixed properties, reduced to the bare preference names the schema knows. */
 function sourceOf(bag: PropertyBag): PreferenceSource {
@@ -64,18 +72,23 @@ function sourceOf(bag: PropertyBag): PreferenceSource {
   return source;
 }
 
+function resolveFrom(stores: PreferenceStores): Preferences {
+  return resolvePreferences(sourceOf(stores.user), sourceOf(stores.script));
+}
+
 /**
  * Every preference, the user's own store taking precedence over the deployment's.
  *
- * Never throws. `doGet` calls this on every page load, so a `PropertiesService` failure here would
- * take the whole display down over settings nobody had set — and a dial drawn with default
- * preferences is a working dial. Same reasoning as ADR 0006's stale-but-rendered payload.
+ * **Never throws, including from acquiring the stores.** `doGet` calls this on every page load, so
+ * a `PropertiesService` failure here would take the whole display down over settings nobody had
+ * set — and a dial drawn with default preferences is a working dial. Same reasoning as ADR 0006's
+ * stale-but-rendered payload.
  */
 export function readStoredPreferences(
-  stores: PreferenceStores = propertiesServiceStores()
+  acquire: PreferenceStoreSource = propertiesServiceStores
 ): Preferences {
   try {
-    return resolvePreferences(sourceOf(stores.user), sourceOf(stores.script));
+    return resolveFrom(acquire());
   } catch (error) {
     console.error(`preferences unreadable, using defaults — ${(error as Error).message}`);
     return defaultPreferences();
@@ -83,38 +96,42 @@ export function readStoredPreferences(
 }
 
 /** The resolved preferences in wire form, for `doGet` to template into the page. */
-export function preferencesWire(stores?: PreferenceStores): string {
-  return encodePreferences(readStoredPreferences(stores));
+export function preferencesWire(acquire?: PreferenceStoreSource): string {
+  return encodePreferences(readStoredPreferences(acquire));
 }
 
 /**
  * Persist the preferences a wire string carries, and report the resolved set back.
  *
- * Called from the browser, so it treats its argument as untrusted: the patch is parsed against the
- * schema and each accepted value is **re-encoded** before it is stored, which leaves no path for a
- * client string to reach the store verbatim. An unknown key, a malformed value or a number outside
- * its range is dropped rather than written.
+ * Called from the browser, so the argument is untrusted: it is parsed against the schema and each
+ * accepted value **re-encoded** before storage, which leaves no path for a client string to reach
+ * the store verbatim. Unknown keys, malformed values and out-of-range numbers are dropped.
  *
- * Only the keys present are touched. A client sending one preference must not overwrite the others,
- * or a second tab holding stale values would undo whatever the first one changed.
- *
- * Writes go to the user store only — the script store is the deployment's defaults, and a viewer
- * changing their own settings has no business editing those.
+ * Only the keys present are written, for the reason `decodePreferencePatch` gives, and only to the
+ * user store — the script store is the deployment's own defaults. One batched `setProperties` call
+ * rather than one per key, since write quota is per call.
  *
  * Unlike the read path this does not swallow failures: a write that hits a quota should reach the
  * caller, which is the only party that knows a preference did not stick.
  */
 export function savePreferences(
   patchWire: string,
-  stores: PreferenceStores = propertiesServiceStores()
+  acquire: PreferenceStoreSource = propertiesServiceStores
 ): string {
+  const stores = acquire();
   const patch = decodePreferencePatch(patchWire);
+  const properties: { [key: string]: string } = {};
 
   for (const key of PREFERENCE_KEYS) {
     const value = patch[key];
     if (value === undefined) continue;
-    stores.user.setProperty(PROPERTY_PREFIX + key, encodePreferenceValue(key, value));
+    properties[PROPERTY_PREFIX + key] = encodePreferenceValue(key, value);
   }
 
-  return preferencesWire(stores);
+  // A patch that survived nothing writes nothing, rather than an empty batch call.
+  if (Object.keys(properties).length > 0) stores.user.setProperties(properties);
+
+  // Re-read rather than assemble the answer from the patch: the point of echoing is to report what
+  // the store now holds, which is also what the `?check=1` row is checking.
+  return encodePreferences(resolveFrom(stores));
 }

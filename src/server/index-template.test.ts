@@ -7,6 +7,17 @@ import { describe, expect, it } from "vitest";
 
 import TEMPLATE from "../../static/Index.html?raw";
 
+const SCRIPTLET = /<\?[\s\S]*?\?>/g;
+
+/**
+ * What a conditional scriptlet drops when its condition is false: the guard and everything up to
+ * its closing brace. Understands only the one guard shape this template uses — `if (…) {` … `}` —
+ * which is enough to answer "is this attribute emitted whatever the conditions are".
+ */
+function withoutGuardedRegions(html: string): string {
+  return html.replace(/<\?\s*if[\s\S]*?\?>[\s\S]*?<\?\s*\}\s*\?>/g, "");
+}
+
 /** Everything between an HTML comment's delimiters, comment by comment. */
 function comments(html: string): string[] {
   const found: string[] = [];
@@ -27,15 +38,18 @@ describe("the page template", () => {
     expect(TEMPLATE).toContain('data-preferences="<?= preferences ?>"');
   });
 
-  it("emits the preferences attribute unconditionally, so the preview strips it to empty", () => {
-    // The preview builder drops scriptlets and keeps what they guarded. An attribute behind a guard
-    // would therefore be baked into every preview, which for a stored preference would mean the
-    // local preview permanently rendering somebody's saved state.
-    // The whole line rather than a tag match: a scriptlet's own `?>` closes any `[^>]*` pattern.
-    const dial = TEMPLATE.split("\n").find((line) => line.includes('id="dial"')) ?? "";
+  it("emits the preferences attribute whatever the conditions evaluate to", () => {
+    // The regression this exists for: an attribute inside the `showDemo` guard is absent on every
+    // real (non-demo) load, `readPreferenceWire` reads null, and every viewer silently gets the
+    // defaults while the preview — which keeps guarded content — looks perfectly correct.
+    expect(withoutGuardedRegions(TEMPLATE)).toContain("data-preferences=");
+  });
 
-    expect(dial).toContain('data-preferences="<?= preferences ?>"');
-    expect(dial.slice(dial.indexOf("data-preferences"))).not.toContain("<? if");
+  it("leaves an empty attribute behind once scriptlets are stripped, as the preview strips them", () => {
+    // `writePreview` drops scriptlets and keeps what they guarded, so this is what the local preview
+    // actually carries. The client has to read it as "nothing stored" rather than as a stored empty
+    // set — hence the assertion on the empty *value* rather than on the attribute's presence.
+    expect(TEMPLATE.replace(SCRIPTLET, "")).toContain('data-preferences=""');
   });
 
   it("escapes the preferences value rather than printing it raw", () => {

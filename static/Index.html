@@ -8,10 +8,11 @@
   <body>
     <main id="display">
       <!--
-        Preferences arrive as a templated value rather than behind a conditional scriptlet the way
-        data-demo is. The preview builder strips scriptlets and keeps whatever they guarded, so a
-        guarded attribute would be baked into every preview; a templated value strips to "", which
-        the client reads as "nothing stored" and answers with the defaults.
+        Preferences arrive as a templated value, not behind a conditional scriptlet the way data-demo
+        is, because a guarded attribute would be absent on every real load: the guard here is
+        showDemo, and a display showing a real calendar would carry no preferences at all while the
+        preview — which keeps guarded content — looked perfectly correct. Verified both ways rather
+        than reasoned about; the preview line is byte-identical either way.
 
         Escaped output, not raw, because the value comes out of a store. It needs no escaping —
         every encoded preference is [A-Za-z0-9;=], which shared/preferences.test.ts asserts — but

@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   PREFERENCES,
   PREFERENCE_KEYS,
+  type PreferenceKey,
   type Preferences,
   decodePreferencePatch,
   decodePreferences,
@@ -143,16 +144,39 @@ describe("encoding", () => {
     expect(encodePreferences(scrambled)).toBe("showSeconds=0;timerDurationSeconds=600");
   });
 
-  it.each([
-    ["the defaults", DEFAULTS],
-    ["the other end of every value", { showSeconds: false, timerMuted: true, timerDurationSeconds: 43200 }],
-    ["the floor of the numeric range", { ...DEFAULTS, timerDurationSeconds: 60 }],
-    ["nothing", {}]
-  ])("stays in an attribute-safe alphabet for %s", (_case, values) => {
+  it("writes nothing at all for an empty set", () => {
+    expect(encodePreferences({})).toBe("");
+  });
+
+  /**
+   * Every value each definition can produce, keyed so that **a new preference cannot be registered
+   * without extending this** — the mapped type fails to compile otherwise. That is the point: the
+   * alphabet assertion below has to be a property of the registry rather than of a list of literals
+   * somebody remembered to update.
+   */
+  const SAMPLES: { [K in PreferenceKey]: Array<Preferences[K]> } = {
+    showSeconds: [true, false],
+    timerMuted: [true, false],
+    timerDurationSeconds: [60, 300, 43200]
+  };
+
+  it.each(PREFERENCE_KEYS)("keeps %s in an attribute-safe alphabet, for every value", (key) => {
     // The load-bearing assertion behind templating this into `data-preferences` in Index.html: no
     // quote, angle bracket or ampersand can appear, whatever a definition encodes, so the value
     // needs no escaping and cannot break out of the attribute.
-    expect(encodePreferences(values)).toMatch(/^[A-Za-z0-9;=]*$/);
+    for (const value of SAMPLES[key]) {
+      const wire = encodePreferences({ [key]: value } as Partial<Preferences>);
+
+      expect(wire).toMatch(/^[A-Za-z0-9;=]*$/);
+      expect(wire).not.toBe("");
+    }
+  });
+
+  it("keeps a whole encoded set in the same alphabet", () => {
+    expect(encodePreferences(DEFAULTS)).toMatch(/^[A-Za-z0-9;=]*$/);
+    expect(
+      encodePreferences({ showSeconds: false, timerMuted: true, timerDurationSeconds: 43200 })
+    ).toMatch(/^[A-Za-z0-9;=]*$/);
   });
 
   it.each([

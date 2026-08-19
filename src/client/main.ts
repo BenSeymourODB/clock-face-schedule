@@ -166,35 +166,39 @@ function browserTimeZone(): string {
 }
 
 /**
- * Preferences, checked on the device rather than on a workstation.
+ * Preferences, checked on the device rather than on a workstation: what arrived in the page, and
+ * whether the store is reachable through the bridge at all.
  *
- * Reports what arrived in the page, then writes the values **already in effect** straight back and
- * confirms the server echoes them. Storing what is already resolved makes the write a no-op in
- * content, so running the diagnostic cannot change how the display behaves — while still exercising
- * the half of the path a page load never touches. Until #47 exists, this is the only way to find out
- * on the board whether `PropertiesService` is reachable at all.
+ * **Deliberately read-only.** An earlier version sent the resolved values back to prove the write
+ * path, which is a no-op in content and a one-way change in provenance: it copies the deployment's
+ * script-store defaults into the viewer's own store, after which they stop tracking the deployment
+ * and nothing here can unset them (#83). Sending an empty patch exercises the entry point, the patch
+ * parser and the resolution order without storing anything. Until #47 exists the write path has no
+ * production caller anyway, so there is nothing to check that a spec cannot.
  */
 async function checkPreferences(list: Element): Promise<void> {
   const wire = readPreferenceWire(document.querySelector("#dial"));
 
   if (wire === null) {
-    // The attribute is templated unconditionally, so its absence means doGet's templating broke.
+    // The attribute is emitted whatever the conditions are, so its absence means templating broke.
     addRow(list, "preferences", "no data-preferences on the mount", "fail");
     return;
   }
   addRow(list, "preferences", wire === "" ? "none stored — using defaults" : wire, "ok");
 
-  const resolved = encodePreferences(decodePreferences(wire));
+  const templated = encodePreferences(decodePreferences(wire));
   try {
-    const echoed = await callServer<string>("savePreferences", resolved);
+    const resolved = await callServer<string>("savePreferences", "");
+    // A mismatch is worth seeing rather than hiding: the page and the store disagreeing means the
+    // display is showing something other than what a reload would give it.
     addRow(
       list,
-      "preference write",
-      echoed === resolved ? "stored and echoed back" : `stored, resolved to ${echoed}`,
-      echoed === resolved ? "ok" : "note"
+      "preference store",
+      resolved === templated ? "reachable, and agrees with the page" : `reachable, but holds ${resolved}`,
+      resolved === templated ? "ok" : "note"
     );
   } catch (error) {
-    addRow(list, "preference write", `unavailable — ${(error as Error).message}`, "fail");
+    addRow(list, "preference store", `unreachable — ${(error as Error).message}`, "fail");
   }
 }
 

@@ -47,10 +47,11 @@ escaped output would not parse) — which would leave `<?!= ?>` and an unescaped
 tag that a `</script>` in the data can close. Both are avoidable.
 
 Every value comes out of the schema's own `encode`, so the alphabet is closed: `[A-Za-z0-9]` plus
-`=` and `;`. **Nothing in an encoded wire string is HTML-special**, which is asserted directly
-rather than argued — `preferences.test.ts` encodes the defaults and every registered key's sample
-values and checks the whole string against `/^[A-Za-z0-9;=]*$/`. That is the assertion that keeps
-the templating decision safe as keys are added later.
+`=` and `;`. **Nothing in an encoded wire string is HTML-special**, and that is asserted as a
+property of the registry rather than of a list: `preferences.test.ts` iterates `PREFERENCE_KEYS` and
+checks every sample value against `/^[A-Za-z0-9;=]*$/`, with the samples in a mapped type that
+**fails to compile if a new key is registered without one**. A definition whose `encode` could emit
+`&`, `"` or `<` cannot slip past by simply not being on a list.
 
 Cost: the format carries no types, so a value is only as safe as its `parse`. Which it has to be
 anyway — the store is a bag of strings a previous version of the code wrote.
@@ -115,11 +116,27 @@ confirmation rather than presented as derived.
 
 ## Risks
 
-- **The preview strips scriptlets.** `data-preferences="<?= preferences ?>"` becomes
-  `data-preferences=""` there, which the client must read as "nothing stored" rather than "empty
-  preferences". Guarded by a test on the built preview, not by inspection.
+- **The preview strips scriptlets.** The templated attribute becomes `data-preferences=""` there,
+  which the client must read as "nothing stored" rather than "empty preferences".
+  `index-template.test.ts` applies the same strip the preview builder applies and asserts the empty
+  value survives.
+- **A guarded attribute would be absent on every real load.** Not, as this plan first claimed, baked
+  into the preview: the guard is `showDemo`, and the preview keeps guarded content while stripping
+  the value to `""` either way — so a guard would be invisible locally and would leave every
+  calendar-showing display with no preferences at all. Corrected after building it both ways and
+  finding the preview line byte-identical. The assertion that catches it removes each guarded region
+  the way a false condition would and checks the attribute is still there.
 - **`doGet` must not be able to fail.** A `PropertiesService` error at page load would take the whole
-  display down for a preference nobody set. `readStoredPreferences` catches and returns defaults, and
-  the test drives it with a throwing store.
+  display down for a preference nobody set. `readStoredPreferences` catches — and takes its stores
+  from a **factory** rather than a default parameter, because a default parameter is evaluated
+  outside the function's own `try`: `PropertiesService.getUserProperties()` throwing would have
+  escaped the guard entirely, and no test injecting a fake store could have noticed. Both halves now
+  have a case.
+- **Setting a preference is one-way.** Nothing can unset one, so a stored key stops tracking the
+  script store's default and the code's forever (#83). Why `?check=1` reports the store rather than
+  writing to it: an earlier version echoed the resolved values back, which pinned every key into the
+  viewer's own store on the first diagnostic run.
+- **Two quick saves can land out of order** (#84), which will matter once #47 gives someone a field
+  to tap twice.
 - **Textual conflict with #75**, which also edits `doGet` and the same line of `Index.html`. No
   semantic overlap; whichever merges second resolves.

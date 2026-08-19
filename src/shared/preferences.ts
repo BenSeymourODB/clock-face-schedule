@@ -74,6 +74,9 @@ export const PREFERENCES = {
    * The second hand. `main.ts` has always passed `true`, so that is the default here and
    * registering it moves nothing until something is stored. Safe to persist in ADR 0008's sense:
    * the hand is plainly present or absent, and nothing else on the dial changes meaning without it.
+   *
+   * Note `analogClock`'s own parameter defaults to `false` — the ported default, for a builder whose
+   * caller is expected to say. This is the display's answer, and `main.ts` has to pass it explicitly.
    */
   showSeconds: flag(true),
 
