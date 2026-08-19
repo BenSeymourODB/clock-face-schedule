@@ -1,7 +1,8 @@
 # Viewer preferences in PropertiesService
 
-**Status:** in progress
+**Status:** in review
 **Issue:** [#31](https://github.com/BenSeymourODB/clock-face-schedule/issues/31)
+**PR:** [#82](https://github.com/BenSeymourODB/clock-face-schedule/pull/82)
 **Docs:** [../DESIGN.md](../DESIGN.md) (Platform constraints — browser storage; ADR 0006; ADR 0008)
 
 ## What this builds
@@ -92,7 +93,8 @@ confirmation rather than presented as derived.
 - **`colourScheme`.** The storage half is three lines, but honouring `light` needs a light palette
   authored *and* contrast-verified: #27's table has nine of Google's eleven event colours failing
   on white (Banana 1.40:1, Graphite 1.31:1). Storing a preference the renderer would ignore is
-  worse than not having it. Filed separately and linked from the PR.
+  worse than not having it. Filed as
+  [#81](https://github.com/BenSeymourODB/clock-face-schedule/issues/81), which the key lands with.
 - **`timerDisplayMode`, `showTimerReadout`.** #46 and #48 decide their option sets; a guess here
   would be a key those issues have to migrate.
 - **`scaleMode`.** #34, whose comment settles that a persistent toggle makes it safe to store —
