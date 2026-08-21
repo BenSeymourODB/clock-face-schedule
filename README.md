@@ -173,6 +173,11 @@ and on the deployed app alike:
 `build/preview.html?now=04:15&freeze=1` needs no server. A pinned clock says so on screen, and an
 unreadable time falls back to the real clock rather than inventing one.
 
+**A pin currently changes the dial's size as well as its clock** (#115). The notice a pinned dial puts
+on screen widens the grid track `#dial` sizes itself against, so the same page draws the dial at 950 px
+pinned and 600 px unpinned — and 600 px is what the board gets whatever its resolution. Pinned
+screenshots are to the right proportions and the wrong scale until that is fixed.
+
 **The times below exercise the demo fixture's states**, and are what the fixture's offsets mean once
 a pin anchors them to midnight — measured by rendering, not predicted:
 
