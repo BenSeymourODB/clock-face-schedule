@@ -186,15 +186,27 @@ demo mode posts a notice of its own: screenshots are to the right proportions an
 scale; hide `#status` to see what the wall gets.
 
 **The times below exercise the demo fixture's states**, and are what the fixture's offsets mean once
-a pin anchors them to midnight — measured by rendering, not predicted:
+a pin anchors them to midnight — measured by rendering, not predicted. Each claim names one event and
+one state, in this vocabulary:
+
+| state | what the dial draws |
+| --- | --- |
+| `live` | The fill and its separator, whole — nothing of it spent. On this dial that means it has not begun: an event spanning `now` always drains. |
+| `draining` | Spanning `now` (#28) — the spent side hollowed to the elapsed outline, the rest still filled, and a short gradient at the seam. |
+| `elapsed` | Finished (#26) — the fill dropped to that outline, and no separator. |
+| `clamped` | The *window* ended the arc rather than the event, so that end fades (#22): `clamped at the leading edge` or `clamped at the trailing edge`. Orthogonal to the three above and combines with any of them. |
+
+The vocabulary is what makes the rows mechanical: `src/client/pin-table.test.ts` renders each pin and
+reads every claim below back off the arcs it draws, so a cell cannot go quietly stale the way two of
+them already had (#104).
 
 | `?now=` | What it shows |
 | --- | --- |
-| `03:00` | The unpinned *states*, exactly: ⚪ Breakfast Club elapsed and crossing the leading edge, the four-deep cluster elapsed, and 🟡 Tidy Up and Line Up **draining** beside it. Not the unpinned *picture* — see below. |
-| `01:30` | The cluster mid-drain — 🎮 Game Time and 🔴 Deadline draining, 🟣 Study just starting, 🟠 Swimming Group B still to come. |
-| `04:15` | ⚫ Staff Debrief and 🟤 ⚽ draining, ⚫ Assembly elapsed: the two palette colours that fail contrast on the dial, in both treatments at once. |
-| `08:30` | 🟣 Free Play draining, with 📚 Reading — the ten-minute event held open by the minimum span — elapsed beside it. |
-| `11:00` | 🟢 Aftercare draining and crossing the dial's noon seam, with copy 1 of the fixture already filling most of the band — the arc clamped at the window's end here is that copy's 🍽️ Lunch, not Aftercare. |
+| `03:00` | The unpinned *states*, exactly — not the unpinned *picture*, see below. ⚪ Breakfast Club **elapsed** and **clamped at the leading edge**; then the four-deep cluster: 🟢 🎮 Game Time **elapsed**, 🔴 Deadline **elapsed**, 🟣 Study Skills **elapsed**, 🟠 Swimming Group B **elapsed**, and 🟡 Tidy Up and Line Up **draining** on the thinnest ring the dial opens. |
+| `01:30` | The four-deep cluster mid-drain: 🟢 🎮 Game Time **draining**, 🔴 Deadline **draining**, 🟣 Study Skills **live** at the very minute it starts, 🟠 Swimming Group B **live**, and 🟡 Tidy Up and Line Up **live**. |
+| `04:15` | ⚫ Staff Debrief **draining** and 🟤 ⚽ **draining**, with ⚫ Assembly **elapsed**: the two palette colours that fail contrast on the dial, in both treatments at once. |
+| `08:30` | 🟣 🧸 🪀🎈 Free Play **draining**, with 📚 Reading **elapsed** beside it — the ten-minute event held open by the minimum span. |
+| `11:00` | 🟢 Aftercare **draining**, crossing the dial's noon seam, with copy 1 of the fixture already filling most of the band: the arc the window cuts off here is that copy's 🟡 🍽️ Lunch (copy 1) **clamped at the trailing edge**, not Aftercare's. |
 
 **The first row is a claim about arcs and their states, not about pixels** — the distinction matters
 and cost a review. The fixture is anchored to the rolling window's own start, so every event's offset
