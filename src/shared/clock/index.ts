@@ -12,6 +12,7 @@ export {
 export {
   clampLabelPosition,
   faceClearanceLimit,
+  labelVerticalBand,
   labelWidthLimit,
   type ClockBox
 } from './clamp-label';
@@ -82,6 +83,11 @@ export {
   type FitTextResult
 } from './pack-lines';
 export { rectEdgeIntersection, rectsOverlap, type Rect } from './rect-edge';
+export {
+  displaceVertically,
+  overlapComponents,
+  type VerticalBand
+} from './stack-labels';
 export {
   ONE_HOUR_SCALE,
   TWELVE_HOUR_SCALE,

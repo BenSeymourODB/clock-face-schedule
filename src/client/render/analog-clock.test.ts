@@ -35,6 +35,11 @@ const MORNING = new Date(2026, 7, 15, 4, 0, 0);
 const AFTERNOON = new Date(2026, 7, 15, 13, 0, 0);
 
 const LONG_TITLE = "Parent Teacher Conference Planning Committee Meeting Notes";
+/**
+ * Long enough to overflow its arc, short enough that the card stays two lines — which is what puts
+ * a pile of them inside the clamp band, where the displacement pass can actually separate them.
+ */
+const PILE_TITLE = "Staff Debrief and Planning";
 
 function input(
   id: string,
@@ -538,6 +543,79 @@ describe("analogClock", () => {
       expect(
         element.querySelector('[data-testid="event-duration-a"] textPath')?.textContent
       ).toBe("3 hr");
+    });
+  });
+
+  /**
+   * #30 item 2. The duration pass above only declines an *optional* line; when cards overlap on
+   * their titles alone it has nothing left to give, and until this landed they simply overlapped.
+   *
+   * Piles form at twelve and six o'clock for a reason worth knowing: `y = cy − R·cos θ`, so
+   * `dy/dθ = R·sin θ` is **zero** at both, and events tens of minutes apart land at nearly the same
+   * height. The fixture's own case is three cards within 22 units of each other at `?now=11:00`.
+   */
+  describe("cards that still overlap are moved apart vertically", () => {
+    function cardRects(element: SVGSVGElement) {
+      return [...element.querySelectorAll('[data-testid^="floating-label-rect-"]')].map((node) => {
+        const at = (name: string) => Number(node.getAttribute(name));
+        return {
+          id: node.getAttribute("data-testid")?.replace("floating-label-rect-", "") ?? "",
+          x: at("x"),
+          y: at("y"),
+          width: at("width"),
+          height: at("height"),
+        };
+      });
+    }
+
+    function anyOverlap(rects: ReturnType<typeof cardRects>): string[] {
+      const hits: string[] = [];
+      rects.forEach((rect, index) =>
+        rects.forEach((other, otherIndex) => {
+          if (otherIndex > index && rectsOverlap(rect, other)) hits.push(`${rect.id}+${other.id}`);
+        })
+      );
+      return hits;
+    }
+
+    /**
+     * Three overflowing events ten minutes apart. Measured with the pass disabled, all three cards
+     * overlap each other — 447.5..502.6, 467.9..522.9 and 486.7..541.8, on a 55.1-unit card.
+     */
+    const pile = [
+      input("early", 4.0, 4.4, { title: PILE_TITLE }),
+      input("middle", 4.17, 4.57, { title: PILE_TITLE }),
+      input("late", 4.34, 4.74, { title: PILE_TITLE }),
+    ];
+
+    it("clears a three-deep pile", () => {
+      const rects = cardRects(build(pile).element);
+
+      expect(rects).toHaveLength(3);
+      expect(anyOverlap(rects)).toEqual([]);
+    });
+
+    it("leaves a dial whose cards already clear each other untouched", () => {
+      // The property that keeps this from disturbing a correct layout: a card overlapping nothing
+      // is never in a component, so its position is the one the clamp produced.
+      const spread = [
+        input("morning", 2, 3, { title: LONG_TITLE }),
+        input("evening", 8, 9, { title: LONG_TITLE }),
+      ];
+      const rects = cardRects(build(spread).element);
+      const naturalYs = rects.map((rect) => rect.y);
+
+      expect(anyOverlap(rects)).toEqual([]);
+      expect(cardRects(build(spread).element).map((rect) => rect.y)).toEqual(naturalYs);
+    });
+
+    it("never moves a card toward the dial's centre line", () => {
+      // `faceClearanceLimit` is monotone in the distance from that line, so this is what keeps a
+      // displaced card off the face without re-deriving the width it was wrapped to.
+      for (const rect of cardRects(build(pile).element)) {
+        // Every card in this pile sits below the centre line, so none of them may move up.
+        expect(rect.y + rect.height / 2).toBeGreaterThan(CY);
+      }
     });
   });
 
