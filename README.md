@@ -185,15 +185,22 @@ a pin anchors them to midnight — measured by rendering, not predicted:
 
 | `?now=` | What it shows |
 | --- | --- |
-| `03:00` | The unpinned picture exactly: ⚪ Breakfast Club elapsed and crossing the leading edge, the three-deep cluster elapsed, **nothing draining**. |
-| `01:30` | The three-deep cluster mid-drain — 🎮 Game Time and 🔴 Deadline draining, 🟣 Study still live. |
+| `03:00` | The unpinned picture exactly: ⚪ Breakfast Club elapsed and crossing the leading edge, the four-deep cluster elapsed, and 🟡 Tidy Up and Line Up **draining** beside it. |
+| `01:30` | The cluster mid-drain — 🎮 Game Time and 🔴 Deadline draining, 🟣 Study just starting, 🟠 Swimming Group B still to come. |
 | `04:15` | ⚫ Staff Debrief and 🟤 ⚽ draining, ⚫ Assembly elapsed: the two palette colours that fail contrast on the dial, in both treatments at once. |
 | `08:30` | 🟣 Free Play draining, with 📚 Reading — the ten-minute event held open by the minimum span — elapsed beside it. |
 | `11:00` | 🟢 Aftercare draining and running past the window's end, with every other event already finished. |
 
-Note the first row: **unpinned, the fixture never has an event in progress**, at any time of day.
-It is anchored to the rolling window's own start, so every event's offset from "now" is a constant.
-That is why the preview had never drawn a draining arc before this existed.
+Note the first row: **the unpinned picture is the `03:00` one, at any time of day.** The fixture is
+anchored to the rolling window's own start, so every event's offset from "now" is a constant — which
+is why one row of this table describes the default look rather than a state you have to reach for.
+
+That constant is also what puts a drain in the default look: 🟡 Tidy Up and Line Up spans `now`
+whatever the wall clock says, so the unpinned preview always draws one draining arc. **It is the
+thin one.** It joins the four-deep cluster through 🔴 Deadline, so it renders at that cluster's
+15.56-unit ring rather than a lone arc's 75.92 — the thinnest ring the dial opens. Reach for
+`?now=04:15` when you want a drain without the ring-thinning confound: ⚫ Staff Debrief draws it at
+35.68 units, clear of the cluster.
 
 Two consequences of that anchoring worth knowing before you pin something:
 

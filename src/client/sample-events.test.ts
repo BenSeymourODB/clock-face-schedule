@@ -12,6 +12,7 @@ import {
   eventsToClockEvents,
   filterEventsForPeriod,
   getRollingWindow,
+  hasEventInProgress,
 } from "../shared/clock";
 import {
   FIXTURE_PERIOD_MINUTES,
@@ -90,6 +91,29 @@ function peakClusterDepth(
  */
 const AUTHORED_CLUSTER_DEPTH = peakClusterDepth(sampleEvents(ANCHOR), windowAtPhase(0));
 
+/**
+ * The longest stretch inside one copy of the 12-hour fixture with nothing running — 55 minutes,
+ * the deliberate empty span between `"d" 🟡 🍽️ Lunch` and `"j" 🔵 Yoga`.
+ *
+ * Derived rather than written down, for the same reason `AUTHORED_CLUSTER_DEPTH` is: a literal 55
+ * would go on passing after the gap it was measured from had moved, which is how a hard-coded 3
+ * outlived the three-deep cluster. Copies abut exactly (`FIXTURE_PERIOD_MINUTES` is the fixture's
+ * own span), so a seam adds no gap of its own and the largest internal one bounds the tiling too.
+ */
+const LARGEST_INTERNAL_GAP_MINUTES = (() => {
+  const spans = sampleEvents(ANCHOR)
+    .map((event) => ({ start: offsetMinutes(event.startDate), end: offsetMinutes(event.endDate) }))
+    .sort((left, right) => left.start - right.start);
+
+  let covered = spans[0].end;
+  let largest = 0;
+  for (const span of spans.slice(1)) {
+    largest = Math.max(largest, span.start - covered);
+    covered = Math.max(covered, span.end);
+  }
+  return largest;
+})();
+
 describe("FIXTURE_PERIOD_MINUTES", () => {
   it("is the fixture's own span, so consecutive copies abut exactly", () => {
     const base = sampleEvents(ANCHOR);
@@ -155,6 +179,62 @@ describe("recurringSampleEvents", () => {
       expect(peakClusterDepth(events, view)).toBeLessThanOrEqual(AUTHORED_CLUSTER_DEPTH);
     }
   );
+
+  /**
+   * The guard #76 was missing, and the reason it went unnoticed for three days: the *1-hour*
+   * fixture has this assertion, written citing #76, and the 12-hour fixture — the one the default
+   * preview draws — has none. So the drain being in the default picture rested on one source
+   * comment, and moving `"n"`'s end back fourteen minutes would take it out again and pass every
+   * other spec in this repo. That is the mechanism by which #71's masks drained nothing through
+   * both #28 and #27.
+   *
+   * `hasEventInProgress` rather than a local predicate, because `analog-clock.ts` decides whether
+   * to draw a drain with exactly that function — a copy of it here could keep agreeing with this
+   * test after the renderer's own rule had moved.
+   *
+   * Measured on the fixture as it stands: 16 arcs at load, 5 elapsed, 1 in progress.
+   */
+  it("has an arc in progress at load, so an unpinned look sees a drain", () => {
+    const view = windowAtPhase(0);
+    const now = new Date(ANCHOR.getTime() + 180 * MINUTE_MS);
+    const drawn = inWindow(recurringSampleEvents(TWELVE_HOUR_FIXTURE, ANCHOR, view), view);
+
+    expect(hasEventInProgress(drawn, now)).toBe(true);
+    expect(drawn.filter((event) => new Date(event.endDate) <= now)).not.toHaveLength(0);
+  });
+
+  /**
+   * Tiling has to keep the state reachable, not just present at the one minute a reviewer loads on
+   * — the same claim the 1-hour fixture makes, and worth making separately because the two
+   * fixtures' spans differ by an order of magnitude.
+   *
+   * Measured across three whole periods (2,535 minutes, one sample a minute): something in progress
+   * at 2,238 of them, something elapsed at all 2,535, never fewer than 10 arcs drawn. The longest
+   * stretch with nothing in progress is **55 minutes**, and that is the fixture's own deliberate
+   * empty span between `"d" 🟡 🍽️ Lunch` and `"j" 🔵 Yoga` — the case the window-track exists to
+   * tell apart from the gap. So the bound is derived from that span rather than chosen: closing the
+   * gap would be a fixture change, and widening it past an hour would take the drain out of view
+   * for longer than a lesson.
+   */
+  it("keeps an arc in progress reachable across the tiling, not just at load", () => {
+    const running = (phase: number) => {
+      const view = windowAtPhase(phase);
+      const now = new Date(ANCHOR.getTime() + (180 + phase) * MINUTE_MS);
+      return hasEventInProgress(inWindow(recurringSampleEvents(TWELVE_HOUR_FIXTURE, ANCHOR, view), view), now);
+    };
+
+    const sampled = Array.from({ length: FIXTURE_PERIOD_MINUTES * 3 }, (_, phase) => running(phase));
+
+    expect(sampled.filter(Boolean).length).toBeGreaterThan((sampled.length * 3) / 4);
+
+    let longestGap = 0;
+    let current = 0;
+    for (const inProgress of sampled) {
+      current = inProgress ? 0 : current + 1;
+      longestGap = Math.max(longestGap, current);
+    }
+    expect(longestGap).toBeLessThanOrEqual(LARGEST_INTERNAL_GAP_MINUTES);
+  });
 
   it("gives every copy distinct ids, leaving copy 0's bare", () => {
     // Ids reach the DOM as data-testid="event-arc-<id>", so a duplicate would collide there and a
