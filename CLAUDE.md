@@ -52,6 +52,9 @@ suite:
 - An emoji overlapping a two-line title by 8.7 units
 - Two-line titles reading bottom-up on the lower half of the dial
 - A floating label lying across the numerals and the hands
+- A 0.38-unit hairline of the elapsed outline painted straight through the mask built to hide it, on
+  the side of the arc that has not happened yet — and 1.66 units on a four-deep ring, wider than the
+  whole separator beside it
 - An elapsed arc's outline at 1.56 units — **thinner than the live separator it replaced** — because
   it was sized from the ring rather than the band
 
@@ -64,6 +67,12 @@ pins the dial's clock, on the preview and the deployed app alike; README has the
 table of which times show which fixture states. Unpinned, the fixture has *nothing in progress* at
 any time of day, so a draining arc only appears if you ask for one — which is how a drain that
 never drained shipped through two releases.
+
+**A pinned dial is 58% larger than the board's, until #115 is fixed.** The pin's own on-screen notice
+is what does it: `#dial`'s width resolves against a grid track sized by whatever text is beside it, so
+a healthy board renders the dial at 600 px and a pinned preview at 950. Geometry and contrast are in
+viewBox units and unaffected — judge them on a pinned screenshot as before — but check anything about
+*size* at the scale the wall gets: unpinned, or with `#status` hidden.
 
 So: for any change to rendered output, `npm run build`, serve `build/preview.html`, screenshot it,
 and look. Query the DOM for the attributes you changed as a cross-check — but measurement confirms

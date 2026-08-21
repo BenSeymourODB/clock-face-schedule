@@ -1,6 +1,6 @@
 # Keep CI's `build/preview.html` instead of throwing it away
 
-**Status:** in review
+**Status:** done — shipped in [#102](https://github.com/BenSeymourODB/clock-face-schedule/pull/102)
 **Issue:** [#100](https://github.com/BenSeymourODB/clock-face-schedule/issues/100)
 **Docs:** [#92](https://github.com/BenSeymourODB/clock-face-schedule/pull/92) (the quality gate this
 extends), [#72](https://github.com/BenSeymourODB/clock-face-schedule/issues/72) (the `?now=` /

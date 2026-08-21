@@ -1,6 +1,6 @@
 # Measure the band's radial clearances against real ink, not the em box
 
-**Status:** in review
+**Status:** done — shipped in [#89](https://github.com/BenSeymourODB/clock-face-schedule/pull/89)
 **Issue:** [#78 — Every radial clearance on the band is measured to the em box, and real ink reaches
 0.5 units past it](https://github.com/BenSeymourODB/clock-face-schedule/issues/78)
 **Docs:** `docs/DESIGN.md` (ADR 0003), `src/shared/clock/arc-title-layout.ts`

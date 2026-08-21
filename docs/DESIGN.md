@@ -293,6 +293,15 @@ after the panel**, and the panel is **180 units wide, on the right**.
   knee, where the circle binds early; it buys 11 chars against the circle's 8 at today's 50.4-unit
   margin, and *nothing* past 75.4. Granting the margin dominates it outright, and avoids the
   band-occlusion cost (#98) that the inward optimum carries.
+- **A locus that clears the band outright is available at 3 and 9 o'clock, and on 16:9 it is free.**
+  Measured after the fact, prompted by looking at the board (#30, #98): a card clears the band when
+  its locus is `292 + W/2`, which against `m` units of margin resolves to `W = m + 8` — **151.3 units
+  at 16:9's 143.3**, holding the same 13 characters a line as the 155.2 above, so a card that never
+  covers an arc carries exactly as much text as one that does. On 16:10 it costs 5 characters a line
+  (98.0 units, 8 a line). It is *unavailable* at 12 and 6, where the dial fills the height and a
+  band-clearing card would sit 22.5 units (one line) to 96.1 units (four) above the frame — off the
+  board. So this removes #98's collisions on the sides by construction and leaves them at the top and
+  bottom, which is the mirror image of the ellipse's asymmetry.
 - **180 is the smallest width that serves the panel's own justification.** It holds 10 characters a
   line at 26 units, and on a 4 ft board 26 units is 53 mm — comfortable reading at 8 m by the
   conventional distance/150 rule. That is the size at which the panel can carry the names of a
@@ -313,6 +322,14 @@ constants, and per `CLAUDE.md` none of it is evidence of *legibility* until it i
 proportions. Two figures in particular are budgets rather than measurements: the character counts
 come from `CHAR_WIDTH_RATIO = 0.6`, which is deliberately crude, and the distance/150 rule is an AV
 signage convention rather than a measurement of these glyphs at this contrast.
+
+**And every millimetre above is measured against a dial that does not render.** This ADR opens by
+giving the dial the board's full height; the page gives it 600 px on any display, because `#dial`'s
+percentage width resolves against a grid track sized by the SVG's own 600-unit attribute (#115). That
+is 55.6% of a 1080-tall board, so as things stand 26 units is 29 mm rather than 53, the distance/150
+rule gives 4.4 m rather than 8, and a 180-unit panel is 203 mm rather than 366. The unit arithmetic
+and the 180-unit choice are unaffected — but they are conditional on the dial being the size this ADR
+assumes, and the sizing rule is part of the allocation (#39) rather than a detail beneath it.
 
 **Revisit when** the pilot board is up (#10) and the panel has been looked at from the back of the
 room, or if a target display falls outside 16:9–16:10.
