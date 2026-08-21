@@ -57,11 +57,13 @@ Two conditions, and the first is the load-bearing one:
   #30's combined-label case and is not this pass's to fix, so the test is that the set of colliding
   pairs after the offer is a **subset** of the set before it. A duration that resolves nothing and
   breaks nothing is still accepted; one that trades one collision for another is not.
-- **Every card stays wholly inside the clamp band.** `displaceVertically` already refuses a
-  component it cannot place inside the band, but a card that overlaps nothing is never displaced and
-  so is never band-checked — and a grown card at its natural position is what the page's frame is
-  sized against (#121). Checking the whole trial layout keeps that envelope true by construction
-  rather than by the coincidence that the fixture does not currently reach it.
+- **No card further outside the clamp band than it already was.** `displaceVertically` already
+  refuses a component it cannot place inside the band, but a card that overlaps nothing is never
+  displaced and so is never band-checked — and a grown card at its natural position is what the
+  page's frame is sized against (#121). Stated as "no worse" rather than "wholly inside" for the
+  same reason as the collisions: the natural layout's own worst overhang is 49.90 units against a
+  band of 50.4, so one card a hair outside it is reachable, and a flat rule would then decline every
+  line on the dial while saying nothing about why.
 
 #68's own constraint carries over unchanged and generalises: a candidate is compared against its
 neighbours **at the sizes committed so far**, so accepting a duration can never force one on

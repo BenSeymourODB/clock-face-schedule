@@ -542,7 +542,7 @@ describe("analogClock", () => {
         // pass used to make declined the later one's line. Displacement resolves the collision, so
         // the line was given up for nothing — and the cards still clear each other with it.
         const { element } = build(adjacent);
-        const rects = cardRects(build(adjacent).element);
+        const rects = cardRects(element);
 
         expect(labelLines(element, "first").slice(-1)).toEqual(["45 min"]);
         expect(labelLines(element, "second").slice(-1)).toEqual(["30 min"]);

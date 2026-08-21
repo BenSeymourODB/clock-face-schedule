@@ -135,6 +135,20 @@ describe('planOptionalLines', () => {
     }
   });
 
+  it('still grows what it can when a card already sits outside the band', () => {
+    // The natural layout's own worst overhang is 49.90 units against a 50.4-unit band, so a card a
+    // hair outside is reachable. A flat "wholly inside" rule would decline every line on the dial
+    // for it; the rule is "no card further out than it already was", so the other card still grows.
+    const stranded = offer(card(-20), null);
+    const offers = [stranded, offer(card(300))];
+    const band: VerticalBand = { top: 0, bottom: 400 };
+
+    const plan = planOptionalLines(offers, CY, band);
+
+    expect(plan.accepted).toEqual([false, true]);
+    expect(laidOut(offers, plan)[0].y).toBe(-20);
+  });
+
   it('settles: re-offering what it declined against its own result accepts nothing more', () => {
     // The fixed point #136 asks for, stated as the property rather than as a round count. Feeding
     // the committed sizes back in must be a no-op, or the pass stopped short of one.

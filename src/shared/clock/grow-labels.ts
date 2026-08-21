@@ -60,8 +60,9 @@ function displaced(rects: Rect[], nudges: number[]): Rect[] {
   return rects.map((rect, index) => ({ ...rect, y: rect.y + nudges[index] }));
 }
 
-function insideBand(rects: Rect[], band: VerticalBand): boolean {
-  return rects.every((rect) => rect.y >= band.top && rect.y + rect.height <= band.bottom);
+/** How far a card reaches past `band`, on either side. Zero for one wholly inside it. */
+function overhang(rect: Rect, band: VerticalBand): number {
+  return Math.max(0, band.top - rect.y) + Math.max(0, rect.y + rect.height - band.bottom);
 }
 
 /**
@@ -77,10 +78,13 @@ function insideBand(rects: Rect[], band: VerticalBand): boolean {
  *   combined-label case and is not this pass's to fix, so the test is that the colliding pairs
  *   after the offer are a subset of the ones before it. A growth that resolves nothing and breaks
  *   nothing is still worth taking; one that trades a collision for a different collision is not.
- * - **Every card wholly inside `band`.** `displaceVertically` refuses a component it cannot place
- *   inside the band, but a card overlapping nothing is never displaced and so is never checked —
- *   and the page's frame is sized from exactly this envelope (#121, #115). Checking the whole trial
- *   layout keeps that true by construction rather than by the fixture happening not to reach it.
+ * - **No card further outside `band` than it already was.** `displaceVertically` refuses a component
+ *   it cannot place inside the band, but a card overlapping nothing is never displaced and so is
+ *   never checked — and the page's frame is sized from exactly this envelope (#121, #115). Stated
+ *   as "no worse" rather than "wholly inside" for the same reason as the collisions: the natural
+ *   layout's own worst overhang is 49.90 units against a band of 50.4, so a card sitting a hair
+ *   outside it is reachable, and a flat rule would then decline every line on the dial and say
+ *   nothing about why.
  *
  * #68's own rule carries over and generalises: a candidate is measured against its neighbours at
  * **the sizes committed so far**, so accepting a line here can never force one on anybody else —
@@ -94,7 +98,9 @@ export function planOptionalLines(
   const accepted = offers.map(() => false);
   let sizes = offers.map((offer) => offer.base);
   let nudges = displaceVertically(sizes, centreY, band);
-  let collisions = new Set(collidingPairs(displaced(sizes, nudges)));
+  let placement = displaced(sizes, nudges);
+  let collisions = new Set(collidingPairs(placement));
+  let overhangs = placement.map((rect) => overhang(rect, band));
 
   // An acceptance changes the layout every later candidate is measured against, and it can change
   // which cards share a component — so a decline is not final until a whole round makes none.
@@ -110,13 +116,15 @@ export function planOptionalLines(
       trial[index] = offer.grown;
       const trialNudges = displaceVertically(trial, centreY, band);
       const placed = displaced(trial, trialNudges);
+      const trialOverhangs = placed.map((rect) => overhang(rect, band));
 
-      if (!insideBand(placed, band)) return;
+      if (trialOverhangs.some((reach, card) => reach > overhangs[card])) return;
       if (collidingPairs(placed).some((pair) => !collisions.has(pair))) return;
 
       sizes = trial;
       nudges = trialNudges;
       collisions = new Set(collidingPairs(placed));
+      overhangs = trialOverhangs;
       accepted[index] = true;
       grew = true;
     });
