@@ -11,17 +11,15 @@ import {
   createTimeSource,
   describeClockPin,
   describePinnedInstant,
-  dialScale,
-  dialWindow,
   getFetchWindow,
   getPeriodBounds,
   parseDialScaleId,
 } from "../shared/clock";
 import { decodePreferences, encodePreferences } from "../shared/preferences";
-import { fixtureAnchor, readClockPin } from "./clock-pin";
+import { readClockPin } from "./clock-pin";
+import { fixtureRefresher } from "./fixture-refresh";
 import { type PreferenceStore, preferenceStore, readPreferenceWire } from "./preferences";
 import { analogClock } from "./render/analog-clock";
-import { demoFixture, fixtureCopyIndices, recurringSampleEvents } from "./sample-events";
 import { type ScheduleStatus, describeStatus, nextStatus } from "./schedule-status";
 
 const TICK_INTERVAL_MS = 1_000;
@@ -77,6 +75,8 @@ function fetchWindow(): Promise<ClockEventInput[]> {
 }
 
 /**
+ * The templated attribute wins over the query string, so the deployed app honours a stored
+ * preference while the server-less preview can still be pointed at either scale by hand.
  */
 function chosenScale(mount: Element): DialScaleId {
   const templated = mount instanceof HTMLElement ? mount.dataset["scale"] : undefined;
@@ -86,20 +86,27 @@ function chosenScale(mount: Element): DialScaleId {
 }
 
 /**
- * Preferences as `doGet` left them, with saves going back over the bridge unawaited.
+ * Preferences as `doGet` left them, with nothing on screen waiting for a save.
  *
  * A failed save is a log line rather than a status-line failure: the status line is the schedule's,
  * and a display that cannot remember a setting is still showing the right time with the right
  * events on it.
+ *
+ * The bridge call is *returned* rather than fired, which is what lets the store keep one write in
+ * flight at a time (#84) — two `google.script.run` calls have no ordering between them, so the
+ * store needs to know when one is over. The log line rethrows rather than swallowing: the store
+ * drains on a rejection just as it does on a success, so this changes no behaviour today, but a
+ * promise that only ever resolves would report a refused write as a stored one — and #84's other
+ * remedy, reconciling against the wire `savePreferences` echoes back, needs the truth.
  */
 function displayPreferences(mount: Element): PreferenceStore {
   return preferenceStore({
     wire: readPreferenceWire(mount),
-    save: (wire) => {
-      void callServer<string>("savePreferences", wire).catch((error: Error) => {
+    save: (wire) =>
+      callServer<string>("savePreferences", wire).catch((error: Error) => {
         console.warn(`preference not saved — ${error.message}`);
-      });
-    }
+        throw error;
+      })
   });
 }
 
@@ -144,34 +151,14 @@ function startDisplay(): void {
    * real schedule, and the whole point of the mode is that someone is standing in front of it.
    */
   if (mount instanceof HTMLElement && mount.dataset["demo"] === "1") {
-    const fixture = demoFixture(scale);
-    const anchor = fixtureAnchor(clockPin, now(), scale);
-    /** Null rather than "", which is what an empty copy list would join to. */
-    let emitted: string | null = null;
-
-    /**
-     * The window keeps moving after load, so a single copy of the fixture scrolls out of it and the
-     * dial empties (#62). The clock re-filters what it holds against the live window on every
-     * render, so the scrolling needs no help — this only hands it copies it has not been given, and
-     * only when the set changes, since `setEvents` redraws every arc.
-     *
-     * Reads the clock the same way the tick above does, and must go on doing so: #72's `?now` /
-     * `?freeze` routes every time read through one seam, and a frozen clock has to freeze the copy
-     * set too. If this kept reading real time while the dial drew a pinned window, the copies would
-     * walk out of that window and leave it blank.
-     *
-     * Both the fixture and the window it is tiled across come from the scale (#34). The 1-hour dial
-     * is what makes this recurrence load-bearing rather than a nicety: its window is 55 minutes, so
-     * a single copy loses its elapsed arc within three minutes, is down to one arc by fifty, and is
-     * empty at seventy — where the 12-hour one takes about thirteen hours to go blank.
-     */
-    function refreshFixture(): void {
-      const view = dialWindow(now(), dialScale(scale));
-      const copies = fixtureCopyIndices(fixture, anchor, view).join(",");
-      if (copies === emitted) return;
-      emitted = copies;
-      clock.setEvents(recurringSampleEvents(fixture, anchor, view));
-    }
+    // Handed the same `now` the tick above reads, which is the whole of what `fixture-refresh.ts`
+    // exists to make checkable: a pinned dial whose copy set kept moving would empty itself (#80).
+    const refreshFixture = fixtureRefresher({
+      scale,
+      pin: clockPin,
+      now,
+      setEvents: (events) => clock.setEvents(events)
+    });
 
     refreshFixture();
     setStatusText("Sample events — not a real calendar");
