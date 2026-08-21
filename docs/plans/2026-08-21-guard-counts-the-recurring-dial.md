@@ -1,6 +1,6 @@
 # Guard counts the recurring dial, not one copy
 
-**Status:** in progress
+**Status:** in review (PR #130)
 **Issue:** #127
 **Docs:** README.md "Pinning the clock" section; `docs/DESIGN.md` (fixture recurrence #62/#79)
 
