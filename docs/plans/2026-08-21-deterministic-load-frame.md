@@ -1,6 +1,6 @@
 # One clock read at load, so the first frame is reproducible
 
-**Status:** in progress — the fix and its guards are unlanded; [#152](https://github.com/BenSeymourODB/clock-face-schedule/issues/152) says what is outstanding
+**Status:** done — shipped in [#155](https://github.com/BenSeymourODB/clock-face-schedule/pull/155)
 **Issue:** [#152](https://github.com/BenSeymourODB/clock-face-schedule/issues/152)
 **Docs:** `CLAUDE.md` ("Render before you believe it works" — the habit this corrupts), ADR 0005
 (browser-local time), #80 / #62 (why the anchor is read once at load), #76 (🔴 Deadline's boundary,
