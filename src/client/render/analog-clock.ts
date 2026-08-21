@@ -32,7 +32,12 @@ import {
 } from "./floating-label";
 import { windowTrack } from "./window-track";
 
-const DEFAULT_SIZE = 600;
+/**
+ * The dial's viewBox extent. Exported because the host has to convert its own pixel measurements
+ * into these units to hand a `labelMargin` back (#30 item 1), and a second copy of 600 is how the
+ * two would drift.
+ */
+export const DIAL_VIEWBOX_SIZE = 600;
 
 /** Clearance between the outermost arc and the nominal SVG edge. */
 const EDGE_MARGIN = 8;
@@ -85,8 +90,13 @@ export const RING_GAP_MIN = 2;
  * from the centre — so at 3 and 9 o'clock a label's centre was off-screen entirely and the clamp
  * had to drag it back across the dial (#21). A small fraction of the radius keeps every centre
  * inside the frame while still clearing the band.
+ *
+ * Exported for the same reason `ARC_BAND_RATIO` is: `dial-frame.test.ts` asks how far a card's
+ * *height* would reach at twelve o'clock, and the only honest way to ask that is against the locus a
+ * card starts from. Reading it back off a rendered card's radius conflates height with the vertical
+ * displacement pass (#134), which moves a centre off this circle and inflates the answer.
  */
-const LABEL_RADIUS_RATIO = 0.02;
+export const LABEL_RADIUS_RATIO = 0.02;
 
 /**
  * Label text size, as a fraction of the dial's radius.
@@ -118,6 +128,20 @@ export interface AnalogClockParams {
    * drawn window, and which of the face's two scales is emphasised.
    */
   scale?: DialScaleId;
+  /**
+   * How far past the viewBox a floating label's edge may reach, per side, in viewBox units — the
+   * board's spare width as ADR 0009 allocates it and the host measures it (#30 item 1).
+   *
+   * Stated from the *viewBox* because that is what every figure on the subject is in: 50.4 is what
+   * the renderer assumed before this existed, 234.5 is what a 16:9 board grants and 172.1 a 16:10
+   * one. `ClockBox.labelAllowance` is the same quantity measured from the dial's own box,
+   * `EDGE_MARGIN` further out, and the conversion happens here because this is the only place that
+   * knows both numbers.
+   *
+   * Omitted — or `null`, which is what a page with no layout yields — leaves the inherited
+   * allowance in place. The geometry never spends less than that either way.
+   */
+  labelMargin?: number | null;
 }
 
 export interface AnalogClockHandle {
@@ -129,15 +153,23 @@ export interface AnalogClockHandle {
   setTime(time: Date): void;
   /** Replace the event set and rebuild the arcs. */
   setEvents(events: ClockEventInput[]): void;
+  /**
+   * Re-grant the labels' margin after the page has been re-laid-out (#30 item 1).
+   *
+   * A no-op when the value has not changed, so a host may call it on every `resize` without
+   * rebuilding the arcs for a resize that did not move the board's edges.
+   */
+  setLabelMargin(margin: number | null): void;
 }
 
 export function analogClock({
   events,
-  size = DEFAULT_SIZE,
+  size = DIAL_VIEWBOX_SIZE,
   arcThickness: arcThicknessOverride,
   showSeconds = false,
   time = new Date(),
   scale: scaleId = "12h",
+  labelMargin = null,
 }: AnalogClockParams): AnalogClockHandle {
   const scale = dialScale(scaleId);
   const cx = size / 2;
@@ -157,14 +189,26 @@ export function analogClock({
 
   const labelRadius = outerRadius * (1 + LABEL_RADIUS_RATIO);
   const labelFontSize = roundCoord(outerRadius * LABEL_FONT_SIZE_RATIO);
-  const clockBox = {
-    top: cy - outerRadius,
-    bottom: cy + outerRadius,
-    left: cx - outerRadius,
-    right: cx + outerRadius,
-    height: outerRadius * 2,
-    width: outerRadius * 2,
-  };
+
+  /** Units past the viewBox a card may reach; re-granted on resize, so read at render time. */
+  let grantedMargin = labelMargin;
+
+  /**
+   * Rebuilt per render rather than captured, so `setLabelMargin` has one thing to change and the
+   * geometry is never handed a box that disagrees with the allowance it was measured for.
+   */
+  function layoutBox() {
+    return {
+      top: cy - outerRadius,
+      bottom: cy + outerRadius,
+      left: cx - outerRadius,
+      right: cx + outerRadius,
+      height: outerRadius * 2,
+      width: outerRadius * 2,
+      // The margin is stated from the viewBox and the box's own edge is `EDGE_MARGIN` inside it.
+      labelAllowance: grantedMargin === null ? undefined : grantedMargin + EDGE_MARGIN,
+    };
+  }
 
   const element = svg("svg", {
     "data-testid": "analog-clock",
@@ -202,6 +246,8 @@ export function analogClock({
   function renderEvents(): void {
     arcsLayer.textContent = "";
     labelsLayer.textContent = "";
+
+    const clockBox = layoutBox();
 
     // The origin is the angle origin only — it never moves the window, which rolls continuously
     // with the time (#25) rather than jumping at a period boundary. Both come from the scale
@@ -410,6 +456,13 @@ export function analogClock({
 
     setEvents(next: ClockEventInput[]): void {
       currentEvents = next;
+      renderEvents();
+      describe();
+    },
+
+    setLabelMargin(margin: number | null): void {
+      if (margin === grantedMargin) return;
+      grantedMargin = margin;
       renderEvents();
       describe();
     },

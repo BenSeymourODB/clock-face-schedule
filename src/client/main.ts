@@ -13,13 +13,14 @@ import {
   describePinnedInstant,
   getFetchWindow,
   getPeriodBounds,
+  labelMarginUnits,
   parseDialScaleId,
 } from "../shared/clock";
 import { decodePreferences, encodePreferences } from "../shared/preferences";
 import { readClockPin } from "./clock-pin";
 import { fixtureRefresher } from "./fixture-refresh";
 import { type PreferenceStore, preferenceStore, readPreferenceWire } from "./preferences";
-import { analogClock } from "./render/analog-clock";
+import { type AnalogClockHandle, DIAL_VIEWBOX_SIZE, analogClock } from "./render/analog-clock";
 import { type ScheduleStatus, describeStatus, nextStatus } from "./schedule-status";
 
 const TICK_INTERVAL_MS = 1_000;
@@ -110,6 +111,36 @@ function displayPreferences(mount: Element): PreferenceStore {
   });
 }
 
+/**
+ * The board's spare width, in the dial's own units — ADR 0009's allocation, measured (#30 item 1).
+ *
+ * `#dial` is the grid column the drawing sits in and its box is definite on both axes, so its
+ * rendered size is the scale the whole page resolved at. `clientWidth` rather than `innerWidth`
+ * because the latter counts a scrollbar, and this page has none by construction.
+ *
+ * `null` on a page with no layout — the preview before paint, a jsdom spec — which leaves the
+ * renderer on its inherited allowance rather than on a zero.
+ */
+function measureLabelMargin(mount: Element): number | null {
+  const box = mount.getBoundingClientRect();
+  return labelMarginUnits(box, document.documentElement.clientWidth, DIAL_VIEWBOX_SIZE);
+}
+
+/**
+ * Grant the margin now and again whenever the board's edges move.
+ *
+ * Re-measured on `resize` rather than computed once: a board rotated, a window resized, or a
+ * projector re-detected at a different resolution all change the allocation, and a card sized for
+ * the old one is either clipped or needlessly narrow. `setLabelMargin` ignores an unchanged value,
+ * so a resize that does not move the edges costs no rebuild.
+ */
+function trackLabelMargin(mount: Element, clock: AnalogClockHandle): void {
+  const apply = (): void => clock.setLabelMargin(measureLabelMargin(mount));
+
+  apply();
+  window.addEventListener("resize", apply);
+}
+
 function startDisplay(): void {
   const statusLine = document.querySelector("#status");
   if (!mount) return;
@@ -124,6 +155,9 @@ function startDisplay(): void {
     scale
   });
   mount.append(clock.element);
+
+  // After the append, so the box being measured is the one the drawing is laid out in.
+  trackLabelMargin(mount, clock);
 
   // Hands before data. A google.script.run round trip runs 0.5–2s and the server cache does not
   // help a cold start, so the wall shows a working clock rather than an empty panel.
@@ -284,6 +318,30 @@ async function renderDiagnostics(list: Element): Promise<void> {
   addRow(list, "browser time", new Date().toString(), "ok");
   if (clockPin) {
     addRow(list, "clock pin", describePinnedInstant(clockPin, now()), "note");
+  }
+
+  // ADR 0009's allocation is arithmetic over an assumed board, and #30 item 1 makes it a
+  // measurement — so the measurement is worth reading on the display rather than inferring it from
+  // the resolution. A margin at the inherited 50.4 on a widescreen board means the sizing rule did
+  // not resolve, which is #115 returning and is invisible in the drawing itself.
+  //
+  // The rendered size is quoted beside it because the margin is a count of *viewBox units* and so
+  // moves inversely with it — and this panel is one of the few places the dial is not the whole of
+  // the page, since the sections below it take height the dial would otherwise have. So the two
+  // numbers are only ADR 0009's figures when read together, and the pixel one is the direct check
+  // on #115: 600 px on a board taller than that is the defect, whatever the margin says.
+  if (mount) {
+    const margin = measureLabelMargin(mount);
+    const { width, height } = mount.getBoundingClientRect();
+
+    addRow(
+      list,
+      "label margin",
+      margin === null
+        ? "not measurable — the dial has no layout"
+        : `${margin.toFixed(1)} units per side past the viewBox, at ${Math.min(width, height).toFixed(0)} px of dial`,
+      margin === null ? "fail" : "ok"
+    );
   }
 
   const { periodStart, periodEnd } = getPeriodBounds(now());
