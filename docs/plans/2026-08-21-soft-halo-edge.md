@@ -1,6 +1,6 @@
 # Soften the AM/PM halo's edge, so a hand fades into the label rather than being notched
 
-**Status:** in review
+**Status:** done — shipped in [#132](https://github.com/BenSeymourODB/clock-face-schedule/pull/132)
 **Issue:** none — a follow-up asked for directly, on the back of #113
 **Docs:** `docs/DESIGN.md` (ADR 0009 — the millimetre scale), `CLAUDE.md` (the pinned-dial caveat)
 
