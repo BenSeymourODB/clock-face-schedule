@@ -233,3 +233,33 @@ export function encodePreferences(values: Partial<Preferences>): string {
   }
   return pairs.join(PAIR_SEPARATOR);
 }
+
+/**
+ * The wire form of a *set of preference names* — what a reset carries, since it names keys rather
+ * than values (#83). Separated by the same `;` the patch format puts between pairs, and in registry
+ * order, so the result is deterministic and therefore comparable in a test.
+ *
+ * Deliberately not expressible as a patch, and vice versa: `readWire` drops any entry with no `=`,
+ * and no `key=value` pair is itself a registry key. So sending one format where the other is
+ * expected names nothing and writes nothing, rather than doing something adjacent to what was meant.
+ *
+ * The filter is for order and repeats — the type already closes the set of names a caller can pass.
+ */
+export function encodePreferenceKeys(keys: readonly PreferenceKey[]): string {
+  return PREFERENCE_KEYS.filter((key) => keys.indexOf(key) !== -1).join(PAIR_SEPARATOR);
+}
+
+/**
+ * The preferences a reset wire names, in registry order and without repeats. Names the registry does
+ * not know are dropped, as they are on the patch path — this argument arrives from the browser.
+ *
+ * An empty wire names nothing, so it resets nothing. That direction is the deliberate one: the
+ * argument a caller reaches by accident must be the harmless one, and a full reset is every key
+ * named explicitly.
+ */
+export function decodePreferenceKeys(wire: string | null | undefined): PreferenceKey[] {
+  if (!wire) return [];
+
+  const named = wire.split(PAIR_SEPARATOR);
+  return PREFERENCE_KEYS.filter((key) => named.indexOf(key) !== -1);
+}
