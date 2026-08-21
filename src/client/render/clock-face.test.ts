@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { INK_HEIGHT_RATIO, type DialScaleId, textWidth } from "../../shared/clock";
+import { type DialScaleId, textWidth } from "../../shared/clock";
 import { clockFace } from "./clock-face";
 
 const CX = 300;
@@ -59,18 +59,28 @@ function at(hours: number, minutes = 0, seconds = 0): Date {
 }
 
 /**
+ * Ink reach either side of a line of capitals, as a fraction of font size.
+ *
+ * `INK_HEIGHT_RATIO`'s 1.2 em is the *em box*, which is what `getBBox` reports and what every
+ * radial gate on the band is measured to. Capitals have no descenders, so their real ink is roughly
+ * cap height — the same 0.35 em either side `RADIUS.hourNumeralInner`'s comment uses for the
+ * numerals, and the correction #78 made to the em-box model. Using the em box here would inflate
+ * the box by 4.6 units per side at the indicator's font size and stop it being conservative.
+ */
+const CAP_INK_HALF_EM = 0.35;
+
+/**
  * A `<text>` element's ink box, as the four corners the renderer would put it at.
  *
- * `text-anchor: middle` and `dominant-baseline: central` centre the glyphs on (x, y). Height comes
- * from `INK_HEIGHT_RATIO` — the same 1.2 em the rendered "PM" measures at 1.194 — and width from
- * `textWidth`, which is the only measure jsdom offers. That model *underestimates* two capitals at
- * weight 600 badly (1.2 em against a measured 1.768), so this box is narrower than the real one and
- * every overlap found against it is a real overlap.
+ * `text-anchor: middle` and `dominant-baseline: central` centre the glyphs on (x, y). Both
+ * dimensions come out *smaller* than the rendered glyphs — height from cap ink rather than the em
+ * box, width from `textWidth`, which underestimates two capitals at weight 600 badly (1.2 em
+ * against a measured 1.768) — so every overlap found against this box is a real overlap.
  */
 function glyphBox(element: Element): { x: number; y: number; width: number; height: number } {
   const fontSize = Number(element.getAttribute("font-size"));
   const width = textWidth(element.textContent ?? "", fontSize);
-  const height = fontSize * INK_HEIGHT_RATIO;
+  const height = fontSize * CAP_INK_HALF_EM * 2;
 
   return {
     x: Number(element.getAttribute("x")) - width / 2,
@@ -388,6 +398,45 @@ describe("clockFace", () => {
         // measures the hour hand alone as obscuring the word for ~21 minutes twice a day.
         expect(crossings).toBeGreaterThan(60);
         expect(crossed).toEqual(new Set(["hour-hand-halo", "minute-hand-halo", "second-hand-halo"]));
+      });
+
+      /**
+       * The cost side of mounting the label above the hands, and the one the first visual pass on
+       * #107 missed: the halo band is a stretch of every hand that gets erased, so a hand *ending*
+       * just past it keeps a stub instead of a tip. At the original 0.35 the 1-hour scale's
+       * shortened hour hand kept 5.83 units against its own 9.20 of width, and at 06:00 and 18:00
+       * all that survived past the label was a detached lozenge.
+       *
+       * Every hand, both scales — a mode-specific length is exactly what got missed.
+       */
+      it.each([
+        ["12h" as DialScaleId, "hour-hand", 0.045],
+        ["12h" as DialScaleId, "minute-hand", 0.028],
+        ["12h" as DialScaleId, "second-hand", 0.01],
+        ["1h" as DialScaleId, "hour-hand", 0.045],
+        ["1h" as DialScaleId, "minute-hand", 0.028],
+        ["1h" as DialScaleId, "second-hand", 0.01],
+      ])("leaves the %s %s a stub that still reads as a line", (scale, id, widthRatio) => {
+        const { element } = build(at(6, 0), true, scale);
+        const indicator = find(element, "period-indicator")!;
+        const halo = find(element, "period-indicator-halo")!;
+        const fontSize = Number(indicator.getAttribute("font-size"));
+
+        // The band the halo wipes out of anything beneath it: the glyphs' cap ink, plus half the
+        // stroke on each side — a stroke straddles the outline it follows.
+        const bandOuter =
+          Number(indicator.getAttribute("y")) -
+          CY +
+          fontSize * CAP_INK_HALF_EM +
+          Number(halo.getAttribute("stroke-width")) / 2;
+
+        const hand = find(element, id)!;
+        const tip = CY - Number(hand.getAttribute("y2"));
+        const width = FACE_RADIUS * widthRatio;
+
+        // Round caps make a zero-length stub a dot of exactly this width; twice that is the point
+        // it reads as elongated instead.
+        expect(tip - bandOuter).toBeGreaterThan(2 * width);
       });
 
       it("gives the word a halo of its own, in `var(--card)`, so it keeps a known ground", () => {

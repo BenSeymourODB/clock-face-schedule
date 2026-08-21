@@ -98,14 +98,54 @@ Twice the hands' own halo rather than the same, because the job is not symmetric
 separates a 9.2-unit bright line from the arcs behind it, while this one has to separate a ~2-unit
 grey letter stem from that same 9.2-unit bright line.
 
-### Radial cost
+That measurement governs a hand passing **beside** a stem, which is the case legibility turns on. A
+hand running along the word's own axis — every half hour for the minute hand — is broken outright
+instead, because the gap between two capitals is narrower than the two dilations meeting across it.
+Deliberate: a label interrupting a hand is a date window and the eye completes the line. What is
+*not* acceptable is that break landing near a hand's tip, which is the next section.
+
+### The band is a stretch of every hand that gets erased
+
+**The defect the first visual pass missed, and the reason the indicator moves.** The halo mounts
+above the hands, so the band it dilates — cap ink plus 4.09 either side, **21.05 units** at the
+shipped 204.4 face radius — is erased out of any hand crossing it. Fine where the hand runs on past
+it. Not fine where the hand *ends* just beyond it:
+
+| | 1-hour hour hand | 12-hour hour hand | minute hand | second hand |
+| --- | --- | --- | --- | --- |
+| tip radius | 87.89 | 130.82 | 183.96 | 190.09 |
+| own width | 9.20 | 9.20 | 5.72 | 2.04 |
+| stub past the band, at `periodIndicator: 0.35` | **5.83** | 48.75 | 101.89 | 108.02 |
+| stub ÷ width | **0.63** | 5.30 | 17.8 | 52.9 |
+
+At 06:00 and 18:00 in the 1-hour scale mode, all that survived past the label was a 5.83-unit
+lozenge — shorter than the hand's own width, so with round caps it read as a **detached blob sitting
+on the inner "6"**, and the hand pointed at nothing. Missed on the first pass because that mode was
+rendered at 18:30 (hand at 195°, off the axis) and at 12:00 (hand pointing away) — never collinear.
+
+A stub reads as a line rather than a mark at roughly twice the width it is drawn at, which caps the
+band's outer edge at 69.5:
+
+| `periodIndicator` | centre | band outer | 1-hour stub | ÷ width |
+| --- | --- | --- | --- | --- |
+| 0.35 — before | 71.54 | 82.07 | 5.83 | 0.63 |
+| 0.30 | 61.32 | 71.85 | 16.05 | 1.74 |
+| **0.28** | 57.23 | 67.76 | **20.13** | **2.19** |
+| 0.26 | 53.14 | 63.67 | 24.22 | 2.63 |
+
+**0.28.** The 0.35 was not chosen against the 1-hour hand — that hand is two days old (#34) and
+nothing had measured the two together; 71.54 sitting 16 units inside a tip at 87.89 was a
+coincidence. Moving in costs nothing on the other side: the band's inner edge lands at 46.70, which
+is 39 units clear of the centre dot and 22 clear of the second hand's counterweight tail at 24.53.
+
+### Radial cost outward
 
 The halo is `var(--card)`, so against the face it is invisible: its extent costs nothing on its own
-and matters only where it would *erase* a neighbour. It dilates the ink by 4.09 units per side, from
-78.0 out to **82.1**. In the 1-hour scale mode the nearest thing outward is the inner hour ring's
-ink at 95.05, leaving **13.0** — against the chip's 10.4. Confirmed by rendering that mode at 12:00,
-where both hands point away and the halo is the only thing that could touch the ring: the inner "6"
-comes out whole. Nothing else is within 50 units.
+and matters only where it would *erase* a neighbour. At 0.28 the band's outer edge is 67.76, so the
+1-hour mode's inner hour ring — the nearest thing outward, ink from 95.05 — is **27.3** units clear,
+where the original position left 13.0 and the rejected chip 10.4. Confirmed by rendering that mode
+at 12:00, where both hands point away and the halo is the only thing that could touch the ring: the
+inner "6" comes out whole. Nothing else is within 25 units.
 
 ## Tests the suite is missing
 
@@ -117,8 +157,20 @@ never that it can be read.
 2. The indicator is painted above everything that can cover it: both hands, both halos, the second
    hand, and the centre dot.
 
+And a third the issue could not have named, because it is a property of the fix rather than of the
+defect: **the halo band leaves every hand a stub at least twice its own width**, in both scale modes.
+That is the assertion the amputation above needed. It reads the tip and the band off the rendered
+attributes, so it cannot drift from the code, and it is parameterised by scale because a
+mode-specific hand length is exactly what got missed by eye.
+
 Plus, for the fix itself: the halo carries the same text as the indicator through `setTime` (or AM/PM
 would desynchronise at noon), and the halo's stroke width is twice the hands'.
+
+One correction to make while writing them: the glyph box must be measured to **cap ink (0.35 em
+either side)**, not to `INK_HEIGHT_RATIO`'s em box. Capitals have no descenders, and the em box is
+4.6 units per side larger at this font size — enough that the box would stop being the conservative
+one its comment claims, and enough for the vacuity guard to ride on margin rather than on glyphs.
+The same correction #78 made to the band's radial gates.
 
 ## Deferred
 

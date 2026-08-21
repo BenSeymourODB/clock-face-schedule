@@ -41,7 +41,23 @@ const RADIUS = {
    * numeral, which is that "12" at 6.32.
    */
   numeralOneHour: 0.7,
-  periodIndicator: 0.35,
+  /**
+   * Pulled in from 0.35 so the indicator's halo does not amputate a hand (#107).
+   *
+   * The halo mounts above the hands, so the band it dilates — the glyphs' ink plus
+   * `PERIOD_HALO_MULTIPLE` either side, 21.05 units at the shipped 204.4 face radius — is a stretch
+   * of every hand that gets erased. That is the intended reading where a hand runs on past it. It
+   * is not where the hand *ends* just beyond it, and the 1-hour scale's shortened hour hand did:
+   * tipping at 87.89 against a band ending at 82.07, it kept a 5.83-unit stub, shorter than its own
+   * 9.20-unit width, so at 06:00 and 18:00 all that survived past the label was a detached lozenge
+   * sitting on the inner "6".
+   *
+   * A stub reads as a line rather than a mark at about twice the width it is drawn at, which caps
+   * the band's outer edge at 69.5 and this ratio at 0.2885. 0.28 leaves 20.13 units — 2.19× — and
+   * still holds the band's inner edge 39 units clear of the centre dot. Nothing else lies between:
+   * the 12-hour hour hand keeps 63 units past the band and the minute hand 116.
+   */
+  periodIndicator: 0.28,
   /**
    * Hand lengths, each reaching the thing it is read against.
    *
@@ -137,6 +153,12 @@ const HAND_HALO_RATIO = 0.01;
  * the "P", on a 600-px raster: ×1 leaves a single antialiased pixel of face between the two — the
  * amount a display's own bloom swallows — and ×3 costs five of the hand's nine pixels. ×2 buys
  * three while leaving two thirds of the hand.
+ *
+ * That measurement governs a hand passing *beside* a stem, which is the case legibility turns on.
+ * A hand running along the word's own axis — every half hour for the minute hand — is broken
+ * outright instead, because the gap between two capitals is narrower than the two dilations that
+ * meet across it. Deliberate: a label interrupting a hand is a date window, and the eye completes
+ * the line. `RADIUS.periodIndicator` is what keeps that break away from a hand's tip.
  */
 const PERIOD_HALO_MULTIPLE = 2;
 
