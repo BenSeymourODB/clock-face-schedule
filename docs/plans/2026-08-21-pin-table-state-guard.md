@@ -1,6 +1,6 @@
 # Tie README's pin table to the states the dial renders
 
-**Status:** in progress — the guard and the vocabulary rewrite are outstanding as [#104](https://github.com/BenSeymourODB/clock-face-schedule/issues/104)
+**Status:** done — shipped in [#162](https://github.com/BenSeymourODB/clock-face-schedule/pull/162)
 **Issue:** [#104](https://github.com/BenSeymourODB/clock-face-schedule/issues/104)
 **Docs:** [#103](https://github.com/BenSeymourODB/clock-face-schedule/issues/103) / #105 (the numeric
 half of the same paragraph, and the `?raw` reader this extends), #110's review comment on #104 (the
@@ -92,3 +92,17 @@ to understand it:
 - **A README build step** — rejected above.
 - **The 1-hour fixture's own pins.** README's table is the 12-hour one; the 1-hour fixture has its
   own figures and no pin table.
+- **The card counts two paragraphs below the table**, which are the third copy of the same class.
+  Deferred to #163 rather than folded in, and for a reason this plan's approach does not cover: a
+  card count is not fixture-invariant the way an arc's state is — it follows angular position, the
+  granted label margin and the wrap budget, so pinning the three integers would go red on changes
+  that are working as intended.
+
+## What building it changed about the design
+
+The cluster phrase was `the <n>-deep cluster:` until a mutation run found that the `01:30` row read
+*"The four-deep cluster mid-drain:"* and matched nothing — so that row carried no membership claim,
+and deleting a member from it stayed green. That is the failure this plan exists to prevent, one
+level down, and it was invisible to reasoning and immediate under mutation. Two changes came out of
+it: the phrase may carry a word of its own before the colon, and a cell that mentions a cluster the
+parser cannot read now **throws** rather than yielding nothing.
