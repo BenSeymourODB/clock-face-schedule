@@ -61,8 +61,12 @@ window-widths there against a bit over one on the 12-hour dial.
 
 ## Not in scope
 
-- **The `?demo=1` + evening pin note** ("worth checking while there"). Measured and reported on
-  #104, which owns README's state descriptions, rather than edited here — a fixture-state table is
-  that issue's subject and half-correcting it would make its eventual fix harder to review.
+- **The `?demo=1` + evening pin note** ("worth checking while there"). Measured, and it is a real
+  defect: README says a pinned evening dial is empty, a guard agrees, and the dial draws fifteen
+  arcs — both count one fixture copy while the app draws every copy since #62. Filed as
+  [#127](https://github.com/BenSeymourODB/clock-face-schedule/issues/127) with the figures rather
+  than fixed here. It wants doing beside #104, which is open on the state descriptions in the same
+  README table and for the same reason; correcting the counts alone would leave the rows above them
+  describing the same pre-recurrence dial.
 - **Closing or retitling #80.** The fix landing in passing is worth recording, but which of those
   the issue becomes is the maintainer's call.
