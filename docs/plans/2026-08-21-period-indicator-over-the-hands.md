@@ -1,6 +1,6 @@
 # The AM/PM indicator has to survive the hands crossing it
 
-**Status:** in review
+**Status:** done — shipped in [#113](https://github.com/BenSeymourODB/clock-face-schedule/pull/113)
 **Issue:** #107
 **Docs:** `docs/DESIGN.md` (ADR 0007 — the five CSS custom properties), `README.md` (`?now=`/`&freeze=1`)
 
