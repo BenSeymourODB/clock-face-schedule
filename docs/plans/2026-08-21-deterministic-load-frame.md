@@ -66,9 +66,16 @@ const clock = analogClock({ …, time: loadedAt });
 const refreshFixture = fixtureRefresher({ scale, pin: clockPin, loadedAt, now, setEvents });
 ```
 
-Nothing else needs to change. The pinned cases are already immune — `createTimeSource` on a frozen
-pin returns one instant however often it is called — so this is a fix for the unpinned load, which is
-the one a reviewer opens by default.
+Nothing else needs to change, and every pinned case is already immune — for two different reasons,
+which is worth splitting because only one of them is the obvious one:
+
+- `?freeze=1`, with or without `?now=`, because `createTimeSource` on a frozen pin returns one
+  instant however often it is called.
+- `?now=` **without** `freeze`, where two reads genuinely differ — `origin + (Date.now() −
+  createdAt)` — but a displaced pin is anchored through `getDayStart`, which quantises to midnight.
+  A sub-second difference cannot move that, short of a load spanning midnight itself.
+
+So this is a fix for the unpinned load, which is the one a reviewer opens by default.
 
 ## Why the boundary then reads as elapsed rather than as a drain
 
@@ -83,14 +90,17 @@ With `anchor = loadedAt − 3h`, 🔴 Deadline's `at(3, 0)` end is `loadedAt` ex
 trueEndAngle` and it draws no drain — and on the next tick it is past, so it draws none then either.
 The arc is elapsed in both frames, which is the same picture at 150 ms and at 2 s.
 
-This is the strictness #153 had to separate from `hasEventInProgress`, which is inclusive at the
-start. Both stay as they are; only the clock read moves.
+**On this boundary the two functions agree**, and an earlier draft of this document had that
+backwards. `hasEventInProgress` is `start <= now && now < end` — inclusive at the start, *exclusive*
+at the end — so an event ending exactly at `now` is out by both measures. The disagreement #153 is
+about is at the **start** boundary, where an event beginning exactly at `now` keeps the rebuild
+cadence ticking and draws no drain. Both stay as they are; only the clock read moves.
 
 ## Tests
 
-Two, in `fixture-refresh.test.ts`, which already fakes the system clock for exactly this class of
+Three in `fixture-refresh.test.ts`, which already fakes the system clock for exactly this class of
 bug (#80's regression is the same shape: a read of the wrong clock that no count of emissions could
-see).
+see), plus one on the load path itself.
 
 1. **The mechanism, fixture-agnostic and scale-swept.** Construct one refresher with the system
    clock still at `loadedAt` and another with it advanced past it, and assert the two hand the dial
@@ -98,16 +108,54 @@ see).
    fails there for both scales; after the change the anchor cannot see the delay at all.
 2. **The symptom, as #152 reports it.** With the clock advanced between the two reads, exactly one
    of the emitted arcs is mid-drain at the dial's own `loadedAt` — asserted through
-   `computeDrainFraction` on resolved angles, which is what actually decides a drain (#153), not
-   through `hasEventInProgress`, which disagrees on precisely this boundary.
+   `computeDrainFraction` on resolved angles, which is what actually decides a drain, rather than
+   through `hasEventInProgress`, which is one boolean over the whole set and so cannot say *which*
+   arc drains.
+3. **The pinned dial, held where it already was.** Not a regression risk today (see the two
+   immunities above), and that is the point: it is the case a later reader "simplifying" the anchor
+   back to a local read would still see pass, and pinned dials are what every screenshot in this
+   repo is judged on.
 
-The second is 12-hour only, and that is a measurement rather than an omission: the 1-hour fixture's
-nearest event to its own boundary is `"p"`, ending `at(3)` against a 5-minute look-behind, so a
-sub-second delay cannot move it across `now`. The race is scale-independent; the *visible* drain it
-produces is the 12-hour fixture's boundary coincidence.
+The second is 12-hour only, and that is a measurement rather than an omission. On the 1-hour fixture
+a later anchor can only *gain* a drain by dragging an event's end past `now` — `"p"` ends `at(3)`
+against a 5-minute look-behind, so **120 s** of margin — or *lose* one by dragging a start past it —
+`"q"` begins `at(4)`, so **60 s**, which is the binding figure and still sixty ticks away. The race
+is scale-independent; the *visible* drain it produces is the 12-hour fixture's boundary coincidence.
+
+### And one on the load path, because that is where the bug was
+
+Both files the bug touched were already fully covered, and the bug was the *order* the host called
+them in. So the required `loadedAt` option closes the omission (`main.ts` cannot forget to pass one)
+but not the wrong value: **`loadedAt: now()` at the call site typechecks, keeps all 1,508 tests
+green, and puts both drains straight back on the built preview.** Verified by doing it.
+
+`main.ts` is a top-level script and has no spec, so `main-load-order.test.ts` reads it as source —
+the only place that shape is visible — and asserts the dial's `time` and the refresher's `loadedAt`
+name one identifier, that the identifier is a bare variable rather than a call, that the refresher's
+arguments contain no clock read, and that exactly one `now()` read precedes the dial. A source-shape
+assertion buys nothing about behaviour and rots if the load path is restructured, so every pattern is
+required to match and a miss throws saying so — the answer `clock-pin.test.ts` already gives for
+README's prose.
+
+The same argument retires `analogClock`'s `time = new Date()` default in passing. All six call sites
+already pass a time, so requiring it costs nothing, and what it removes is a clock read outside
+#72's `?now` / `?freeze` seam that a future caller could reach for by omission.
 
 ## Verify by rendering
 
 The issue's own recipe: sample the gradient id list at 150 ms and at 2 s on the unpinned preview.
-They must agree, and both must carry `arc-drain-n-drain` alone. A screenshot of the load frame goes
-in the PR beside one taken after it settles — the point being that they are the same picture.
+Measured on the built preview at 1920×1080, at 150, 300, 600, 1,200 and 2,500 ms, the list is the
+same four entries throughout — `arc-fade-z-start`, `arc-fade-n-drain`, `arc-drain-n-drain`,
+`arc-fade-y-end` — of which exactly one is a drain. Before the change, `arc-drain-b-drain` was a
+fifth entry at the first three samples and gone by the fourth.
+
+The picture, too, and it is visible rather than only a DOM difference — the remaining fill at
+🔴 Deadline's tip is sub-pixel, so this could have gone the other way. Diffing the four-deep cluster
+at 3× between the load frame and the settled frame *within one load*: **981 pixels** past 16/255 on
+`main` (max channel delta 228), against **1** after (max 38, which is 2.35 s of legitimate drain
+motion). `main`'s differing pixels all sit in one 19 × 35 CSS-px box at 🔴 Deadline's end, and what
+they show is the elapsed outline's **end cap missing** — the arc terminates open at 150 ms, reading
+as damage, and is closed again at 2,500 ms.
+
+Three pinned dials (`?now=04:15`, `03:00`, `08:30`, each frozen) render pixel-identical before and
+after: 0 of 2,073,600 on all three, which is the immunity argument above, measured.

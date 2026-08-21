@@ -74,6 +74,11 @@ function refresher(pin: ClockPin | null, scale: DialScaleId, loadedAt?: Date) {
  * decides it in: the drawn set, resolved to *true* (window-clamped) angles, through
  * `computeDrainFraction`. An event clamped to the window's edge has a true angle its raw timestamps
  * do not show, which is why this goes the long way round rather than comparing dates.
+ *
+ * A strict **superset** of what is drawn, deliberately: `analog-clock.ts` also gates the drain on
+ * the event not being in `elapsedEventIds`, which this omits. Omitting it can only over-report, so
+ * an expected set of one stays at least as hard to satisfy as the renderer's — where re-implementing
+ * the gate would risk encoding the same assumption twice, which is the failure `CLAUDE.md` names.
  */
 function drainingIds(events: ClockEventInput[], now: Date, scale: DialScale): string[] {
   const view = dialWindow(now, scale);
@@ -228,12 +233,16 @@ describe("fixtureRefresher, on the load frame", () => {
    * What the refresher hands the dial when the clock has moved on by `delayMs` between the dial's
    * own read and the refresher's construction — the load order `main.ts` has.
    */
-  function loadFrame(scale: DialScaleId, delayMs: number): ClockEventInput[] {
+  function loadFrame(
+    scale: DialScaleId,
+    delayMs: number,
+    pin: ClockPin | null = null
+  ): ClockEventInput[] {
     vi.setSystemTime(LOADED_AT);
-    const loadedAt = new Date();
+    const loadedAt = pin ? pin.origin : new Date();
 
     vi.setSystemTime(new Date(LOADED_AT.getTime() + delayMs));
-    const { refresh, emissions } = refresher(null, scale, loadedAt);
+    const { refresh, emissions } = refresher(pin, scale, loadedAt);
     refresh();
 
     return emissions[0]!;
@@ -252,16 +261,34 @@ describe("fixtureRefresher, on the load frame", () => {
   /**
    * The symptom, in the terms #152 reports it, and 12-hour only — which is a measurement rather than
    * an omission. The race is scale-independent; the *visible* drain it opens is the 12-hour
-   * fixture's boundary coincidence. The 1-hour fixture's nearest event to its own anchor boundary is
-   * `"p"`, ending `at(3)` against a 5-minute look-behind, so no sub-second delay moves it across
-   * `now`.
+   * fixture's boundary coincidence. On the 1-hour fixture, against a 5-minute look-behind, a later
+   * anchor can only gain a drain by dragging an event's *end* past `now` (`"p"` ends `at(3)`, 120 s
+   * of margin) or lose one by dragging a *start* past it (`"q"` begins `at(4)`, **60 s** — the
+   * binding figure, 60 ticks away).
    *
    * Asserted through `computeDrainFraction`, which is what decides a drain, rather than
-   * `hasEventInProgress`, which is the rebuild cadence and disagrees on exactly this boundary
-   * (#153): `"b"` ends *at* the frame's `now`, so the strict test reads it as elapsed and the
-   * inclusive one would not.
+   * `hasEventInProgress`, which is the rebuild cadence — and which cannot express this at all: it is
+   * one boolean over the whole set, where the claim here is *which* arc drains and that there is one
+   * of it.
+   *
+   * The two happen to agree on this particular boundary, which is worth stating because #153 is
+   * about a case where they do not. `hasEventInProgress` is `start <= now && now < end`, so it is
+   * inclusive at the start and exclusive at the end; `computeDrainFraction` is strict at both. An
+   * event ending exactly at `now` — which `"b"` does — is out by both. The disagreement is at the
+   * *start* boundary, where an event beginning exactly at `now` is "in progress" and draws no drain.
    */
   it("draws one drain on the load frame, where the delayed anchor opened two", () => {
     expect(drainingIds(loadFrame("12h", LOAD_DELAY_MS), LOADED_AT, TWELVE_HOUR_SCALE)).toEqual(["n"]);
+  });
+
+  /**
+   * A pinned dial was never affected — `fixtureAnchor` sends a displaced pin through `getDayStart`,
+   * which quantises to midnight, and a frozen clock reads one instant however often it is asked. So
+   * this is here to keep it that way: it is the case a later "simplification" that reads the clock
+   * inside `fixtureAnchor` again would still pass on, and the pinned dial is what every screenshot
+   * in this repo is judged on.
+   */
+  it.each(SCALES)("leaves a pinned dial's load frame alone — %s", (scale) => {
+    expect(loadFrame(scale, LOAD_DELAY_MS, displaced)).toEqual(loadFrame(scale, 0, displaced));
   });
 });
