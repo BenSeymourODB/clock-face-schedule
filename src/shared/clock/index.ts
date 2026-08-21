@@ -97,6 +97,7 @@ export {
   ONE_HOUR_SCALE,
   TWELVE_HOUR_SCALE,
   dialOrigin,
+  DIAL_SCALES,
   dialScale,
   dialWindow,
   parseDialScaleId,
