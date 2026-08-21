@@ -84,8 +84,8 @@ which exceeds `0.02 × outerRadius` at **every** dial size; at 3 and 9 o'clock t
 the half-*width*, which is larger again. So the anchor is always inside the card, the card's rects
 are painted after the connector inside the same `<g>`, and the line is always covered.
 
-That is #30 / #88's geometry and not this change's to move — filed as its own issue rather than
-widened into this one. It does mean the honest claim for this PR is narrow, and it is stated that
+That is #30 / #88's geometry and not this change's to move — filed as #117 rather than widened into
+this one, with the assertion that would have caught it. It does mean the honest claim for this PR is narrow, and it is stated that
 way: **this change makes the connector correct, not yet visible.** The render below shows it on the
 real dial with `LABEL_RADIUS_RATIO` temporarily raised — an experiment, not a committed change —
 because that is the only way to see the element at all today.
@@ -128,11 +128,11 @@ paint is what a 8-bit screen can do with it.
 
 ## Not in scope
 
-- **The occlusion**, which is `LABEL_RADIUS_RATIO` and belongs with #30 / #88. Filed separately.
-- **The card's border**, which measures 1.00–2.14:1 against its own washed field across the palette
-  — ⚪ at 1.00 and 🟡 at 1.20. It is a different element with a different ground and a different
-  question (the card's *shape* is never in doubt: its light field is ~17:1 on the page), so it is
-  filed rather than folded in. Note it contradicts the premise in #93's body that "the card's own
-  linework is fine": #29's 10.9:1 figure is the card's *text* on the washed field, not its border.
+- **The occlusion**, which is `LABEL_RADIUS_RATIO` and belongs with #30 / #88 — **#117**.
+- **The card's wash and border**, which measure 1.000–1.476:1 and 1.00–2.14:1 against the field they
+  sit on — ⚪ washes to `#f2f4f8` exactly, so a light event's card carries no colour at all. A
+  different element on a different ground with a design decision attached, so **#118** rather than
+  folded in. Note it contradicts the premise in #93's body that "the card's own linework is fine":
+  #29's 10.9:1 figure is the card's *text* on the washed field, not its wash or its border.
 - **#30's collision work**, which will move this line. The issue asked whether to wait for it; the
   answer taken is no, because a colour is not a position.
