@@ -62,13 +62,22 @@ export const ONE_HOUR_SCALE: DialScale = {
   lookaheadMinutes: 50
 };
 
-const SCALES: Record<DialScaleId, DialScale> = {
+/**
+ * Every scale the dial has, keyed by id.
+ *
+ * Exported so a caller can enumerate the scales rather than list them — a hand-written list is how
+ * a new scale gets past a check written for the old ones, and the `DialScaleId` union forces an
+ * entry here for every scale that exists. `event-arc.test.ts` iterates it to hold #58's
+ * feather/drain clearance, which is a function of `lookbehindMinutes`, across whatever scales the
+ * dial grows.
+ */
+export const DIAL_SCALES: Record<DialScaleId, DialScale> = {
   '12h': TWELVE_HOUR_SCALE,
   '1h': ONE_HOUR_SCALE
 };
 
 export function dialScale(id: DialScaleId): DialScale {
-  return SCALES[id];
+  return DIAL_SCALES[id];
 }
 
 /**
