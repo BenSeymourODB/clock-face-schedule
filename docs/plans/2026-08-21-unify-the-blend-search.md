@@ -1,6 +1,6 @@
 # One blend search, and a tie-break that agrees with itself
 
-**Status:** in review
+**Status:** done — shipped in [#109](https://github.com/BenSeymourODB/clock-face-schedule/pull/109)
 **Issue:** [#97](https://github.com/BenSeymourODB/clock-face-schedule/issues/97)
 **Docs:** #94 / #66 (where `adjustCompositeForContrast` comes from), #96 / #95 (where
 `adjustForContrast`'s target rule was corrected), #81 (the light scheme, the reason either

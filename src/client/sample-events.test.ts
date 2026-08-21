@@ -200,8 +200,8 @@ describe("fixtureCopyIndices", () => {
   });
 
   it("is stable inside the two-copy regime, where the poll gate depends on it", () => {
-    // main.ts re-emits only when this changes, so churn here would redraw every arc every five
-    // minutes. The single-copy regime is the easy case; this is the one worth sampling.
+    // fixture-refresh.ts re-emits only when this changes, so churn here would redraw every arc
+    // every five minutes. The single-copy regime is the easy case; this is the one worth sampling.
     expect(fixtureCopyIndices(TWELVE_HOUR_FIXTURE, ANCHOR, windowAtPhase(200))).toEqual(
       fixtureCopyIndices(TWELVE_HOUR_FIXTURE, ANCHOR, windowAtPhase(600))
     );
@@ -367,9 +367,9 @@ describe("the 1-hour fixture, recurring", () => {
   });
 
   it("is stable between polls inside the two-copy regime", () => {
-    // main.ts re-emits only when this changes, and the 1-hour window crosses a seam every 78
-    // minutes rather than every fourteen hours — so churn here would redraw every arc far more
-    // often than on the 12-hour dial.
+    // fixture-refresh.ts re-emits only when this changes, and the 1-hour window crosses a seam
+    // every 78 minutes rather than every fourteen hours — so churn here would redraw every arc far
+    // more often than on the 12-hour dial.
     expect(fixtureCopyIndices(ONE_HOUR_FIXTURE, ANCHOR, view(20))).toEqual(
       fixtureCopyIndices(ONE_HOUR_FIXTURE, ANCHOR, view(40))
     );

@@ -45,8 +45,9 @@ export function sampleEvents(windowStart: Date): ClockEventInput[] {
     // wrapping title here is on a lone arc, so nothing exercised text sized from a divided band
     // against an outline sized from the whole of it (#67). 45 visual units against the 44 its ring
     // gives, so it wraps by one word; well inside the 88 two lines can carry, so it stays on the arc
-    // rather than overflowing to a card. This is the arc where the clearance cap binds: the stack
-    // wants 4.58 units of half-height in the 4.12 the outline leaves, so the font yields to 3.93.
+    // rather than overflowing to a card. This is the arc where the clearance cap binds hardest: the
+    // stack's ink wants 5.45 units of half-height in the 4.12 the outline leaves, so the font yields
+    // from 4.36 to 3.30 (#90 — it read 3.93 against the em box, and 3.59 against #89's offset).
     { id: "k", title: "🟠 Swimming Group B Kit Check and Coach Handover", startDate: at(1, 45), endDate: at(2, 45), isAllDay: false, fallbackColor },
     // Overlaps nothing — should keep the whole band despite the cluster above. Ends 55 minutes
     // before "j" starts, deliberately, so the stretch between them is empty *and inside* the
@@ -158,7 +159,14 @@ export function oneHourSampleEvents(windowStart: Date): ClockEventInput[] {
     // Also the outer arc of the three-deep cluster, which runs +15 to +22.
     { id: "q", title: "🟢 🎮 Maths Starter", startDate: at(4), endDate: at(30), isAllDay: false, fallbackColor },
     { id: "r", title: "🔴 Spelling Test", startDate: at(12), endDate: at(26), isAllDay: false, fallbackColor },
-    { id: "s", title: "🟣 Reading", startDate: at(15), endDate: at(22), isAllDay: false, fallbackColor },
+    // Innermost of the three, and the only **two-line title on a three-deep ring** in either
+    // fixture: #90 moved that depth from "the ring ratio wins" to "the outline wins", and the
+    // 12-hour fixture's stacked title is four deep, so nothing showed the boundary it moved. 54
+    // visual units against the 44 its ring gives, so it wraps by one word and stays well inside the
+    // 88 two lines carry — on the arc rather than promoted to a card, which would sidestep the
+    // question. The font yields 4% here against 24% four deep, which is the case worth looking at:
+    // a small yield on text #70 already calls too small.
+    { id: "s", title: "🟣 Reading Circle and Quiet Reflection in the Book Corner", startDate: at(15), endDate: at(22), isAllDay: false, fallbackColor },
     // One minute is 6° even here, so the minimum-span floor still has something to hold open —
     // the floor is angular and does not scale with the mode, which is the behaviour to keep sight of.
     { id: "n", title: "🟠 Bell", startDate: at(31), endDate: at(32), isAllDay: false, fallbackColor },
@@ -244,8 +252,8 @@ export const FIXTURE_PERIOD_MINUTES = TWELVE_HOUR_FIXTURE.periodMinutes;
  * Which copies of `fixture` reach `[windowStart, windowEnd)`, as offsets in whole periods from the
  * load-time anchor.
  *
- * Usually one, two across a seam. `main.ts` re-emits only when this changes, so it must be stable
- * between advances rather than recomputed into a new-looking value every poll.
+ * Usually one, two across a seam. `fixture-refresh.ts` re-emits only when this changes, so it must
+ * be stable between advances rather than recomputed into a new-looking value every poll.
  *
  * A copy is bounded by its span, and a fixture need not be contiguous — the 12-hour one's largest
  * internal gap is 55 minutes. So a window narrower than that gap could be handed a copy with
