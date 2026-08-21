@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { roundCoord } from "../../shared/clock";
-import { floatingLabel, floatingLabelGeometry } from "./floating-label";
+import { compositeOver, contrastRatio, roundCoord } from "../../shared/clock";
+import { arcFillColor, BAND_BACKGROUND } from "./event-arc";
+import { connectorColor, floatingLabel, floatingLabelGeometry } from "./floating-label";
 
 const CX = 300;
 const CY = 300;
@@ -82,6 +83,8 @@ describe("floatingLabel", () => {
     });
 
     it("borders in the event colour", () => {
+      // The connector matches only because green clears its floor untouched (#93) — the colours
+      // that do not are measured below, where the floor itself is the subject.
       expect(part(group, "border")?.getAttribute("stroke")).toBe("#22c55e");
       expect(part(group, "connector")?.getAttribute("stroke")).toBe("#22c55e");
     });
@@ -148,6 +151,96 @@ describe("floatingLabel", () => {
 
       expect(x1).toBeCloseTo(CX, 4);
       expect(y1).toBeCloseTo(CY - ANCHOR_RADIUS, 4);
+    });
+
+    /**
+     * #93: the connector is a graphical object on the page's ground, and for the darkest colours it
+     * was not a faint line but no line — ⚫ at 1.15:1, 🟤 at 1.68. These measure the *painted*
+     * stroke, which is the only version of it a viewer meets: the attribute is the authored-or-
+     * floored colour and the paint is that colour composited at `CONNECTOR_OPACITY`.
+     */
+    describe("colour, against the page it crosses", () => {
+      /** WCAG 1.4.11's floor for a non-text object — the same one #66 gave a filled arc's body. */
+      const AA_GRAPHICAL_OBJECT = 3;
+      const CONNECTOR_OPACITY = 0.6;
+
+      /** What a viewer sees where the connector is stroked, against the ground beside it. */
+      function painted(stroke: string): number {
+        const over = compositeOver(BAND_BACKGROUND, stroke, CONNECTOR_OPACITY);
+        return contrastRatio(over as string, BAND_BACKGROUND) as number;
+      }
+
+      function strokeOf(color: string): string {
+        return part(render({ color }), "connector")?.getAttribute("stroke") ?? "";
+      }
+
+      /** Every colour the dial can be handed: the nine dots, Google's eleven, and the fallback. */
+      const EVERY_COLOUR = [
+        ["🔴 red-500", "#EF4444"],
+        ["🟠 orange-500", "#F97316"],
+        ["🟡 yellow-500", "#EAB308"],
+        ["🟢 green-500", "#22C55E"],
+        ["🔵 blue-500", "#3B82F6"],
+        ["🟣 purple-500", "#A855F7"],
+        ["⚫ gray-800", "#1F2937"],
+        ["⚪ gray-100", "#F3F4F6"],
+        ["🟤 amber-800", "#92400E"],
+        ["Lavender", "#a4bdfc"],
+        ["Sage", "#7ae7bf"],
+        ["Grape", "#dbadff"],
+        ["Flamingo", "#ff887c"],
+        ["Banana", "#fbd75b"],
+        ["Tangerine", "#ffb878"],
+        ["Peacock", "#46d6db"],
+        ["Graphite", "#e1e1e1"],
+        ["Blueberry", "#5484ed"],
+        ["Basil", "#51b749"],
+        ["Tomato", "#dc2127"],
+        ["the fallback", "#3b82f6"],
+      ] as const;
+
+      it.each(EVERY_COLOUR)("%s reads as a line once painted", (_label, color) => {
+        expect(painted(strokeOf(color))).toBeGreaterThanOrEqual(AA_GRAPHICAL_OBJECT);
+      });
+
+      it.each([
+        ["🔴 red-500", "#EF4444", 2.48],
+        ["🔵 blue-500", "#3B82F6", 2.6],
+        ["🟣 purple-500", "#A855F7", 2.46],
+        ["⚫ gray-800", "#1F2937", 1.15],
+        ["🟤 amber-800", "#92400E", 1.68],
+      ])("floors %s, which painted at %s:1", (_label, color, before) => {
+        // The authored colour is what the defect measured; the drawn one is what replaced it.
+        expect(painted(color)).toBeCloseTo(before as number, 2);
+        expect(strokeOf(color as string)).not.toBe(color);
+      });
+
+      it.each([
+        ["🟠 orange-500", "#F97316"],
+        ["🟢 green-500", "#22C55E"],
+        ["🟡 yellow-500", "#EAB308"],
+        ["⚪ gray-100", "#F3F4F6"],
+      ])("returns %s exactly as authored, since it already reads", (_label, color) => {
+        expect(strokeOf(color)).toBe(color);
+      });
+
+      it("needs its own alpha, not the arcs' floored fill (#66)", () => {
+        // 0.6 mixes back more ground than the arcs' 0.85, so a colour floored for the fill is still
+        // short as a stroke: reusing `arcFillColor` here would under-correct rather than duplicate.
+        expect(painted(arcFillColor("#1F2937"))).toBeLessThan(AA_GRAPHICAL_OBJECT);
+        expect(connectorColor("#1F2937")).not.toBe(arcFillColor("#1F2937"));
+      });
+
+      it("floors the line and not the card, whose ground is the light field (#29)", () => {
+        // One assertion because the three used to be one colour: a later tidy-up that ran all of
+        // them through the floor would wash out a card sitting on `--card-foreground`, where the
+        // authored colour is what ties the chip to its arc.
+        const group = render({ color: "#1F2937" });
+
+        expect(part(group, "connector")?.getAttribute("stroke")).toBe(connectorColor("#1F2937"));
+        expect(part(group, "wash")?.getAttribute("fill")).toBe("#1F2937");
+        expect(part(group, "border")?.getAttribute("stroke")).toBe("#1F2937");
+      });
     });
 
     it("degrades to zero length rather than NaN when anchor and centre coincide", () => {
