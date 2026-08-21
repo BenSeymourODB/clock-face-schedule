@@ -1,6 +1,6 @@
 # The drain claims #150 got wrong, and the guards that would have caught them
 
-**Status:** in progress — outstanding as [#153](https://github.com/BenSeymourODB/clock-face-schedule/issues/153)
+**Status:** done — shipped in [#154](https://github.com/BenSeymourODB/clock-face-schedule/pull/154)
 **Issue:** [#153](https://github.com/BenSeymourODB/clock-face-schedule/issues/153), following
 [#150](https://github.com/BenSeymourODB/clock-face-schedule/pull/150) (merged) and
 [#76](https://github.com/BenSeymourODB/clock-face-schedule/issues/76) (closed)
