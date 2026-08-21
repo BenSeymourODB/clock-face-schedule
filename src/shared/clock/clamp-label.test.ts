@@ -118,6 +118,77 @@ describe('labelWidthLimit', () => {
   );
 });
 
+/**
+ * The host-measured allowance (#30 item 1, ADR 0009). The band-clearing locus is the fork's (#138),
+ * so what is asserted here is only that a granted margin is spent and a scarce one cannot take away
+ * what the page's frame already pays for.
+ */
+describe('labelAllowance', () => {
+  const LOCUS = 297.84;
+  /** Three o'clock: where the allowance binds rather than the face. */
+  const AT_THREE = CX + LOCUS;
+
+  it('is the inherited fraction of the dial when the host cannot measure', () => {
+    expect(labelWidthLimit(AT_THREE, DIAL)).toBeCloseTo(105.12, 2);
+  });
+
+  it.each([
+    // m units past the viewBox is m + EDGE_MARGIN past the dial's own box, which is what
+    // `analog-clock.ts` converts before handing it over.
+    ['16:9 as shipped', 234.5, 473.32],
+    ['16:10 as shipped', 172.1, 348.52],
+    ['ADR 0009 at the knee', 75.4, 155.12]
+  ])('spends a %s margin at three o\'clock', (_label, margin, expected) => {
+    const granted: ClockBox = { ...DIAL, labelAllowance: margin + 8 };
+    expect(labelWidthLimit(AT_THREE, granted)).toBeCloseTo(expected, 2);
+  });
+
+  /**
+   * The floor, and the reason it is inside the geometry rather than at the call site: a portrait
+   * board's reserved panel takes more width than the board has spare, so the measurement is legitimately
+   * zero — and a zero allowance gives a card at three o'clock a width of zero, which renders as an
+   * empty chip where a title used to be. `--label-frame` is 51.29 units on any viewport, so the
+   * inherited allowance is covered at every aspect ratio and costs nothing to keep.
+   */
+  it.each([0, 10, 58.3])('never falls below the inherited allowance (%i)', (allowance) => {
+    const scarce: ClockBox = { ...DIAL, labelAllowance: allowance };
+    expect(labelWidthLimit(AT_THREE, scarce)).toBeCloseTo(labelWidthLimit(AT_THREE, DIAL), 6);
+  });
+
+  it('widens the clamp band by the same allowance the width limit spends', () => {
+    const granted: ClockBox = { ...DIAL, labelAllowance: 242.5 };
+
+    expect(clampLabelPosition({ x: -9999, y: CY }, granted).x).toBeCloseTo(DIAL.left - 242.5, 4);
+    expect(clampLabelPosition({ x: 9999, y: CY }, granted).x).toBeCloseTo(DIAL.right + 242.5, 4);
+  });
+
+  it('leaves the vertical band alone, which is the frame\'s axis and #121\'s question', () => {
+    const granted: ClockBox = { ...DIAL, labelAllowance: 242.5 };
+
+    expect(clampLabelPosition({ x: CX, y: -9999 }, granted).y).toBe(
+      clampLabelPosition({ x: CX, y: -9999 }, DIAL).y
+    );
+    expect(clampLabelPosition({ x: CX, y: 9999 }, granted).y).toBe(
+      clampLabelPosition({ x: CX, y: 9999 }, DIAL).y
+    );
+  });
+
+  it('keeps sizing-to-the-limit a no-op for the clamp at every angle', () => {
+    const granted: ClockBox = { ...DIAL, labelAllowance: 242.5 };
+
+    for (let degrees = 0; degrees < 360; degrees += 15) {
+      const radians = (degrees * Math.PI) / 180;
+      const position = {
+        x: CX + LOCUS * Math.sin(radians),
+        y: CY - LOCUS * Math.cos(radians)
+      };
+      const width = labelWidthLimit(position.x, granted);
+
+      expect(clampLabelPosition(position, granted, width / 2).x).toBeCloseTo(position.x, 4);
+    }
+  });
+});
+
 describe('faceClearanceLimit', () => {
   const CARD_HEIGHT = 79.6;
 
