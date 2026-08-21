@@ -5,9 +5,11 @@ import {
   PREFERENCE_KEYS,
   type PreferenceKey,
   type Preferences,
+  decodePreferenceKeys,
   decodePreferencePatch,
   decodePreferences,
   defaultPreferences,
+  encodePreferenceKeys,
   encodePreferences,
   resolvePreferences
 } from "./preferences";
@@ -207,5 +209,68 @@ describe("a patch", () => {
 
   it("ignores keys it does not recognise", () => {
     expect(decodePreferencePatch("scaleMode=1h")).toEqual({});
+  });
+});
+
+/** #83's wire: a reset names keys, so it needs a format the patch path cannot be mistaken for. */
+describe("a key list", () => {
+  it("carries the names it was given", () => {
+    expect(encodePreferenceKeys(["timerMuted"])).toBe("timerMuted");
+  });
+
+  it("is written in registry order, whatever order it was given in", () => {
+    expect(encodePreferenceKeys(["timerDurationSeconds", "showSeconds"])).toBe(
+      "showSeconds;timerDurationSeconds"
+    );
+  });
+
+  it("names a repeated key once", () => {
+    expect(encodePreferenceKeys(["timerMuted", "timerMuted"])).toBe("timerMuted");
+  });
+
+  it("is empty for no keys, so a reset with nothing to do deletes nothing", () => {
+    expect(encodePreferenceKeys([])).toBe("");
+    expect(decodePreferenceKeys("")).toEqual([]);
+  });
+
+  it.each([
+    ["null", null],
+    ["undefined", undefined]
+  ])("names nothing for %s", (_case, wire) => {
+    expect(decodePreferenceKeys(wire)).toEqual([]);
+  });
+
+  it("round-trips every key there is", () => {
+    expect(decodePreferenceKeys(encodePreferenceKeys(PREFERENCE_KEYS))).toEqual(PREFERENCE_KEYS);
+  });
+
+  it("drops a name the registry does not know", () => {
+    expect(decodePreferenceKeys("scaleMode;timerMuted")).toEqual(["timerMuted"]);
+  });
+
+  it("reads in registry order and without repeats, whatever the wire says", () => {
+    expect(decodePreferenceKeys("timerMuted;timerDurationSeconds;timerMuted;showSeconds")).toEqual([
+      "showSeconds",
+      "timerMuted",
+      "timerDurationSeconds"
+    ]);
+  });
+
+  /**
+   * The safety property the two formats are worth having rather than merely observing: neither can
+   * be read as the other, so `resetPreferences(patchWire)` deletes nothing and
+   * `savePreferences(keysWire)` writes nothing. A reset that silently deleted whatever a misrouted
+   * patch happened to name is the failure this closes.
+   */
+  it("names nothing when handed a patch wire", () => {
+    expect(decodePreferenceKeys("showSeconds=0;timerMuted=1")).toEqual([]);
+  });
+
+  it("is read as an empty patch, so a misrouted key list writes nothing", () => {
+    expect(decodePreferencePatch(encodePreferenceKeys(PREFERENCE_KEYS))).toEqual({});
+  });
+
+  it("stays in the attribute-safe alphabet the patch format keeps", () => {
+    expect(encodePreferenceKeys(PREFERENCE_KEYS)).toMatch(/^[A-Za-z0-9;=]*$/);
   });
 });

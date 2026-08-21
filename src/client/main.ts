@@ -107,6 +107,13 @@ function displayPreferences(mount: Element): PreferenceStore {
       callServer<string>("savePreferences", wire).catch((error: Error) => {
         console.warn(`preference not saved — ${error.message}`);
         throw error;
+      }),
+    // Its wire *is* used, unlike the save's: only the server knows what dropping a viewer's own
+    // value falls back to, so the store learns the outcome from this answer (#83).
+    reset: (keysWire) =>
+      callServer<string>("resetPreferences", keysWire).catch((error: Error) => {
+        console.warn(`preference not reset — ${error.message}`);
+        throw error;
       })
   });
 }
@@ -279,12 +286,18 @@ function browserTimeZone(): string {
  * Preferences, checked on the device rather than on a workstation: what arrived in the page, and
  * whether the store is reachable through the bridge at all.
  *
- * **Deliberately read-only.** An earlier version sent the resolved values back to prove the write
- * path, which is a no-op in content and a one-way change in provenance: it copies the deployment's
- * script-store defaults into the viewer's own store, after which they stop tracking the deployment
- * and nothing here can unset them (#83). Sending an empty patch exercises the entry point, the patch
- * parser and the resolution order without storing anything. Until #47 exists the write path has no
- * production caller anyway, so there is nothing to check that a spec cannot.
+ * **Deliberately read-only, and both write entry points are reachable that way.** An earlier version
+ * sent the resolved values back to prove the save path, which is a no-op in content and a one-way
+ * change in provenance: it copies the deployment's script-store defaults into the viewer's own store,
+ * after which they stop tracking the deployment (#83). An empty patch exercises the entry point, the
+ * patch parser and the resolution order without storing anything, and an empty key list is read-only
+ * for the same reason — `resetPreferences` deletes what its wire names, and an empty wire names
+ * nothing.
+ *
+ * Both are probed because **a missing footer entry fails silently in the browser** and nothing
+ * offline catches it: the footer is generated from the bundle's export list (ADR 0002), and this is
+ * the only check that the generated name is the one `google.script.run` actually resolves. Every
+ * other property of these two functions a spec settles; that one it cannot.
  */
 async function checkPreferences(list: Element): Promise<void> {
   const wire = readPreferenceWire(document.querySelector("#dial"));
@@ -309,6 +322,18 @@ async function checkPreferences(list: Element): Promise<void> {
     );
   } catch (error) {
     addRow(list, "preference store", `unreachable — ${(error as Error).message}`, "fail");
+  }
+
+  try {
+    const resolved = await callServer<string>("resetPreferences", "");
+    addRow(
+      list,
+      "preference reset",
+      resolved === templated ? "reachable, and changed nothing" : `reachable, but holds ${resolved}`,
+      resolved === templated ? "ok" : "note"
+    );
+  } catch (error) {
+    addRow(list, "preference reset", `unreachable — ${(error as Error).message}`, "fail");
   }
 }
 
