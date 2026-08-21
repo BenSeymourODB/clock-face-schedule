@@ -347,6 +347,75 @@ the way `labelWidthLimit` already bounds them horizontally, and the frame shrink
 **Revisit when** the pilot board is up (#10) and the panel has been looked at from the back of the
 room, or if a target display falls outside 16:9–16:10.
 
+## ADR 0010 — Staging tracks `main`, production is promoted by hand
+
+**Status:** accepted
+
+**Context.** `npm run push` uploads a bundle; it does not deploy one. A web app serves whatever
+*version* its deployment points at, so a push on its own changes nothing anyone can see — the
+board's contents were a function of who last remembered to open the UI and click Deploy.
+
+The reason this had not been automated was a belief that a new deployment means a new URL. That is
+true of `clasp create-deployment`, and fatal: the classroom board is a bookmark, and ADR 0001 already
+accepts an ephemeral *iframe* origin, so the one stable address in the whole system is the `/exec`
+URL. But it is not true of `clasp update-deployment` (alias `redeploy`), which clasp has had all
+along and nothing here used.
+
+Measured on 3.4.0: `create-deployment` and `update-deployment` both call the same
+`clasp.project.deploy(description, deploymentId, versionNumber)`, and with `versionNumber` omitted
+that function does two things — `projects.versions.create` to snapshot what was last pushed, then
+`projects.deployments.update` to repoint an existing deployment at it. So "deploy the latest pushed
+code to a fixed URL" is one command, and the version history is a real audit trail rather than a
+side effect.
+
+**Decision.** Two slots on one script project, driven by `.github/workflows/deploy.yml`. A push to
+`main` redeploys **staging**; **production** is a `workflow_dispatch` promotion, which can name any
+ref. Deployment identity lives in a GitHub environment variable, so one job body serves both.
+
+One script project rather than two is safe because versions are immutable: deploying staging cannot
+move what production is pinned to. It also keeps `SCRIPT_ID` and the manifest single-valued.
+
+**Consequences.**
+- **`-d` is effectively mandatory.** clasp writes `deploymentConfig.description` on every redeploy,
+  defaulting it to `''`, so a redeploy without a description does not preserve the old one — it
+  blanks it. Since Apps Script has no *name* for a deployment, that description is the only label
+  distinguishing the slots, and the workflow rebuilds it from the slot, ref, commit and run number.
+- **`redeploy` is chosen over the identical `deploy -i` for its failure mode.** They call the same
+  function, but `deploy` treats a falsy deployment ID as "create", so a misconfigured slot would
+  quietly publish a second, unlisted web app URL. `redeploy` refuses it. A preflight step refuses
+  it earlier, before anything remote is touched.
+- **Deploys queue rather than cancel** — the opposite of ci.yml, where a superseded run's verdict is
+  merely irrelevant. Cancelling between `versions.create` and `deployments.update` leaves the slot
+  on its old version with an orphan version above it, which looks exactly like a deploy that never
+  ran.
+- **Authentication is a stored refresh token, not a service account**, and not for lack of trying
+  the modern option. Two independent blocks:
+
+  | ADC credential type | Resolves to | `clasp --adc` |
+  | --- | --- | --- |
+  | `authorized_user` | `UserRefreshClient` | works |
+  | `service_account` | `JWT` | works |
+  | `impersonated_service_account` | `Impersonated` | works |
+  | `external_account` (keyless WIF) | `IdentityPoolClient` | **discarded** |
+
+  clasp's ADC path ends in `if (defaultCreds instanceof OAuth2Client)`, and only the first three
+  extend it; `IdentityPoolClient` extends `AuthClient`. So the credentials
+  `google-github-actions/auth` writes in keyless mode are dropped and the run fails with
+  `No credentials found.` — a message that reads like a missing secret. Independently, the Apps
+  Script API is gated on a *per-user* setting at `script.google.com/home/usersettings`, which no
+  service account principal can visit, so even a working service account could not push. Revisit
+  when google-auth-library-nodejs#1677 lands, which clasp's own source cites.
+- **clasp does not look for a local auth file.** `initAuth` defaults to `~/.clasprc.json` with no
+  fallback, contrary to clasp's `docs/config-files.md` — a `.clasprc.json` written beside
+  `.clasp.json` is invisible unless `clasp_config_auth` or `-A` names it, and naming the
+  *directory* fails with `EISDIR` despite `--help` advertising folders. Cost: one workflow env var,
+  and it is asserted by `scripts/deploy-workflow.test.mjs` because the failure blames the secret.
+- The quality gate runs again inside the deploy job. A promotion can name a ref whose CI run
+  predates a dependency change, and a green suite is cheap next to a broken dial on a wall.
+- Deployment still does not prove the dial *renders*. The gate is the same one that has never caught
+  a legibility defect, so a promotion to production is still a decision to be made after looking at
+  staging — which is what the manual step is for.
+
 ---
 
 ## Platform constraints

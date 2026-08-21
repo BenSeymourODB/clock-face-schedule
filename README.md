@@ -144,6 +144,11 @@ block in `static/appsscript.json`, not from the container type.
 `build/` is generated and gitignored; it is also clasp's `rootDir`, so a push only ever uploads
 generated output. Edits made in the Apps Script online editor are overwritten by the next push.
 
+**A push is not a deployment.** A web app serves whichever *version* its deployment points at, so
+`npm run push` changes what the editor holds and nothing that anyone watching the board can see.
+Redeploying a slot is what publishes it — see "Continuous deployment" below, which does that for
+`main` automatically.
+
 **`build/preview.html`** resolves the HtmlService `include()` templating into a standalone page,
 so the UI can be opened straight from disk — `file://` renders it pixel-identically to serving it,
 because every asset it needs is inlined. This is the fast loop for visual work — no push, no
@@ -223,6 +228,94 @@ upload nothing whenever the manifest had drifted.
 > suits a proof of concept and nothing else. An organisation deploying its own instance almost
 > certainly wants `"access": "DOMAIN"`, which also avoids Google's unverified-app review entirely,
 > since that only applies to users outside the owning domain. See issue #13.
+
+## Continuous deployment
+
+`main` deploys itself to a **staging** slot; **production** is promoted by hand. Both are
+deployments of the same script project, and `.github/workflows/deploy.yml` runs the same two clasp
+calls against a different deployment ID:
+
+```bash
+npx clasp push --force                        # upload the built bundle
+npx clasp redeploy "$DEPLOYMENT_ID" -d "…"    # version it, and repoint the slot
+```
+
+**Omitting `-V` is the whole mechanism.** clasp then creates an immutable version from whatever was
+just pushed and repoints the *existing* deployment at it, so the slot's web app URL never changes —
+which is what makes a bookmarked classroom URL safe to deploy behind. ADR 0010 has the reasoning.
+
+Because versions are immutable snapshots, deploying staging cannot disturb production: it stays
+pinned to whichever version it was last promoted to, however many times `main` moves.
+
+| Trigger | Effect |
+| --- | --- |
+| Push to `main` | Builds, runs the full gate, redeploys **staging** |
+| Actions → Deploy → Run workflow | Redeploys the slot you choose, from the ref you choose |
+
+The gate — `build`, `check-types`, `test` — re-runs inside the deploy job rather than trusting the
+commit's earlier CI run, because a promotion can name any ref, including one whose CI predates a
+dependency change.
+
+### One-time setup
+
+1. Create the two deployments once, and keep the IDs they print:
+
+   ```bash
+   npx clasp create-deployment -d "staging"
+   npx clasp create-deployment -d "production"
+   npx clasp deployments   # every ID, with its version and description
+   ```
+
+   Leave the implicit `@HEAD` deployment alone — that is the `/dev` URL, not a slot.
+
+2. Log in locally, and take the credentials clasp writes:
+
+   ```bash
+   npx clasp login
+   cat ~/.clasprc.json
+   ```
+
+3. Populate the repository's Actions configuration:
+
+   | Where | Name | Value |
+   | --- | --- | --- |
+   | Repository secret | `CLASPRC_JSON` | the whole contents of `~/.clasprc.json` |
+   | Repository variable | `SCRIPT_ID` | the Apps Script project ID |
+   | Environment `staging` → variable | `CLASP_DEPLOYMENT_ID` | the staging deployment ID |
+   | Environment `production` → variable | `CLASP_DEPLOYMENT_ID` | the production deployment ID |
+
+`CLASP_DEPLOYMENT_ID` is **environment-scoped**, which is what lets one job body serve both slots —
+and it means production can carry required reviewers (Settings → Environments) without the workflow
+knowing anything about it. `SCRIPT_ID` is repository-wide because both slots live on one script
+project; defining it on an environment overrides it, should the slots ever need to be separate
+projects. Neither ID is secret: the deployment ID *is* the public web app URL.
+
+A missing value fails the job's first step with a message naming what to add, before anything is
+built or uploaded.
+
+### Why a stored refresh token rather than a service account
+
+`clasp --adc` looks like the keyless answer and is not. Two independent obstacles, both measured
+against clasp 3.4.0:
+
+- **Workload Identity Federation is silently discarded.** clasp's ADC path ends in
+  `if (defaultCreds instanceof OAuth2Client)`, and the `external_account` credentials that
+  `google-github-actions/auth` writes in keyless mode resolve to an `IdentityPoolClient` — which
+  extends `AuthClient`, not `OAuth2Client`. clasp drops it and reports `No credentials found.`
+  (`authorized_user`, `service_account` and `impersonated_service_account` all pass that check.)
+- **The Apps Script API is gated per user**, at <https://script.google.com/home/usersettings> — a
+  page no service account principal can visit. Domain-wide delegation impersonating a real user is
+  the only way round it.
+
+One consequence worth knowing if you ever move off clasp's built-in OAuth client with `--creds`:
+refresh tokens issued by an app in "Testing" publishing status expire after seven days, so CD would
+break weekly. Keep the consent screen in production, or internal to the Workspace domain.
+
+Note also that clasp resolves its auth file to `~/.clasprc.json` and **does not fall back to a local
+one**, contrary to its own `docs/config-files.md`. The workflow sets `clasp_config_auth` for exactly
+this reason; without it a perfectly good `.clasprc.json` sitting beside `.clasp.json` still yields
+`No credentials found.` It has to name the file, too — pointed at a directory, clasp dies with
+`EISDIR` despite `--help` advertising folder support.
 
 ## Relationship to the prior implementations
 
