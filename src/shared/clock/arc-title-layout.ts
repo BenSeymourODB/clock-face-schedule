@@ -82,9 +82,10 @@ export const TITLE_LINE_OFFSET_RATIO = (INK_HEIGHT_RATIO + TITLE_LINE_GAP_RATIO)
  * One unit, matching the separator's own floor: below that the two are not distinguishable as
  * separate marks anyway, so there is nothing left to protect.
  *
- * Measured to the glyph *em box*, as every radial gate on this band is. Real ink reaches past it —
- * 0.54 units per side at a 3.93 font — so a clearance of one unit is nearer half that of actual gap;
- * #78 carries the correction, which touches every one of those gates rather than this constant alone.
+ * Measured to real ink. Every radial gate on this band used to measure to the glyph *em box*, which
+ * understates the text by `INK_HEIGHT_RATIO - 1` per em and so delivered a fraction of this unit
+ * wherever room was scarce. #89 corrected two of the three gates and #90 the third, so one unit here
+ * is now one unit of actual gap rather than nearer half of one.
  */
 export const TITLE_EDGE_CLEARANCE = 1;
 
@@ -111,17 +112,26 @@ export interface ArcTitleLayout {
 }
 
 /**
- * How far the outermost line's glyph band reaches from the centre of the stack, per unit of font
- * size. `central` dominant-baseline puts a glyph band at ±fontSize/2 around its own baseline, and a
- * stacked line's baseline sits `TITLE_LINE_OFFSET_RATIO` further out again.
+ * How far the outermost line's ink reaches from the centre of the stack, per unit of font size. A
+ * line's ink covers `INK_HEIGHT_RATIO` centred on the point `central` dominant-baseline anchors to,
+ * and a stacked line's anchor sits `TITLE_LINE_OFFSET_RATIO` further out again.
+ *
+ * Ink and not the em box (#78): the box is `±fontSize/2`, which is what this used to charge, and it
+ * left 0.41 to 0.87 units of the promised `TITLE_EDGE_CLEARANCE` wherever the cap bound — worst on a
+ * 900-unit dial four deep, where the band-sized outline is widest against the ring. The em box is not
+ * even a conservative approximation of ink, so the shortfall was not a margin being spent, it was one
+ * that was never there.
  *
  * Keyed on the lines a title *actually takes*, not on the two the span allows: charging two-line room
- * to a one-line title cost 10% of its size four deep on a 600-unit dial and 33% on a 300-unit one,
- * where a single line had radial room to spare. Small text on a crowded ring is #70's whole subject,
+ * to a one-line title costs 24% of its size four deep on a 600-unit dial and 44% on a 300-unit one,
+ * where a single line has radial room to spare. (Those read 10% and 33% when #67 chose the rule, at
+ * the 0.55 line offset of the time; both grew as #89 and #90 corrected the model.) Small text on a crowded ring is #70's whole subject,
  * so there is nothing to spend there for a line that is not drawn.
  */
 function stackReachRatio(lines: number): number {
-  return lines >= 2 ? TITLE_LINE_OFFSET_RATIO + 0.5 : 0.5;
+  return lines >= 2
+    ? TITLE_LINE_OFFSET_RATIO + INK_HEIGHT_RATIO / 2
+    : INK_HEIGHT_RATIO / 2;
 }
 
 export function computeArcTitleLayout(params: {
@@ -163,8 +173,9 @@ export function computeArcTitleLayout(params: {
   // Then held to what the ring's own strokes leave. Not the absolute 18-unit ceiling #35's comment
   // records removing: that one meant widening the band bought a thicker arc carrying the same small
   // text, whereas this limit scales with the band exactly as the ratio does. It binds only where the
-  // stroke genuinely takes the space — a two-line stack four deep on a 600-unit dial, three deep on a
-  // 300-unit one — and truncates to `roundCoord`'s own precision rather than rounding, since rounding
+  // stroke genuinely takes the space — a two-line stack three or four deep on a 600-unit dial, three or
+  // four deep on a 300-unit one, four deep on a 900-unit one; never a one-line title at any of them —
+  // and truncates to `roundCoord`'s own precision rather than rounding, since rounding
   // a *limit* upward is how a ten-thousandth of an overlap gets back in.
   //
   // `fitDurationLine` can add a second line under a one-line title (#35), which this has not budgeted

@@ -109,10 +109,11 @@ describe('computeArcTitleLayout', () => {
   /**
    * The clearance nothing used to check (#67). An elapsed arc's outline is sized from the whole
    * band, deliberately (#26), while the text is sized from this arc's own ring — two quantities that
-   * move independently, compared against each other nowhere. At the 0.12 halo #27 retired, a
-   * two-line stack three deep cleared the stroke by 0.03 units and four deep by −1.35; at today's
-   * 0.07 outline it clears by 1.93 and 0.55, so the only thing standing between the text and the
-   * stroke is a constant that changed for an unrelated reason.
+   * move independently, compared against each other nowhere. Uncapped and measured to real ink, a
+   * two-line stack at today's 0.07 outline clears the stroke by 0.68 units three deep and −1.32
+   * four deep on a 600-unit dial — so the only thing standing between the text and the stroke is
+   * the cap below. (The figures this used to quote — 1.93 and 0.55, and 0.03 and −1.35 under #27's
+   * retired 0.12 halo — were the em box at the 0.55 line offset that preceded #89 and #90.)
    *
    * These cases assert the property rather than the numbers: whatever the caller strokes on the
    * ring's edges, both lines stay `TITLE_EDGE_CLEARANCE` clear of it.
@@ -156,8 +157,12 @@ describe('computeArcTitleLayout', () => {
         title,
         arcSpan
       });
-      // Keyed on the lines drawn, which is what the cap is keyed on too.
-      const reach = (fit.lines.length >= 2 ? lineOffset : 0) + titleFontSize / 2;
+      // Keyed on the lines drawn, which is what the cap is keyed on too, and measured to real ink
+      // rather than the em box (#90). Modelling `titleFontSize / 2` here is the same wrong assumption
+      // the cap itself carried, which is why the binding cases below passed at 0.41 to 0.87 units of
+      // a promised 1.00.
+      const reach =
+        (fit.lines.length >= 2 ? lineOffset : 0) + (titleFontSize * INK_HEIGHT_RATIO) / 2;
       const strokeReach = shape.edgeStrokeWidth / 2;
 
       return {
@@ -213,7 +218,11 @@ describe('computeArcTitleLayout', () => {
       expect(inward).toBeGreaterThanOrEqual(TITLE_EDGE_CLEARANCE);
     });
 
-    it.each([[1], [2], [3]])(
+    // Three deep at 600 used to be in this list and is now in the binding list below: measured
+    // against ink the stroke does *not* leave room there. The em box read that ring as 0.31 units
+    // clear of the floor while its ink was 0.32 over the line. The boundary between "the ring ratio
+    // wins" and "the stroke wins" is the thing #90 moved, so both sides of it are pinned, not one.
+    it.each([[1], [2]])(
       'leaves a two-line font at the ring ratio where the stroke leaves room (%i deep)',
       (depth) => {
         const shape = ring(600, depth);
@@ -228,20 +237,60 @@ describe('computeArcTitleLayout', () => {
 
     it('takes a two-line font no lower than the stroke demands', () => {
       // Four deep at size 600 is the case that binds: 4.12 units of usable half-height against a
-      // stack wanting 4.58. Yielding more than that would cost legibility for nothing.
+      // stack whose ink wants 5.45. Yielding more than that would cost legibility for nothing.
       const shape = ring(600, 4);
       const arcHeight = shape.outerRadius - shape.innerRadius;
       const usableHalf = arcHeight / 2 - (shape.edgeStrokeWidth / 2 + TITLE_EDGE_CLEARANCE);
       const { titleFontSize } = clearances(shape, wrappingTitle(shape, 60), 60);
 
       expect(titleFontSize).toBeLessThan(arcHeight * TITLE_FONT_SIZE_RATIO);
-      expect(titleFontSize).toBeCloseTo(usableHalf / (TITLE_LINE_OFFSET_RATIO + 0.5), 1);
+      expect(titleFontSize).toBeCloseTo(
+        usableHalf / (TITLE_LINE_OFFSET_RATIO + INK_HEIGHT_RATIO / 2),
+        1
+      );
+    });
+
+    /**
+     * The shortfall #90 corrects, at the size and depth where it was worst. The em-box cap left the
+     * outermost line's ink 0.41 units from the elapsed outline on a 900-unit dial four deep — 41% of
+     * the `TITLE_EDGE_CLEARANCE` the cap exists to deliver, and the constant #35 fixed as the
+     * smallest separation that still reads as two marks. Asserted as the cap *landing on* the floor
+     * rather than merely clearing it, since anything looser is satisfied by the number that was wrong.
+     */
+    it.each([
+      [900, 4],
+      [600, 4],
+      [600, 3],
+      [300, 4],
+      [300, 3]
+    ])('spends the whole clearance and no more at size %i, %i deep', (size, depth) => {
+      const shape = ring(size, depth);
+      const { outward, titleFontSize } = clearances(shape, wrappingTitle(shape, 60), 60);
+      const arcHeight = shape.outerRadius - shape.innerRadius;
+
+      // The premise: this is a depth where the cap binds, not one where the ring ratio wins.
+      expect(titleFontSize).toBeLessThan(arcHeight * TITLE_FONT_SIZE_RATIO);
+      expect(outward).toBeCloseTo(TITLE_EDGE_CLEARANCE, 3);
+
+      // What the em-box reach would have left in the same place, for the same drawn font.
+      const emBoxFont = Math.min(
+        arcHeight * TITLE_FONT_SIZE_RATIO,
+        (arcHeight / 2 - (shape.edgeStrokeWidth / 2 + TITLE_EDGE_CLEARANCE)) /
+          (TITLE_LINE_OFFSET_RATIO + 0.5)
+      );
+      const emBoxClearance =
+        arcHeight / 2 -
+        shape.edgeStrokeWidth / 2 -
+        emBoxFont * (TITLE_LINE_OFFSET_RATIO + INK_HEIGHT_RATIO / 2);
+
+      expect(emBoxClearance).toBeLessThan(TITLE_EDGE_CLEARANCE);
     });
 
     /**
      * The room a line that is not drawn does not get to take. Charging the two-line reach to every
-     * arc wider than `TWO_LINE_MIN_SPAN_DEGREES` cost a one-line title 10% of its size four deep at
-     * size 600 and 33% at size 300, on the rings that can least afford it (#70).
+     * arc wider than `TWO_LINE_MIN_SPAN_DEGREES` costs a one-line title 24% of its size four deep at
+     * size 600 and 44% at size 300, on the rings that can least afford it (#70). (10% and 33% when
+     * #67 chose the rule; the gap widened as #89 and #90 corrected the reach.)
      */
     it.each([
       [600, 4],
@@ -264,7 +313,7 @@ describe('computeArcTitleLayout', () => {
     });
 
     /**
-     * Overflow routing is the dial's decision about whether a title goes on the band at 3.93 units or
+     * Overflow routing is the dial's decision about whether a title goes on the band at 3.30 units or
      * onto a floating card at 17.52, and the cap must not move it: a smaller font is a *larger*
      * character budget, so packing against the capped size would quietly keep borderline titles on
      * the band. Whether cluster titles belong there at all is #70's question, not this one's.
