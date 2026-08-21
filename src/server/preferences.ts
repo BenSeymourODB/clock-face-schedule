@@ -15,6 +15,7 @@ import {
   PREFERENCE_KEYS,
   type PreferenceSource,
   type Preferences,
+  decodePreferenceKeys,
   decodePreferencePatch,
   defaultPreferences,
   encodePreferenceValue,
@@ -37,6 +38,12 @@ export interface PropertyBag {
   getProperties(): { [key: string]: string };
   /** Merges: `Properties.setProperties` only clears absent keys when told to, which it never is. */
   setProperties(properties: { [key: string]: string }): unknown;
+  /**
+   * One key at a time, which is the only delete this file can safely use. `Properties` offers two
+   * batched forms — `deleteAllProperties` and `setProperties(kept, true)` — and both reach past the
+   * prefix into whatever else shares the store, which is exactly what the prefix exists to prevent.
+   */
+  deleteProperty(key: string): unknown;
 }
 
 export interface PreferenceStores {
@@ -133,5 +140,38 @@ export function savePreferences(
 
   // Re-read rather than assemble the answer from the patch: the point of echoing is to report what
   // the store now holds, which is also what the `?check=1` row is checking.
+  return encodePreferences(resolveFrom(stores));
+}
+
+/**
+ * Remove the preferences a key wire names from the user's own store, and report the resolved set
+ * back.
+ *
+ * Without this the user store is append-only in effect (#83): once a key is in it, that display has
+ * left the deployment's own default behind permanently, and the script store is precisely the
+ * mechanism #31 describes for institution defaults. The same applies to the code defaults, which
+ * this project retunes on measurement.
+ *
+ * Only the user store is touched, for the reason `savePreferences` gives — the script store holds
+ * the deployment's answer, and a viewer resetting their own settings must not reset the school's.
+ * What a reset lands on is therefore the *next* layer down, not necessarily the code default.
+ *
+ * Unbatched where the save path batches "write quota is per call", because the batched deletes
+ * `Properties` offers reach past the prefix — see `PropertyBag.deleteProperty`. The call count is
+ * bounded by the registry rather than by the request, and a reset is a deliberate act performed
+ * once rather than a control held down.
+ *
+ * Like the save path and unlike the read path, a failure reaches the caller: only the caller knows
+ * a preference did not go away.
+ */
+export function resetPreferences(
+  keysWire: string,
+  acquire: PreferenceStoreSource = propertiesServiceStores
+): string {
+  const stores = acquire();
+
+  for (const key of decodePreferenceKeys(keysWire)) {
+    stores.user.deleteProperty(PROPERTY_PREFIX + key);
+  }
   return encodePreferences(resolveFrom(stores));
 }

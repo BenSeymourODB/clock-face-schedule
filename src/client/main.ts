@@ -107,6 +107,13 @@ function displayPreferences(mount: Element): PreferenceStore {
       callServer<string>("savePreferences", wire).catch((error: Error) => {
         console.warn(`preference not saved — ${error.message}`);
         throw error;
+      }),
+    // Its wire *is* used, unlike the save's: only the server knows what dropping a viewer's own
+    // value falls back to, so the store learns the outcome from this answer (#83).
+    reset: (keysWire) =>
+      callServer<string>("resetPreferences", keysWire).catch((error: Error) => {
+        console.warn(`preference not reset — ${error.message}`);
+        throw error;
       })
   });
 }
@@ -266,10 +273,12 @@ function browserTimeZone(): string {
  *
  * **Deliberately read-only.** An earlier version sent the resolved values back to prove the write
  * path, which is a no-op in content and a one-way change in provenance: it copies the deployment's
- * script-store defaults into the viewer's own store, after which they stop tracking the deployment
- * and nothing here can unset them (#83). Sending an empty patch exercises the entry point, the patch
- * parser and the resolution order without storing anything. Until #47 exists the write path has no
- * production caller anyway, so there is nothing to check that a spec cannot.
+ * script-store defaults into the viewer's own store, after which they stop tracking the deployment.
+ * `resetPreferences` now exists to undo that (#83), which is not a reason for the diagnostic to
+ * write: a check that deleted a viewer's settings to prove it could is the same mistake facing the
+ * other way. Sending an empty patch exercises the entry point, the patch parser and the resolution
+ * order without storing anything. Until #47 exists the write path has no production caller anyway,
+ * so there is nothing to check that a spec cannot.
  */
 async function checkPreferences(list: Element): Promise<void> {
   const wire = readPreferenceWire(document.querySelector("#dial"));

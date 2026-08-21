@@ -17,9 +17,12 @@
  * it settles. Ordering is total because there is only ever one writer.
  */
 import {
+  type PreferenceKey,
   type Preferences,
+  decodePreferenceKeys,
   decodePreferencePatch,
   decodePreferences,
+  encodePreferenceKeys,
   encodePreferences
 } from "../shared/preferences";
 
@@ -28,6 +31,14 @@ export interface PreferenceStore {
   get(): Preferences;
   /** Apply and persist some preferences, ignoring any the schema rejects. */
   set(patch: Partial<Preferences>): void;
+  /**
+   * Forget the viewer's own values for these keys, so each falls back to whatever the layer beneath
+   * it says (#83) — the deployment's default, or the code's where the deployment has none.
+   *
+   * The one operation here that does **not** show its effect immediately, because the client cannot
+   * know it: see `PreferenceStoreOptions.reset`.
+   */
+  reset(keys: readonly PreferenceKey[]): void;
 }
 
 export interface PreferenceStoreOptions {
@@ -46,6 +57,21 @@ export interface PreferenceStoreOptions {
    * costs its own value and not the ones behind it.
    */
   save: (wire: string) => PromiseLike<unknown>;
+  /**
+   * Deletes the viewer's own values for the keys a wire names, and resolves with **the resolved set
+   * the store then holds** — where `save`'s answer is discarded.
+   *
+   * That asymmetry is the point rather than an oversight. After a save the client already knows the
+   * outcome: it wrote the user layer, and the user layer is the one that wins. After a reset it
+   * cannot. `doGet` templates the *resolved* wire and nothing else (#31), so the client is never
+   * told which layer a value came from, and dropping a user value may land on the deployment's
+   * answer or on the code's. Only the server knows which.
+   *
+   * So the wire is required, and a `reset` that reported nothing would leave the store guessing.
+   * Typed as `string` for the same reason `save`'s return type is required at all: it is the only
+   * thing that catches the omission at build time.
+   */
+  reset: (keysWire: string) => PromiseLike<string>;
 }
 
 /**
@@ -60,22 +86,38 @@ export function readPreferenceWire(mount: Element | null | undefined): string | 
   return wire === undefined ? null : wire;
 }
 
-export function preferenceStore({ wire, save }: PreferenceStoreOptions): PreferenceStore {
+export function preferenceStore({ wire, save, reset }: PreferenceStoreOptions): PreferenceStore {
   let values = decodePreferences(wire);
 
-  /** Whether a save is with the server. The queue's only state that is not the queue. */
-  let saving = false;
+  /** Whether a write is with the server. The queue's only state that is not the queue. */
+  let writing = false;
 
   /**
-   * Changes made while a save was in flight, merged so a later value for a key replaces an earlier
+   * Changes made while a write was in flight, merged so a later value for a key replaces an earlier
    * one — the superseded value is dropped rather than queued behind its own replacement. A burst of
    * taps therefore costs two writes however long it is: the one already going, and one carrying
    * wherever the control ended up.
    */
-  let queued: Partial<Preferences> = {};
+  let queuedValues: Partial<Preferences> = {};
 
-  function send(patch: Partial<Preferences>): void {
-    saving = true;
+  /**
+   * Keys held for a reset, the same way values are held for a save (#83). A reset is a write to the
+   * same store, so it queues *with* the saves rather than beside them — two `google.script.run`
+   * calls have no ordering between them, which is the whole of #84.
+   *
+   * **A key is in at most one of the two buckets**: queueing either operation for a key drops it
+   * from the other, so the last thing asked of a key is the one that lands — the supersede rule the
+   * queue already applied to values, extended to cover "and unset it". Being key-disjoint by
+   * construction is also why the order `drain` sends the two in cannot matter.
+   */
+  let queuedKeys: PreferenceKey[] = [];
+
+  /** Registry order, no repeats, nothing the schema does not know — as the wire itself would give. */
+  const normalise = (keys: readonly PreferenceKey[]): PreferenceKey[] =>
+    decodePreferenceKeys(encodePreferenceKeys(keys));
+
+  function sendValues(patch: Partial<Preferences>): void {
+    writing = true;
 
     try {
       save(encodePreferences(patch)).then(drain, drain);
@@ -88,19 +130,60 @@ export function preferenceStore({ wire, save }: PreferenceStoreOptions): Prefere
     }
   }
 
+  function sendKeys(keys: PreferenceKey[]): void {
+    writing = true;
+
+    try {
+      reset(encodePreferenceKeys(keys)).then((resolved) => {
+        adopt(keys, resolved);
+        drain();
+      }, drain);
+    } catch {
+      drain();
+    }
+  }
+
   /**
-   * Send whatever accumulated while the last save was out, if anything.
+   * Take the server's answer for the keys a reset named — the only way the display learns what the
+   * reset landed on, since the layer beneath the viewer's own was never sent to the browser.
    *
-   * A failed patch is *not* folded into the next send. The server rejects a write for a reason it
-   * will reject the retry for too — quota, or a value the schema refused — and this store's
-   * documented stance is that a lost save costs the next reload's memory of a setting rather than
-   * interrupting a lesson.
+   * Per key, and only where nothing has been asked of it since: a key sitting in either queue was
+   * changed while this reset was in flight, and the echo predates that. Single-flight means only one
+   * write is ever out, so "queued" is exactly "touched since". Read before `drain` empties them.
+   */
+  function adopt(keys: readonly PreferenceKey[], resolved: string): void {
+    const stored = decodePreferences(resolved);
+    const next = { ...values };
+
+    for (const key of keys) {
+      if (queuedValues[key] !== undefined || queuedKeys.indexOf(key) !== -1) continue;
+      // The registry is heterogeneous, so walking it needs one widening — confined to this line.
+      (next as { [key: string]: unknown })[key] = stored[key];
+    }
+    values = next;
+  }
+
+  /**
+   * Send whatever accumulated while the last write was out, if anything.
+   *
+   * A failed write is *not* folded into the next send. The server rejects one for a reason it will
+   * reject the retry for too — quota, or a value the schema refused — and this store's documented
+   * stance is that a lost write costs the next reload's memory of a setting rather than interrupting
+   * a lesson.
    */
   function drain(): void {
-    saving = false;
-    const pending = queued;
-    queued = {};
-    if (Object.keys(pending).length > 0) send(pending);
+    writing = false;
+
+    const pending = queuedValues;
+    queuedValues = {};
+    if (Object.keys(pending).length > 0) {
+      sendValues(pending);
+      return;
+    }
+
+    const pendingKeys = queuedKeys;
+    queuedKeys = [];
+    if (pendingKeys.length > 0) sendKeys(pendingKeys);
   }
 
   return {
@@ -117,8 +200,24 @@ export function preferenceStore({ wire, save }: PreferenceStoreOptions): Prefere
 
       // Memory is updated either way, above: the screen shows the latest value from the moment it
       // is set, and the queue only decides when the store is told.
-      if (saving) queued = { ...queued, ...accepted };
-      else send(accepted);
+      if (writing) {
+        queuedValues = { ...queuedValues, ...accepted };
+        queuedKeys = queuedKeys.filter((key) => accepted[key] === undefined);
+      } else sendValues(accepted);
+    },
+
+    reset(keys) {
+      const named = normalise(keys);
+      if (named.length === 0) return;
+
+      // Nothing is applied locally, which is the one place this store departs from "the display
+      // agrees with the control at once". It cannot: guessing the code default would show the wrong
+      // value where the deployment has an answer of its own, and briefly stale beats briefly wrong.
+      // `PreferenceStoreOptions.reset` has the reasoning.
+      if (writing) {
+        queuedKeys = normalise(queuedKeys.concat(named));
+        for (const key of named) delete queuedValues[key];
+      } else sendKeys(named);
     }
   };
 }

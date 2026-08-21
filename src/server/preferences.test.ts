@@ -7,6 +7,7 @@ import {
   type PropertyBag,
   preferencesWire,
   readStoredPreferences,
+  resetPreferences,
   savePreferences
 } from "./preferences";
 
@@ -24,6 +25,9 @@ function bag(initial: { [key: string]: string } = {}): FakeBag {
     setProperties(properties) {
       // Merging, as `Properties.setProperties` does when not told to clear the rest.
       for (const key of Object.keys(properties)) stored[key] = properties[key] as string;
+    },
+    deleteProperty(key) {
+      delete stored[key];
     }
   };
 }
@@ -86,7 +90,8 @@ describe("reading", () => {
       getProperties: () => {
         throw new Error("read quota exceeded");
       },
-      setProperties: () => undefined
+      setProperties: () => undefined,
+      deleteProperty: () => undefined
     };
 
     const resolved = readStoredPreferences(from({ user: broken, script: broken }));
@@ -211,5 +216,127 @@ describe("saving", () => {
     };
 
     expect(() => savePreferences("timerMuted=1", from(live))).toThrow("write quota exceeded");
+  });
+});
+
+/**
+ * #83. Every case here is about the *layering*, not about the key going away: a store that only
+ * forgets is not what was missing — what was missing is the deployment's own answer becoming
+ * reachable again.
+ */
+describe("resetting", () => {
+  it("restores the script store's value rather than the code default", () => {
+    // The property the issue is actually about. Asserting only "the key is gone" would pass against
+    // a reset that dropped the viewer through the deployment's layer to the code's.
+    const live = stores({ "pref.showSeconds": "1" }, { "pref.showSeconds": "0" });
+
+    expect(resetPreferences("showSeconds", from(live))).toBe(
+      encodePreferences({ ...defaultPreferences(), showSeconds: false })
+    );
+  });
+
+  it("lets a later change to the deployment's default reach a display that had stored the key", () => {
+    // The scenario in the issue, end to end: the user store shadows the script store, the admin
+    // changes the deployment's answer, and before this it was never picked up again.
+    const live = stores({ "pref.timerDurationSeconds": "600" }, { "pref.timerDurationSeconds": "600" });
+    expect(readStoredPreferences(from(live)).timerDurationSeconds).toBe(600);
+
+    live.script.setProperties({ "pref.timerDurationSeconds": "1200" });
+    expect(readStoredPreferences(from(live)).timerDurationSeconds).toBe(600);
+
+    resetPreferences("timerDurationSeconds", from(live));
+
+    expect(readStoredPreferences(from(live)).timerDurationSeconds).toBe(1200);
+  });
+
+  it("falls to the code default where the deployment has no answer either", () => {
+    const live = stores({ "pref.timerMuted": "1" });
+
+    expect(resetPreferences("timerMuted", from(live))).toBe(encodePreferences(defaultPreferences()));
+  });
+
+  it("deletes the prefixed key, and only that one", () => {
+    const live = stores({ "pref.showSeconds": "0", "pref.timerMuted": "1" });
+
+    resetPreferences("showSeconds", from(live));
+
+    expect(live.user.stored).toEqual({ "pref.timerMuted": "1" });
+  });
+
+  it("leaves a property that is not under the preference prefix alone", () => {
+    // The prefix is why the batched deletes `Properties` offers are unusable here: something else's
+    // key sharing the store must survive a preference reset.
+    const live = stores({ showSeconds: "0", "pref.showSeconds": "0" });
+
+    resetPreferences("showSeconds", from(live));
+
+    expect(live.user.stored).toEqual({ showSeconds: "0" });
+  });
+
+  it("never touches the script store, so a viewer cannot reset the deployment's own defaults", () => {
+    const live = stores({ "pref.showSeconds": "0" }, { "pref.showSeconds": "0" });
+    const deleted = vi.spyOn(live.script, "deleteProperty");
+
+    resetPreferences("showSeconds;timerMuted;timerDurationSeconds", from(live));
+
+    expect(deleted).not.toHaveBeenCalled();
+    expect(live.script.stored).toEqual({ "pref.showSeconds": "0" });
+  });
+
+  it("deletes every key the wire names", () => {
+    const live = stores({
+      "pref.showSeconds": "0",
+      "pref.timerMuted": "1",
+      "pref.timerDurationSeconds": "600"
+    });
+
+    resetPreferences("showSeconds;timerDurationSeconds", from(live));
+
+    expect(live.user.stored).toEqual({ "pref.timerMuted": "1" });
+  });
+
+  it("deletes nothing for an empty wire, so a dropped argument is harmless", () => {
+    // The direction that matters: `savePreferences("")` writes nothing, and the reset path must not
+    // read the same accidental argument as "everything".
+    const live = stores({ "pref.showSeconds": "0" });
+    const deleted = vi.spyOn(live.user, "deleteProperty");
+
+    expect(resetPreferences("", from(live))).toBe(
+      encodePreferences({ ...defaultPreferences(), showSeconds: false })
+    );
+    expect(deleted).not.toHaveBeenCalled();
+  });
+
+  it("deletes nothing when handed a patch wire instead of a key list", () => {
+    const live = stores({ "pref.showSeconds": "0" });
+
+    resetPreferences("showSeconds=0", from(live));
+
+    expect(live.user.stored).toEqual({ "pref.showSeconds": "0" });
+  });
+
+  it("ignores a name the schema does not know", () => {
+    const live = stores({ "pref.scaleMode": "1h", "pref.showSeconds": "0" });
+
+    resetPreferences("scaleMode", from(live));
+
+    expect(live.user.stored).toEqual({ "pref.scaleMode": "1h", "pref.showSeconds": "0" });
+  });
+
+  it("reports the resolved set back, as the save path does", () => {
+    const live = stores({ "pref.showSeconds": "0", "pref.timerMuted": "1" });
+
+    expect(resetPreferences("showSeconds", from(live))).toBe(
+      encodePreferences({ ...defaultPreferences(), timerMuted: true })
+    );
+  });
+
+  it("lets a failing delete reach the caller", () => {
+    const live = stores({ "pref.showSeconds": "0" });
+    live.user.deleteProperty = () => {
+      throw new Error("write quota exceeded");
+    };
+
+    expect(() => resetPreferences("showSeconds", from(live))).toThrow("write quota exceeded");
   });
 });
