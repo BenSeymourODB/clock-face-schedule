@@ -168,9 +168,11 @@ test catches legibility:
 ## Deferred
 
 - **The merge fallback** — phase 2 above, staying on #30.
-- **Durations declined at natural positions are not revisited.** #68 decides the duration line
+- **#136 — durations declined at natural positions are not revisited.** #68 decides the duration line
   against un-displaced rects, so at `11:00` three cards give up a duration to avoid an overlap that
   displacement then resolves anyway. Re-running that decision after displacement would hand some of
   them back; doing it properly is another fixed point, and it is filed rather than folded in.
+- **#135 — a card overlapping `#status`.** Pre-exists on `main` unpinned (1.5 px, card `j`), and
+  displacement makes it visible at the pins where it acts. Not this pass's defect and not its fix.
 - **Cards over the band's content** (#98) is untouched: this pass moves cards relative to each other,
   not relative to the band.
