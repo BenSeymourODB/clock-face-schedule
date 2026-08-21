@@ -1,6 +1,6 @@
 # Measure `computeArcTitleLayout`'s clearance cap against real ink
 
-**Status:** in review
+**Status:** done — shipped in [#110](https://github.com/BenSeymourODB/clock-face-schedule/pull/110)
 **Issue:** [#90 — #67's title-stack clearance cap is still measured to the em box, and needs
 INK_HEIGHT_RATIO](https://github.com/BenSeymourODB/clock-face-schedule/issues/90)
 **Docs:** #78 / #89 (the ink model and where `INK_HEIGHT_RATIO` is measured), #67 / #77 (the cap this
