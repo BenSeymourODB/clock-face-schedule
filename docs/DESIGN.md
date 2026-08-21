@@ -344,6 +344,30 @@ knee — but it is the dial paying, which is the one thing this ADR says must no
 paying for the labels. #121 is the cheaper answer if there is one: bound a card's *edges* vertically
 the way `labelWidthLimit` already bounds them horizontally, and the frame shrinks back toward nothing.
 
+**The margin figures above are understated, for the same reason** (#30 item 1). This ADR computes the
+board's width as `600 × aspect`, which is only the board's width in dial units if 600 units *is* the
+board's height. At 85.4% it is not, so the same board is proportionally wider measured in dial units
+and the margin grows with it:
+
+| | board width, in dial units | margin per side |
+| --- | --- | --- |
+| 16:9, dial at full height — as stated above | 1066.7 | 143.3 |
+| **16:9, dial at 85.4% — as it renders** | **1249.0** | **234.5** |
+| 16:10, dial at full height | 960.0 | 90.0 |
+| **16:10, dial at 85.4% — as it renders** | **1124.1** | **172.1** |
+
+Measured off the rendered page as well as derived: at 1920×1080 the dial draws 922.3 px for its 600
+units, so the viewport is 1249.0 units and `(1249.0 − 600 − 180) / 2 = 234.5`. The amendment above
+says "the unit arithmetic and the 180-unit choice are unaffected", and that holds for the knee (75.4)
+and the saturation ceiling (155.2) — both properties of the locus, not of the board — and for the
+180-unit choice and the 209-unit ceiling, which both move further inside their headroom. It does not
+hold for the margin figures, which is what this table corrects.
+
+Nothing downstream changes: both aspects were already past the knee at the understated figures, so
+labels get the same 13 characters a line either way. The correction matters for the 16:10 penalty the
+ADR reports on a band-clearing locus — at 172.1 rather than 90.0 that penalty disappears — and for
+anyone reading 143.3 as the number the renderer is handed.
+
 **Revisit when** the pilot board is up (#10) and the panel has been looked at from the back of the
 room, or if a target display falls outside 16:9–16:10.
 

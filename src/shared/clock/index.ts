@@ -80,6 +80,11 @@ export {
   type GrowthPlan
 } from './grow-labels';
 export {
+  PANEL_RESERVE_UNITS,
+  labelMarginUnits,
+  type DrawingBox
+} from './label-margin';
+export {
   CHAR_WIDTH_RATIO,
   charBudget,
   normaliseText,

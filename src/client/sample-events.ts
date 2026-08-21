@@ -10,8 +10,10 @@
  * many rings as `maxRings` will open, carrying both a two-line title and a one-line one on rings that
  * divide the band four ways (#67), a title too long for its arc, an event short enough to need
  * the minimum-width floor, an event crossing each end of the rolling window (#25), a floating label
- * washed with a colour the palette itself fails contrast for once filled (⚫, #26/#27), and a card
- * whose duration line is wider than its title (#35).
+ * washed with a colour the palette itself fails contrast for once filled (⚫, #26/#27), a card
+ * whose duration line is wider than its title (#35), and an event straddling `now` so the drain
+ * (#28) is in the *default* picture rather than a state a reviewer has to know to ask for — the
+ * mechanism by which masks that drained nothing survived two releases (#71, #76).
  *
  * Anchored to `windowStart` — the rolling window's own leading edge — rather than a fixed
  * `periodStart`, so the whole fixture lands inside whatever window is live the moment demo mode
@@ -62,9 +64,16 @@ export function sampleEvents(windowStart: Date): ClockEventInput[] {
     // sidestep the question, and yellow takes a black title — 1.18:1 on the bare dial the drained
     // side exposes, so the title has to change colour across the seam. The title is long enough to
     // reach past the seam for the same reason: a short one sits entirely on the spent side and
-    // never exercises the split. Overlaps only "b", which ends at +3:00, so peak concurrency stays
-    // three and the cluster above keeps its ring thickness — and a drained portion ends up beside a
-    // fully elapsed arc, which is the comparison a viewer actually has to make.
+    // never exercises the split. Overlaps only "b", which ends at +3:00, so it opens no fifth ring
+    // and the cluster above keeps its thickness — and a drained portion ends up beside a fully
+    // elapsed arc, which is the comparison a viewer actually has to make.
+    //
+    // It does not escape the cluster, though: overlapping "b" joins it, so `assignRings` reports
+    // clusterDepth 4 for this arc and it renders at **15.56 units** — ring 0, shared with "a",
+    // which it does not overlap — against the 75.92 a lone arc gets. So the drain the default
+    // picture carries is the thinnest one the dial draws. Deliberate rather than a cost: the
+    // hardest place to draw a drain is the useful default (#76), and `?now=04:15` puts one on a
+    // 35.68-unit ring clear of the cluster for anyone judging drain geometry itself.
     { id: "n", title: "🟡 Tidy Up and Line Up", startDate: at(2, 30), endDate: at(3, 14), isAllDay: false, fallbackColor },
     // Twenty-two minutes with a four-character title: 11° of arc against a three-character budget
     // on a lone ring, so it overflows onto a label whose duration line ("22 min", 6 units) is

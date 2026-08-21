@@ -16,9 +16,12 @@
 import { describe, expect, it } from "vitest";
 import styles from "../../../static/Styles.html?raw";
 import type { ClockEventInput, DialScaleId } from "../../shared/clock";
-import { analogClock } from "./analog-clock";
+import { LABEL_RADIUS_RATIO, analogClock } from "./analog-clock";
 
 const SIZE = 600;
+const OUTER_RADIUS = SIZE / 2 - 8;
+/** The circle a card's centre starts from, before the displacement pass moves it (#134). */
+const LOCUS = OUTER_RADIUS * (1 + LABEL_RADIUS_RATIO);
 /** Four in the morning, so the rolling window `[time − 3h, time + 8h)` is [01:00, 12:00). */
 const TIME = new Date(2026, 7, 15, 4, 0, 0);
 const WINDOW_START_HOUR = 1;
@@ -69,19 +72,35 @@ function event(id: string, startHour: number, durationHours: number): ClockEvent
 
 interface Reach {
   id: string;
-  /** How far past the viewBox the card reaches where it actually landed. */
+  /** How far past the viewBox the card reaches where it actually landed, on either axis. */
   drawn: number;
+  /**
+   * The same, horizontally only.
+   *
+   * Split out because the two axes stopped being paid for out of the same pot (#30 item 1). The
+   * frame is what a card at twelve or six spends, and it is all a card has there; horizontally a
+   * card spends the margin the host measured off the board, which on any widescreen display is
+   * several times the frame and sits in the grid column beside the drawing rather than in the
+   * padding. Bounding both by the padding would have made the granted margin unusable, and
+   * bounding both by the margin would have stopped checking the thing this file was opened for.
+   */
+  horizontal: number;
+  /** The same, vertically only — the axis the page's frame is what pays for. */
+  vertical: number;
   /**
    * How far past the viewBox this card's *height* would reach at twelve o'clock.
    *
-   * The two differ, and only this one binds vertically. Card width is angle-dependent — a card is
-   * only wide where the frame leaves room for width — so the drawn figure is a horizontal
-   * measurement almost everywhere, and a card whose height outgrew the frame would pass it unless
-   * the sweep happened to drop that card at the top of the dial. Height is not angle-dependent in
-   * the same direction: a tall card is tall *because* it was narrow, and moving it to twelve gives
-   * it more width and so no more lines, so this over-estimates rather than under-estimates. It is
-   * the one number `clampLabelPosition` does not bound — the vertical clamp holds a card's centre,
-   * and against a locus at `outerRadius × 1.02` it never binds.
+   * Card width is angle-dependent — a card is only wide where the frame leaves room for width — so a
+   * card whose *height* outgrew the frame would pass the drawn measurements unless the sweep happened
+   * to drop it at the top of the dial. Height is not angle-dependent in the same direction: a tall
+   * card is tall *because* it was narrow, and moving it to twelve gives it more width and so no more
+   * lines, so this over-estimates rather than under-estimates.
+   *
+   * Taken against `LOCUS` rather than against the card's own radius, which is the correction #30
+   * item 1 forced: a card the displacement pass has moved (#134) sits off the locus circle, so its
+   * measured radius carries the displacement as well as the height and the sum is a quantity nothing
+   * bounds. `stack-labels.ts` bounds a displaced card's *edges* directly, which is what `vertical`
+   * above measures.
    */
   atTwelve: number;
 }
@@ -92,18 +111,21 @@ function reach(rect: Element): Reach {
   const y = number("y");
   const width = number("width");
   const height = number("height");
-  const centre = { x: x + width / 2, y: y + height / 2 };
-  const locus = Math.hypot(centre.x - SIZE / 2, centre.y - SIZE / 2);
-
   return {
     id: rect.getAttribute("data-testid") ?? "",
     drawn: Math.max(-x, -y, x + width - SIZE, y + height - SIZE, 0),
-    atTwelve: locus + height / 2 - SIZE / 2,
+    horizontal: Math.max(-x, x + width - SIZE, 0),
+    vertical: Math.max(-y, y + height - SIZE, 0),
+    atTwelve: LOCUS + height / 2 - SIZE / 2,
   };
 }
 
-function cardsOf(events: ClockEventInput[], scale: DialScaleId): Reach[] {
-  const { element } = analogClock({ events, size: SIZE, time: TIME, scale });
+function cardsOf(
+  events: ClockEventInput[],
+  scale: DialScaleId,
+  labelMargin?: number
+): Reach[] {
+  const { element } = analogClock({ events, size: SIZE, time: TIME, scale, labelMargin });
   const rects = Array.from(element.querySelectorAll('[data-testid^="floating-label-rect-"]'));
 
   // A scenario that promotes no titles to cards would pass every assertion below while testing
@@ -112,7 +134,7 @@ function cardsOf(events: ClockEventInput[], scale: DialScaleId): Reach[] {
   return rects.map(reach);
 }
 
-function worst(cards: Reach[], axis: "drawn" | "atTwelve"): Reach {
+function worst(cards: Reach[], axis: keyof Omit<Reach, "id">): Reach {
   return cards.reduce((most, card) => (card[axis] > most[axis] ? card : most));
 }
 
@@ -141,6 +163,61 @@ describe("the frame the page leaves for floating labels", () => {
 
   it.each(SWEEPS)("holds the tallest card the %s dial draws, at twelve o'clock", (scale, events) => {
     const card = worst(cardsOf(events, scale), "atTwelve");
+    const frame = frameUnits();
+
+    expect(
+      card.atTwelve,
+      `${card.id} would reach ${card.atTwelve.toFixed(2)} units out at twelve, frame is ${frame.toFixed(2)}`
+    ).toBeLessThanOrEqual(frame);
+  });
+});
+
+/**
+ * The board's spare width, once the host measures it and hands it over (#30 item 1, ADR 0009).
+ *
+ * The frame above is still the whole allowance a card at twelve or six has, and still what the
+ * renderer may spend with nothing passed. What changes is the horizontal axis: a widescreen board's
+ * margin is several times the frame, and the room it names is the grid column beside the drawing
+ * rather than the padding — so the bound stops being the stylesheet's number and becomes the one the
+ * host measured. Bounding it by the padding again is how the grant would be silently unusable.
+ */
+describe("the margin the board grants", () => {
+  /** A 16:9 board at 1920×1080, per `label-margin.ts`. */
+  const GRANTED = 234.5;
+
+  it.each(SWEEPS)("leaves the %s dial's cards inside the granted margin", (scale, events) => {
+    const card = worst(cardsOf(events, scale, GRANTED), "horizontal");
+
+    expect(
+      card.horizontal,
+      `${card.id} reaches ${card.horizontal.toFixed(2)} units past the viewBox, margin is ${GRANTED}`
+    ).toBeLessThanOrEqual(GRANTED);
+  });
+
+  it.each(SWEEPS)("spends it on the %s dial rather than banking it", (scale, events) => {
+    const granted = worst(cardsOf(events, scale, GRANTED), "horizontal").horizontal;
+    const inherited = worst(cardsOf(events, scale), "horizontal").horizontal;
+
+    expect(granted).toBeGreaterThan(inherited);
+  });
+
+  /**
+   * The frame keeps governing the axis it pays for, and both vertical measures have to say so — a
+   * wider card wraps to fewer lines, but #142's `planOptionalLines` then offers it a duration line
+   * with the room that freed, so "wider" does not straightforwardly mean "shorter".
+   */
+  it.each(SWEEPS)("still fits every card the %s dial draws in the frame", (scale, events) => {
+    const card = worst(cardsOf(events, scale, GRANTED), "vertical");
+    const frame = frameUnits();
+
+    expect(
+      card.vertical,
+      `${card.id} reaches ${card.vertical.toFixed(2)} units above or below the viewBox, frame is ${frame.toFixed(2)}`
+    ).toBeLessThanOrEqual(frame);
+  });
+
+  it.each(SWEEPS)("still fits the %s dial's tallest card in it at twelve", (scale, events) => {
+    const card = worst(cardsOf(events, scale, GRANTED), "atTwelve");
     const frame = frameUnits();
 
     expect(

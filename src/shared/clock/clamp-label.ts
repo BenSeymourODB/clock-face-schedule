@@ -24,10 +24,38 @@ export interface ClockBox {
   height: number;
   /** Dial width, used to derive the horizontal 10% allowance. */
   width: number;
+  /**
+   * Room a card's edge may use beyond `left` and `right`, per side, measured from the dial's own
+   * box and **not** from the viewBox — see `AnalogClockParams.labelMargin`, which is the same
+   * quantity from the viewBox and is what the ADR's figures are in.
+   *
+   * The inherited allowance is a fraction of the dial's own width, so it is the same on a 4K board
+   * as on a phone and knows nothing about the page it is drawn on. ADR 0009 allocates the board's
+   * spare width, and #30 item 1's answer is that the host measures it and hands it in: the geometry
+   * stays pure and node-testable and the layout question stays with the layout.
+   *
+   * Absent for any caller that cannot measure — jsdom has no layout — which is the inherited
+   * behaviour rather than a degraded one.
+   */
+  labelAllowance?: number;
 }
 
 function clamp(value: number, lower: number, upper: number): number {
   return Math.min(Math.max(value, lower), upper);
+}
+
+/**
+ * The room a card's edge may use to each side, in viewBox units.
+ *
+ * Floored against the inherited allowance rather than taken as given, in one place so no caller can
+ * forget it. A measured margin can be *smaller* than the inherited one — on a portrait board ADR
+ * 0009's reserved panel wants more width than the board has spare — and an allowance of zero leaves
+ * a card at three o'clock no width at all, so it renders as an empty chip. The floor is what the
+ * page already pays for either way: `--label-frame: 7.3vmin` is 51.29 units on every viewport,
+ * against the 50.4 past the viewBox this allowance permits.
+ */
+function horizontalAllowance(clockBox: ClockBox): number {
+  return Math.max(clockBox.width * OVERFLOW_RATIO, clockBox.labelAllowance ?? 0);
 }
 
 /**
@@ -62,9 +90,9 @@ export function clampLabelPosition(
     clockBox.bottom + verticalAllowance
   );
 
-  const horizontalAllowance = clockBox.width * OVERFLOW_RATIO;
-  const leftLimit = clockBox.left - horizontalAllowance + halfWidth;
-  const rightLimit = clockBox.right + horizontalAllowance - halfWidth;
+  const allowance = horizontalAllowance(clockBox);
+  const leftLimit = clockBox.left - allowance + halfWidth;
+  const rightLimit = clockBox.right + allowance - halfWidth;
 
   // A card wider than the whole allowance band cannot satisfy both edges. Centring it spills
   // evenly on both sides, which reads far better than pinning it hard against one.
@@ -84,11 +112,13 @@ export function clampLabelPosition(
  * so the fix is to never hand it one. Callers wrap their text to this width instead.
  *
  * The room is the *nearer* of the two edges, because the card is centred and both of its sides
- * have to land inside. At 3 and 9 o'clock that is a small number — the dial fills the frame, and
- * there is genuinely almost no "outside the dial" on the horizontal axis.
+ * have to land inside. At 3 and 9 o'clock that is where the allowance is spent rather than the
+ * face: on the inherited allowance it is 105.1 units, eight characters a line, which is what
+ * `labelAllowance` exists to widen (#30 item 1). Above a 75.4-unit margin the face becomes the
+ * binding constraint instead and the width saturates at 155.2, so no board gets more than thirteen.
  */
 export function labelWidthLimit(x: number, clockBox: ClockBox): number {
-  const allowance = clockBox.width * OVERFLOW_RATIO;
+  const allowance = horizontalAllowance(clockBox);
   const room = Math.min(
     x - (clockBox.left - allowance),
     clockBox.right + allowance - x

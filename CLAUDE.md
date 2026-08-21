@@ -64,9 +64,13 @@ code.** Rendering is what breaks the tie.
 
 **A state that depends on the time is not a state you have to wait for.** `?now=04:15&freeze=1`
 pins the dial's clock, on the preview and the deployed app alike; README has the parameters and a
-table of which times show which fixture states. Unpinned, the fixture has *nothing in progress* at
-any time of day, so a draining arc only appears if you ask for one — which is how a drain that
-never drained shipped through two releases.
+table of which times show which fixture states. The fixture is anchored to the window's own start,
+so every event's offset from `now` is a constant and the unpinned picture is the same at any time of
+day — which cuts both ways. It does carry one draining arc (🟡 Tidy Up and Line Up, added with #71's
+fix), so an unpinned look is no longer blind to the drain the way it was when a drain that never
+drained shipped through two releases. But that arc is inside the four-deep cluster, drawn on a
+15.56-unit ring against a lone arc's 75.92, so anything about a drain's *own* geometry wants
+`?now=04:15` where one is drawn clear of the cluster.
 
 **Every preview dial is one line of text smaller than the board's** (#115). The dial is sized from
 the display now, so a notice no longer changes its *width* — but it is still a grid row, and demo
