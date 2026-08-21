@@ -1,6 +1,6 @@
 # Fit a two-line title inside what the arc's own outline leaves
 
-**Status:** in review
+**Status:** done — shipped in [#77](https://github.com/BenSeymourODB/clock-face-schedule/pull/77)
 **Issue:** [#67 — A two-line title on a stacked ring sits on the elapsed arc's own
 outline](https://github.com/BenSeymourODB/clock-face-schedule/issues/67)
 **Docs:** #26 (band-sized elapsed outline), #27 (halo retired), #35 (`fitDurationLine`'s radial

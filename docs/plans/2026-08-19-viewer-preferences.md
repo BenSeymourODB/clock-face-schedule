@@ -1,6 +1,6 @@
 # Viewer preferences in PropertiesService
 
-**Status:** in review
+**Status:** done — shipped in [#82](https://github.com/BenSeymourODB/clock-face-schedule/pull/82)
 **Issue:** [#31](https://github.com/BenSeymourODB/clock-face-schedule/issues/31)
 **PR:** [#82](https://github.com/BenSeymourODB/clock-face-schedule/pull/82)
 **Docs:** [../DESIGN.md](../DESIGN.md) (Platform constraints — browser storage; ADR 0006; ADR 0008)
