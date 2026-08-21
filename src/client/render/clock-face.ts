@@ -128,6 +128,18 @@ const STROKE = {
  */
 const HAND_HALO_RATIO = 0.01;
 
+/**
+ * Halo dilating the AM/PM indicator's own glyphs, as a multiple of `HAND_HALO_RATIO`.
+ *
+ * Twice the hands' halo rather than the same, because the job is not symmetric: a hand's halo
+ * separates a 9.2-unit bright line from the arcs behind it, while this one has to separate a
+ * ~2-unit grey letter stem from that same bright line. Measured at 18:30, where the hour hand abuts
+ * the "P", on a 600-px raster: ×1 leaves a single antialiased pixel of face between the two — the
+ * amount a display's own bloom swallows — and ×3 costs five of the hand's nine pixels. ×2 buys
+ * three while leaving two thirds of the hand.
+ */
+const PERIOD_HALO_MULTIPLE = 2;
+
 export interface ClockFaceParams {
   /**
    * Radius the face is drawn at — used as given, not scaled down.
@@ -290,6 +302,46 @@ export function clockFace({
     }
   }
 
+  const periodText = (at: Date) => (at.getHours() >= 12 ? "PM" : "AM");
+
+  /**
+   * AM/PM, drawn twice for the same reason the hands are (#107).
+   *
+   * A hand crossing this used to *erase* it rather than overlap it: the indicator was appended
+   * before the hands' halos, so the halo painted `var(--card)` straight over the glyphs and "PM"
+   * read as "P И" for roughly an hour a day. There is nowhere on the face to move it to — every
+   * hand starts at the centre — and simply drawing it after the hands puts `--muted-foreground`
+   * over a `--card-foreground` hand at 2.4:1, under the 3:1 floor a graphical object gets.
+   *
+   * So the label gets its own halo instead and the pair mounts last. The hand is interrupted by the
+   * letters rather than the other way round, and the text keeps its full 7:1 because `var(--card)`
+   * is what is now behind it. Two elements rather than `paint-order: stroke fill`: the file already
+   * has that idiom for the hands, and an SVG2 attribute the board's browser ignores would fail
+   * silently, which is precisely the failure this fixes.
+   */
+  const periodIndicatorHalo = svg(
+    "text",
+    {
+      "data-testid": "period-indicator-halo",
+      x: cx,
+      y: roundCoord(cy + faceRadius * RADIUS.periodIndicator),
+      "text-anchor": "middle",
+      "dominant-baseline": "central",
+      "font-size": roundCoord(faceRadius * SCALE.periodIndicator),
+      "font-weight": 600,
+      fill: "var(--card)",
+      stroke: "var(--card)",
+      // Doubled: a stroke straddles the outline it follows, so half of it falls inside the glyph
+      // and only half becomes dilation. `fill` is what covers the glyph's own interior.
+      "stroke-width": roundCoord(2 * PERIOD_HALO_MULTIPLE * faceRadius * HAND_HALO_RATIO),
+      "stroke-linejoin": "round",
+      "font-family": FONT_STACK,
+      // The word is already in the tree once, on the element below.
+      "aria-hidden": "true",
+    },
+    [periodText(time)]
+  );
+
   const periodIndicator = svg(
     "text",
     {
@@ -303,7 +355,7 @@ export function clockFace({
       fill: "var(--muted-foreground)",
       "font-family": FONT_STACK,
     },
-    [time.getHours() >= 12 ? "PM" : "AM"]
+    [periodText(time)]
   );
 
   const angles = handAngles(time);
@@ -398,7 +450,7 @@ export function clockFace({
   // top of every hour, and a per-hand pairing would let the minute halo — wider than the hour
   // hand's own line — paint over and thin it. Painting every halo first keeps each hand's colour
   // on top regardless of which other hand shares its angle.
-  element.append(periodIndicator, hourHalo, minuteHalo);
+  element.append(hourHalo, minuteHalo);
   if (secondHalo) element.append(secondHalo);
   element.append(hourHand, minuteHand);
   if (secondHand) element.append(secondHand);
@@ -413,6 +465,10 @@ export function clockFace({
     })
   );
 
+  // Last of everything on the face, so nothing drawn here can cover it — including whatever the
+  // timer eventually draws inside this radius (#48).
+  element.append(periodIndicatorHalo, periodIndicator);
+
   return {
     element,
     setTime(next: Date): void {
@@ -423,7 +479,9 @@ export function clockFace({
       minuteHand.setAttribute("transform", rotateAbout(updated.minute));
       secondHalo?.setAttribute("transform", rotateAbout(updated.second));
       secondHand?.setAttribute("transform", rotateAbout(updated.second));
-      periodIndicator.textContent = next.getHours() >= 12 ? "PM" : "AM";
+      // Both copies, or the halo keeps yesterday's word and stops fitting the one on top of it.
+      periodIndicatorHalo.textContent = periodText(next);
+      periodIndicator.textContent = periodText(next);
     },
   };
 }
