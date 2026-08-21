@@ -78,21 +78,40 @@ what is behind it now.
 ### Sizing the halo
 
 Expressed as a multiple of `HAND_HALO_RATIO`, so the relationship between the two halos is
-arithmetic in the code rather than prose. Measured at `deviceScaleFactor: 1` with the dial at
-600 CSS px — the honest small raster — by reading the luminance scanline through the letter stems at
-18:30, where the hour hand abuts the "P":
+arithmetic in the code rather than prose. Measured at `deviceScaleFactor: 1` by reading the
+luminance scanline through the letter stems at 18:30, where the hour hand abuts the "P".
 
-| halo per side | face-dark pixels between hand and glyph | hand pixels surviving left of the glyph |
-| --- | --- | --- |
-| 0 — today | **0**, the stem is inside the hand | 9 |
-| ×1 (2.04) | 1 | 8 |
-| ×1.5 (3.07) | 2 | 7 |
-| **×2 (4.09)** | **3** | 6 |
-| ×3 (6.13) | 5 | **4** — the hand reads as bitten |
+**This is a claim about pixels, so it has to be made at the scale the wall gets** — the caveat #116
+added to `CLAUDE.md`, and the one place in this work where it bites. The sweep was originally run in
+a 700×700 viewport, which puts the dial at 616 px; the board renders it at **600** (#115), so that
+was 2.7% generous by luck rather than by design. Re-run at exactly 600 px — 1920×1080 with `#status`
+hidden, which is the escape hatch `CLAUDE.md` names, keeping the pin for time control while
+restoring the wall's own raster — the gap column below reproduces **identically**.
+
+The near miss is worth recording. Had the sweep used the obvious board viewport, 1920×1080 *pinned*,
+the dial would have been 950.4 px and one unit 1.584 px: ×1 would have shown 2–3 clear pixels and
+looked sufficient, and it delivers **one** on the wall. The caveat would have changed the answer.
+
+| halo per side | face-dark pixels between the bright hour hand and the "P" stem |
+| --- | --- |
+| 0 — today | **0**, the stem is inside the hand |
+| ×1 (2.04) | 1 |
+| ×1.5 (3.07) | 2 |
+| **×2 (4.09)** | **3** |
+| ×3 (6.13) | 5 |
 
 One antialiased pixel is the amount a display's own bloom can swallow, so ×1 is the minimum that
-separates at all rather than a comfortable choice. ×2 buys three dark pixels while leaving two
-thirds of the hand's width, and ×3 halves the hand for one more pixel. **×2.**
+separates at all rather than a comfortable choice. **×2.**
+
+The gap is the robust half of this measurement, because a dilation is uniform: 4.09 units of halo is
+4.09 units of gap wherever a hand meets a glyph, and at the board's one unit per pixel that is the
+pixel count directly. The cost side does *not* reduce to a scanline — the hour hand is tilted, so a
+horizontal row cuts a chord whose width depends on which row, and an earlier draft of this plan
+quoted "hand pixels surviving" from a single row as though it were a property of the halo. The honest
+cost figure is the analytic one: the halo erases a **21.05-unit stretch** of any hand crossing it,
+out of that hand's whole length, and the next section is about where that stretch may land. Looking
+settles the endpoints — at 600 px, ×3 cuts the hour hand into two visibly separate strokes and ×0
+swallows the "P" almost entirely, so both are rejected by eye as well as by arithmetic.
 
 Twice the hands' own halo rather than the same, because the job is not symmetric: a hand's halo
 separates a 9.2-unit bright line from the arcs behind it, while this one has to separate a ~2-unit
@@ -171,6 +190,31 @@ either side)**, not to `INK_HEIGHT_RATIO`'s em box. Capitals have no descenders,
 4.6 units per side larger at this font size — enough that the box would stop being the conservative
 one its comment claims, and enough for the vacuity guard to ride on margin rather than on glyphs.
 The same correction #78 made to the band's radial gates.
+
+## What this fix does not buy: the indicator is still the shortest read on the dial
+
+Newly computable, because #116 pinned the millimetre scale (26 units = 29 mm, from the dial's actual
+600 px against a 1080-tall board) and ADR 0009's distance/150 rule can now be applied to any glyph
+on the face:
+
+| | units | mm | distance/150 |
+| --- | --- | --- | --- |
+| hour numerals | 28.62 | 31.9 | 4.79 m |
+| panel body, ADR 0009 | 26.00 | 29.0 | 4.35 m |
+| 1-hour inner hour ring | 20.44 | 22.8 | 3.42 m |
+| **AM/PM indicator** | **18.40** | **20.5** | **3.08 m** |
+
+So the indicator is the smallest text on the dial and reads from 3.1 m where the numerals beside it
+reach 4.8 m — which is what #70 already characterises it as, now with a figure. This work makes it
+readable *where a hand crosses it*; it does not make it readable *from the back of a room*, and those
+are separate defects. Not widened here: type size is #70's decision, it trades against every radial
+gate around it, and #107 is about erasure.
+
+One connection worth leaving for whoever takes #70: **enlarging this text widens the halo band, which
+shortens the 1-hour hour hand's stub.** The stub test derives the band from the rendered font size
+rather than from a constant, so it fails on its own at a font size of 0.13 — 16.22 units of stub
+against the 17.28 the floor demands. Nobody can enlarge the indicator without being told to re-check
+`RADIUS.periodIndicator`, which is the property that section was written to protect.
 
 ## Deferred
 
