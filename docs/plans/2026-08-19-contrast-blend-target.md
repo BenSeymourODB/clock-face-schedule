@@ -1,6 +1,6 @@
 # Pick the blend target by comparing the extremes, not by thresholding luminance
 
-**Status:** in review
+**Status:** done — shipped in [#96](https://github.com/BenSeymourODB/clock-face-schedule/pull/96)
 **Issue:** #95
 **Docs:** #66 (`adjustCompositeForContrast`, where the corrected rule already lives), #27 (the
 function's origin and only caller), #81 (the light scheme, where this stops being latent)

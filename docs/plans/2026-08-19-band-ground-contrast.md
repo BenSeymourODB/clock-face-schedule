@@ -1,4 +1,4 @@
-**Status:** in review
+**Status:** done — shipped in [#87](https://github.com/BenSeymourODB/clock-face-schedule/pull/87)
 **Issue:** #74
 **Docs:** #27 (the elapsed outline's contrast pass), #26 (elapsed outlines), #66 (the filled arc's
 own extent — the separator question resolves there), ADR 0007 (theme tokens),

@@ -1,6 +1,6 @@
 # Recur the demo fixture, so a long-running display never empties
 
-**Status:** in review
+**Status:** done — shipped in [#79](https://github.com/BenSeymourODB/clock-face-schedule/pull/79)
 **Issue:** [#62](https://github.com/BenSeymourODB/clock-face-schedule/issues/62)
 **Docs:** [../DESIGN.md](../DESIGN.md) (ADR 0005), `src/client/sample-events.ts`
 
