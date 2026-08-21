@@ -1,6 +1,6 @@
 # A plan status that is true at merge, and the guard that keeps it so
 
-**Status:** in progress — the guard and the convention, outstanding as [#111](https://github.com/BenSeymourODB/clock-face-schedule/issues/111)
+**Status:** done — shipped in [#124](https://github.com/BenSeymourODB/clock-face-schedule/pull/124)
 **Issue:** [#111](https://github.com/BenSeymourODB/clock-face-schedule/issues/111)
 **Docs:** `.claude/commands/implement-issue.md` step 1 (the retire pass this replaces), `CLAUDE.md`
 (the brainstorm/plan conventions), #99 and #109 (the chore, done by hand twice), #101 (advisory
@@ -138,10 +138,16 @@ to disagree about. Confirmed by building before and after and diffing `build/`.
 
 ## Deferred
 
-- **Whether a plan's `in progress` reference is actually open.** Needs the issue's state, so it needs
-  the network, so it would have to be skippable — the trap #111's option 2 names. The reference being
-  *present* is what this guard can prove offline; whether it is still open is what a human reading the
-  plan is for. Filed rather than folded in if it turns out to matter.
-- **`**Issue:**` and `**Docs:**` headers**, which `.claude/commands/implement-issue.md` step 4 also
-  requires and which nothing checks either. The mvp plan carries neither, so requiring them means
-  deciding whether it is an exception or a gap — out of scope for a status guard.
+- **#125 — whether a plan's `in progress` reference is actually open.** Needs the issue's state, so it
+  needs the network, so it would have to be skippable — the trap #111's option 2 names. The reference
+  being *present* is what this guard can prove offline; whether it is still open is what a human
+  reading the plan is for.
+- **#126 — the `Issue:` and `Docs:` headers**, which `.claude/commands/implement-issue.md` step 4 also
+  requires and which nothing checks either. 24 of 25 plans carry both; the mvp plan carries neither,
+  so requiring them means first deciding whether it is an exception or a gap.
+
+## What this plan demonstrates
+
+Its own status was `in progress — … outstanding as #111` while it was being written and became
+`done — shipped in #124` in the same PR, once the draft existed. Nothing is left for a later run to
+correct, which is the whole of the claim.
