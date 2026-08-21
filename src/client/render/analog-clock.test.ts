@@ -71,6 +71,18 @@ function build(events: ClockEventInput[], overrides: Partial<AnalogClockParams> 
   return analogClock({ events, time: MORNING, ...overrides });
 }
 
+/**
+ * Three overflowing events ten minutes apart. Measured with the displacement pass disabled, all
+ * three cards overlap each other — 447.5..502.6, 467.9..522.9 and 486.7..541.8, on a 55.1-unit
+ * card. Shared with the duration suite, which uses it as the case where the resolved pile reaches
+ * the bottom of the clamp band and a duration line no longer fits.
+ */
+const pile = [
+  input("early", 4.0, 4.4, { title: PILE_TITLE }),
+  input("middle", 4.17, 4.57, { title: PILE_TITLE }),
+  input("late", 4.34, 4.74, { title: PILE_TITLE }),
+];
+
 function arcs(root: SVGSVGElement): Element[] {
   // The fill layer only — an arc is three paths now, and the others carry the same id prefix.
   return [...root.querySelectorAll('path[data-arc-part="fill"]')];
@@ -481,9 +493,10 @@ describe("analogClock", () => {
     });
 
     /**
-     * A duration line makes a card 40% taller, and cards have no collision avoidance (#30). On the
-     * fixture that turned a 9.5-unit gap into a 15-unit overlap — which hides a title that is on a
-     * card *because* it did not fit its arc. The line is optional, so it goes rather than the title.
+     * A duration line makes a card 40% taller, and two cards landing on each other hides a title
+     * that is on a card *because* it did not fit its arc. The line is optional, so it goes rather
+     * than the title — but only where displacement (#30 item 2) cannot make room for it first,
+     * which is what #136 settled: the two passes iterate together rather than in sequence.
      */
     describe('rather than covering a card already placed', () => {
       function cardRects(element: SVGSVGElement) {
@@ -524,13 +537,33 @@ describe("analogClock", () => {
         }
       });
 
-      it("drops the later card's duration, not its title", () => {
-        // Clockwise order decides which one yields, matching the order a reader scans the dial.
+      it("keeps both durations where displacement separates the cards (#136)", () => {
+        // These two cards overlap at their title-only size, so the un-displaced comparison this
+        // pass used to make declined the later one's line. Displacement resolves the collision, so
+        // the line was given up for nothing — and the cards still clear each other with it.
         const { element } = build(adjacent);
+        const rects = cardRects(element);
 
         expect(labelLines(element, "first").slice(-1)).toEqual(["45 min"]);
-        expect(labelLines(element, "second").slice(-1)).not.toEqual(["30 min"]);
-        expect(labelLines(element, "second").length).toBeGreaterThan(0);
+        expect(labelLines(element, "second").slice(-1)).toEqual(["30 min"]);
+        expect(rectsOverlap(rects[0], rects[1])).toBe(false);
+      });
+
+      it("still drops a duration displacement cannot make room for", () => {
+        // The negative half, and the one that matters: `pile`'s third card is displaced hard
+        // against the bottom of the clamp band — 649.5 against 650.4 — so a line there would push
+        // it out of the frame the page is sized for (#121). Clockwise order decides which of the
+        // three yields, matching the order a reader scans the dial.
+        const { element } = build(pile);
+        const rects = cardRects(element);
+
+        expect(labelLines(element, "early").slice(-1)).toEqual(["24 min"]);
+        expect(labelLines(element, "middle").slice(-1)).toEqual(["24 min"]);
+        expect(labelLines(element, "late").slice(-1)).not.toEqual(["24 min"]);
+        expect(labelLines(element, "late").length).toBeGreaterThan(0);
+        for (const rect of rects) {
+          expect(rects.filter((other) => other !== rect && rectsOverlap(rect, other))).toEqual([]);
+        }
       });
     });
 
@@ -577,16 +610,6 @@ describe("analogClock", () => {
       );
       return hits;
     }
-
-    /**
-     * Three overflowing events ten minutes apart. Measured with the pass disabled, all three cards
-     * overlap each other — 447.5..502.6, 467.9..522.9 and 486.7..541.8, on a 55.1-unit card.
-     */
-    const pile = [
-      input("early", 4.0, 4.4, { title: PILE_TITLE }),
-      input("middle", 4.17, 4.57, { title: PILE_TITLE }),
-      input("late", 4.34, 4.74, { title: PILE_TITLE }),
-    ];
 
     it("clears a three-deep pile", () => {
       const rects = cardRects(build(pile).element);
