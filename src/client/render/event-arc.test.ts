@@ -1549,7 +1549,7 @@ describe("eventArc while the event is draining", () => {
     /**
      * #58: the two ramps on a clamped, draining arc are painted onto one mask in sequence, and the
      * issue asks what happens where they overlap. They never do — but the clearance is a function of
-     * the scale's look-behind, and #34's 1-hour scale cut it from 74.6° to 14.6° with nothing
+     * the scale's look-behind, and #34's 1-hour scale cut it from 74.0° to 14.0° with nothing
      * watching. This is the assertion that watches.
      *
      * Built at the tightest position each scale can reach: clamped at the look-behind edge, so the
@@ -1558,10 +1558,12 @@ describe("eventArc while the event is draining", () => {
      * it), with the remainder chosen to hold both ramps at their deepest — which is the tightest the
      * gap gets, since every cap only widens it.
      *
-     * On the dial's own lone-arc ring, not this file's 48-unit one: the pad comes from
-     * `separatorWidth`, which is sized from the ring, and a lone arc is the thickest ring the dial
-     * draws, so it carries the widest pad and the smallest clearance. A deeper stack has a thinner
-     * ring, a smaller pad and more room.
+     * On the dial's own band, not this file's 48-unit ring, because the pad is sized from real
+     * geometry and an ad-hoc ring reports a clearance the dial does not have. Since #114 the pad is
+     * the widest stroke on the arc, which is band-sized (`ELAPSED_BORDER_RATIO`) at every depth the
+     * dial opens — so the clearance no longer varies with stacking, and one render covers all four.
+     * It was ring-sized before that, and #114 cost this margin 0.6°: the pad is the term that erodes
+     * whenever a stroke on the arc gets wider.
      *
      * Scales are iterated rather than listed. A hand-written pair is exactly how the 1-hour scale
      * got past the arithmetic that closed this issue the first time, and `DialScaleId` forces an

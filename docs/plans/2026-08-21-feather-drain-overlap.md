@@ -25,12 +25,12 @@ Swept over the real pipeline — `dialWindow` → `eventsToClockEvents` → `com
 `computeDrainMasks` — for every event in progress at `now` that reaches a window edge, offsets stepped
 by three minutes, at 168 instants (24 hours × the 0/1/7/23/30/45/59 minute marks), both scales, all
 four stack depths. Zero overlaps, and the clearance is identical at every instant — scale arithmetic
-rather than a time-of-day accident. The tightest, on a lone arc's fill mask:
+rather than a time-of-day accident. The tightest, on the fill mask:
 
 | scale | look-behind | tightest clearance between the two ramp wedges |
 | --- | --- | --- |
-| 12h | 180 min → 90° | **74.5531°** |
-| 1h | 5 min → 30° | **14.5531°** |
+| 12h | 180 min → 90° | **73.9572°** |
+| 1h | 5 min → 30° | **13.9572°** |
 
 It decomposes exactly, and both depths are capped rather than fixed:
 
@@ -40,7 +40,7 @@ spent       = lookbehindDegrees
 drainHalf   = min(FEATHER_DEGREES, min(remaining, spent) × FEATHER_MAX_SPAN_RATIO) / 2
 featherDepth = min(FEATHER_DEGREES, arcSpan × FEATHER_MAX_SPAN_RATIO)
 
-1h:  30 − 5 − 10 − 0.4469 = 14.5531
+1h:  30 − 5 − 10 − 1.0428 = 13.9572
 ```
 
 - `spent` is where the drain boundary sits relative to the clamped edge. Exact, not approximate:
@@ -55,14 +55,18 @@ featherDepth = min(FEATHER_DEGREES, arcSpan × FEATHER_MAX_SPAN_RATIO)
 - `padDegrees` is `buildFadeMask`'s wedge pad as an angle at the outer radius, and it applies to the
   **fill mask only**: that mask's drain wedge pads *toward* the feather, where the spent mask's drain
   wedge — anchored at the other end of the same span — pads away from it. So the fill mask carries the
-  smaller number, at `separatorWidth = 2.2776` units on the dial's undivided 75.92-unit band. A
-  deeper stack has a thinner ring, so a smaller pad and *more* room: 14.79° at two rings, 14.80° at
-  three or four. **A lone arc is therefore the binding case**, which is what the spec renders.
+  smaller number. Since #114 the pad is the widest stroke the arc draws — `5.3144` units, sized from
+  the band — and `ring × ELAPSED_STROKE_MAX_RATIO` exceeds that at every depth the dial opens (the
+  thinnest, a four-deep 15.5636-unit ring, gives 6.225), **so the pad and the clearance are the same
+  at every stack depth**. That is a change: before #114 the pad was `separatorWidth`, ring-sized,
+  which put a lone arc at 14.5531° and a four-deep ring at 14.8038°. **#114 cost this margin 0.6°**,
+  and the pad is the term that erodes whenever a stroke on the arc gets wider — which is the
+  interaction the guard now covers.
 
-**The overlap becomes reachable when the look-behind drops below 12.6629°** — bisected against the
-formula above with a lone arc's pad, which is **2.11 minutes on the 1-hour scale** and 25.33 minutes
-on the 12-hour. Nothing today is near that; the 1-hour scale cut the margin fivefold without anything
-noticing, which is the reason this wants a test rather than an argument.
+**The overlap becomes reachable when the look-behind drops below 13.3852°** — bisected against the
+formula above, which is **2.23 minutes on the 1-hour scale** and 26.77 minutes on the 12-hour. Nothing
+today is near that; the 1-hour scale cut the margin fivefold without anything noticing, which is the
+reason this wants a test rather than an argument.
 
 The look-ahead side is never the binding one, so it does not appear in the formula: 240° on the
 12-hour scale and 300° on the 1-hour, against the same ~15° of combined reach.
@@ -101,7 +105,7 @@ feather that does real work on each mask is the one on the side that mask keeps.
 That is worth holding onto when reading the two numbers: the **fill** mask's clearance is the smaller
 of the pair, but its start feather is the redundant one, so the clearance that could ever produce a
 visible artefact is the **spent** mask's — 15.0000° on the 1-hour scale against the fill mask's
-14.5531°. The spec asserts both, and takes the tighter as the margin, which is the conservative way
+13.9572°. The spec asserts both, and takes the tighter as the margin, which is the conservative way
 round.
 
 ## What lands
@@ -116,16 +120,17 @@ No renderer behaviour changes: there is nothing to fix.
     past the arithmetic that closed this issue the first time. `DIAL_SCALES` is exported from
     `scale.ts` for this, and `DialScaleId` forces an entry there for every scale that exists — a
     third scale is picked up with no edit. Verified: a hypothetical 24-hour scale with 30 minutes of
-    look-behind (7.5°) fails at −4.259°.
-  - **Render on the dial's ring, not the suite's.** The pad comes from `separatorWidth`, which is
-    sized from the ring, and this file's ad-hoc 48-unit ring is not one the dial draws — it
-    understates a lone arc's pad by 37% and would report 14.7174° where the dial has 14.5531°.
-    `ARC_BAND_RATIO` is exported from `analog-clock.ts` for exactly this reason.
+    look-behind (7.5°) fails at −4.86°.
+  - **Render on the dial's geometry, not the suite's.** The pad is sized from real radii, and this
+    file's ad-hoc 48-unit ring is not one the dial draws — it reported 14.7174° where the dial then
+    had 14.5531°. `ARC_BAND_RATIO` is exported from `analog-clock.ts` for exactly this reason. The
+    error is smaller now that #114 has made the pad band-sized, and the reason to take the geometry
+    from the dial is unchanged.
   - **Cap both depths the way the code caps them.** A flat `1.5 × FEATHER_DEGREES` holds only while
     the look-behind clears 28.571°, which is 1.43° of headroom on the 1-hour scale; below it the
     assertion would demand a wrong number and fail on a scale change that is perfectly safe.
     Verified: at a 4-minute look-behind (24°, below the cap) the spec passes; at 2 minutes it fails
-    on the invariant itself, at −0.5469°.
+    on the invariant itself, at −1.14°.
 
   The pad is read back off the rendered wedge rather than written down, so #114 changing it moves the
   spec with it.
