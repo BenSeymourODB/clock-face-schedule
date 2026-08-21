@@ -82,9 +82,9 @@ reach and red on the em-box one, so the branch is a live guard rather than a lat
 
 Text gets smaller where the cap binds: against the font `main` draws today, 4.2% three deep and 8.1%
 four deep at 600; against the uncapped ring ratio the cap is now measured from, 4.1% and 24.3%. That
-is #70's
-subject — 6.24 units three deep is already called "a smudge at classroom distance" — and this makes
-the two-line case of it marginally worse, 6.24 → 5.98.
+is #70's subject — 6.24 units three deep is already called "a smudge at classroom distance" — and this
+makes the two-line case of it marginally worse, 6.24 → 5.98. (Re-grounded at the board's own scale in
+the #116 section below, which strengthens rather than weakens the trade.)
 
 Taking that trade rather than arguing it away, for two reasons `CLAUDE.md` decides:
 
@@ -141,3 +141,80 @@ Found by review, and load-bearing by this repo's own rules rather than cosmetic:
   `TITLE_EDGE_CLEARANCE`'s). That is the pre-#89 figure; it is 3.30 now.
 - The describe header's clearance figures (1.93 and 0.55) were the em box at the 0.55 offset.
   Uncapped against real ink they are 0.68 and −1.32.
+
+## What #116 changes, and what it does not
+
+#116 landed after this was written, recording two measurements off the deployed board. Merged in;
+**no code change follows from either**, and one claim in this plan had to go.
+
+### #115: the dial renders at 600 px on any display
+
+The board lays the dial out at its nominal 600 units, one CSS pixel per unit. Three consequences,
+in ascending order of how much they matter:
+
+- **The 600-unit rows above are the board's own numbers**, not a middle entry in a robustness
+  sweep. So the shortfall a viewer actually got was 0.64 units four deep and 0.68 three deep.
+- **900 is not a size anything renders at.** Calling 900/4's 0.41 "the worst case" was misleading:
+  it is the worst case in the *suite*, which sweeps 300 to 900 because `analogClock` takes a `size`
+  and nothing should depend on one value of it. Nothing passes 900 today, and #115's own candidate
+  fixes land on 950.4 or 1036.8.
+- **A pinned dial is 58% larger than the board's**, because the "Clock frozen at…" notice props the
+  grid track (#115's table). Every screenshot in this change was pinned. Reproduced here: 950.4 px
+  pinned, 600.0 px with `#status` hidden, at 1920×1080.
+
+That last one costs this plan a sentence. Geometry and contrast are in viewBox units and are
+unaffected — `CLAUDE.md`'s new paragraph says so explicitly, and every figure here was read off the
+rendered DOM in units, so the before/after clearances stand. **A legibility claim is not**, and this
+plan made one: *"the text at 5.98 and 3.30 is still legible at the same distance it was"*. Re-rendered
+at the board's own 1.0 px/unit and magnified nearest-neighbour, the four-deep two-line title is not
+words at either font — it is subpixel colour fringing. The three-deep one survives, heavily fringed.
+
+| | units | on a 4 ft 16:9 board | /150 rule |
+| --- | --- | --- | --- |
+| four deep, before | 3.59 | 4.05 mm | 0.61 m |
+| four deep, after | 3.30 | 3.72 mm | 0.56 m |
+| three deep, before | 6.24 | 7.04 mm | 1.06 m |
+| three deep, after | 5.98 | 6.75 mm | 1.01 m |
+
+The honest version of the trade is therefore **stronger** than the one argued above, not weaker: at
+four deep the yield costs 0.05 m of a legible distance that was already 0.61 m on a display meant to
+be read across a classroom. There was nothing there to lose. What that really says is that **#70 is
+not a nicety** — a four-deep two-line title is unreadable at any distance a room contains, before
+and after — and this change neither helps nor hurts it.
+
+### And the clearance itself is sub-pixel at today's scale
+
+0.3588 units of clearance gained is **0.36 device pixels** at 1.0 px/unit. It is not visible on the
+board; it shows up as a slightly different antialiasing fringe. It was visible in the first pass'
+crops because those were captured at deviceScaleFactor 3 to 6 — 1.08 to 2.15 px of change, at a
+scale no display shows.
+
+| px/unit | clearance gained | where |
+| --- | --- | --- |
+| 1.000 | 0.36 px | the board today (#115) |
+| 1.584 | 0.57 px | a pinned preview, and #115's first three candidate fixes |
+| 1.728 | 0.62 px | ADR 0009's dial, which keeps the board's height |
+
+So the case for the change is not "you can see it". It is:
+
+1. **`TITLE_EDGE_CLEARANCE` is a contract other code is written against.** #35's duration gate and
+   #67's cap both compare against it, and #114 is a live bug of exactly this shape — a pad sized
+   from the ring against a stroke sized from the band, with nothing checking them. A constant that
+   silently means 41% of itself is how the next one of those gets built.
+2. **It becomes visible as the dial grows**, and every path #115 offers grows it.
+3. **Nothing regresses.** The yield is 0.29 units of a font that is colour fringing either way.
+
+### #114: the escaped hairline
+
+No interaction, checked rather than assumed. #114's slivers sit at r 213.50–213.75 and 294.25–294.50,
+which are the halves of the 5.31-unit outline lying *outside* the ring — `292 + 5.3144/2 = 294.66`
+at the outer edge. This cap already excludes both halves ("a stroke straddles its path, so it takes
+half its width from each edge"), so the escape is in territory the text never claimed. And #114's fix
+widens the mask pad rather than narrowing the outline, so `edgeStrokeWidth` — the cap's only input
+from that quarter — does not move.
+
+Worth flagging for whoever takes #114: it proposes an `arcEdgeStrokeWidth(ringThickness,
+bandThickness)` helper and notes the title layout already derives the quantity. It does, as
+`computeArcTitleLayout`'s `edgeStrokeWidth` parameter — but as a value the *caller* computes, so the
+helper still has to be extracted from `event-arc.ts`. Not done here; this change has no second caller
+to justify it.
