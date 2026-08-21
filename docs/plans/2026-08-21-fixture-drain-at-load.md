@@ -53,9 +53,11 @@ the four-deep cluster's elapsed outlines.
 > **Corrected after merge (#153).** Two things this passage got wrong. The arc's *position* was
 > quoted as "roughly five o'clock", which is a wall-clock artefact of the session that measured it —
 > the dial rotates with the period start, so at `?now=03:00` the same arc sits near half past two.
-> And the gradient list is the **settled** one: for about the first second of a load the dial also
-> carries `arc-drain-b-drain`, because 🔴 Deadline ends exactly on the anchor boundary (#152). A
-> screenshot taken inside that second shows two seams.
+> And the gradient list was the **settled** one: for about the first second of a load the dial also
+> carried `arc-drain-b-drain`, because 🔴 Deadline ends exactly on the anchor boundary (#152), so a
+> screenshot taken inside that second showed two seams. **Fixed in #155** — the anchor and the dial's
+> first frame now come from one clock read, and the four-entry list above is the list at every sample
+> from 150 ms on. The position correction stands.
 
 Across the tiling (`recurringSampleEvents`, three whole periods = 2,535 minutes, one sample per
 minute):

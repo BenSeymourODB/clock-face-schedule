@@ -78,9 +78,11 @@ angular position — the frame is tightest at 3 and 9. Measured across pins, the
 floating labels at `?now=03:00`, four at `04:15`, three at `08:30`, and **unpinned the set drifts
 minute to minute as the dial turns.** So an unpinned screenshot of a card collision is not
 reproducible, including by you: judge label placement and crowding on a pinned dial and name the pin.
-And for about the first second of an unpinned load the dial draws **two** drains rather than one
-(#152) — 🔴 Deadline ends exactly on the anchor boundary — so a screenshot taken inside that second
-shows a seam that is not there afterwards.
+The *drain* set is no longer among the things that drift: the load frame used to carry **two** drains
+for about a second, because 🔴 Deadline ends exactly on the anchor boundary and the anchor was read
+after the clock the first frame drew with, and #152 made both reads one. So the arc a screenshot
+catches mid-drain is the same at 150 ms as at 2 s — but only *because* one instant now feeds the dial
+and the fixture, and a second `now()` read anywhere on the way up brings it back.
 
 **Every preview dial is one line of text smaller than the board's** (#115). The dial is sized from
 the display now, so a notice no longer changes its *width* — but it is still a grid row, and demo

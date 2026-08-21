@@ -121,8 +121,17 @@ export interface AnalogClockParams {
   /** Band width in viewBox units. Defaults to `ARC_BAND_RATIO` of the dial's radius. */
   arcThickness?: number;
   showSeconds?: boolean;
-  /** Fixed time, for tests. Defaults to now. */
-  time?: Date;
+  /**
+   * The instant the first frame is drawn at.
+   *
+   * Required, and not because a default would be hard to write. It read `new Date()` until #152,
+   * which is a clock read outside #72's `?now` / `?freeze` seam — and #152 was the *host* reading
+   * that seam twice on the way up, so the dial and the demo fixture's anchor disagreed by however
+   * long the load took. Making the caller name the instant is what keeps one load frame to one
+   * clock read; a default is the same silent-omission hazard the build footer is generated to
+   * avoid (ADR 0002).
+   */
+  time: Date;
   /**
    * Which time scale the dial runs at (#34): the inherited 12-hour revolution, or a 60-minute one
    * at twelve times the resolution. Chooses the band's degrees-per-minute, its angle origin, its
@@ -168,7 +177,7 @@ export function analogClock({
   size = DIAL_VIEWBOX_SIZE,
   arcThickness: arcThicknessOverride,
   showSeconds = false,
-  time = new Date(),
+  time,
   scale: scaleId = "12h",
   labelMargin = null,
 }: AnalogClockParams): AnalogClockHandle {

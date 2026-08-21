@@ -156,10 +156,23 @@ function startDisplay(): void {
   const preferences = displayPreferences(mount);
   const scale = chosenScale(mount);
 
+  /**
+   * One read for the whole of the load, so everything the first frame is built from agrees about
+   * when that frame is (#152).
+   *
+   * A second read further down the function is later by however long the append and the label
+   * measurement take, and the demo fixture has an event ending exactly on the anchor boundary — so
+   * the load frame drew a drain the next tick removed, and a screenshot taken inside that second
+   * showed a seam that is not there afterwards. Which is a race in the load order rather than
+   * anything about the geometry, and the review habit `CLAUDE.md` mandates needs the load frame to
+   * be reproducible.
+   */
+  const loadedAt = now();
+
   const clock = analogClock({
     events: [],
     showSeconds: preferences.get().showSeconds,
-    time: now(),
+    time: loadedAt,
     scale
   });
   mount.append(clock.element);
@@ -195,9 +208,11 @@ function startDisplay(): void {
   if (mount instanceof HTMLElement && mount.dataset["demo"] === "1") {
     // Handed the same `now` the tick above reads, which is the whole of what `fixture-refresh.ts`
     // exists to make checkable: a pinned dial whose copy set kept moving would empty itself (#80).
+    // And the same `loadedAt` the dial was built with, so the anchor and the first frame agree.
     const refreshFixture = fixtureRefresher({
       scale,
       pin: clockPin,
+      loadedAt,
       now,
       setEvents: (events) => clock.setEvents(events)
     });
