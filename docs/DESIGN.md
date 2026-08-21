@@ -297,6 +297,8 @@ after the panel**, and the panel is **180 units wide, on the right**.
   line at 26 units, and on a 4 ft board 26 units is 53 mm — comfortable reading at 8 m by the
   conventional distance/150 rule. That is the size at which the panel can carry the names of a
   three-deep cluster, whose arc titles render at 6.24 units, 12.7 mm, legible to about 2 m (#70).
+  (5.98 units, 12.2 mm and ~1.9 m for a three-deep title that wraps, once the clearance cap binds —
+  #90. The one-line figure is the one this argument rests on.)
 - **16:10 is the binding case and the ceiling is 209 units.** Past that the margin drops below the
   knee and the panel starts taking width from the labels one-for-one. 180 leaves 29 units of
   headroom; anything wider should be re-measured rather than assumed.

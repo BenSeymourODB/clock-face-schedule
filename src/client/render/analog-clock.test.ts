@@ -1,5 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { type ClockEventInput, rectsOverlap } from "../../shared/clock";
+import {
+  type ClockEventInput,
+  INK_HEIGHT_RATIO,
+  ONE_HOUR_SCALE,
+  TITLE_EDGE_CLEARANCE,
+  TITLE_FONT_SIZE_RATIO,
+  dialWindow,
+  rectsOverlap,
+} from "../../shared/clock";
+import { oneHourSampleEvents } from "../sample-events";
 import { type AnalogClockParams, analogClock } from "./analog-clock";
 
 const SIZE = 600;
@@ -356,8 +365,51 @@ describe("analogClock", () => {
       expect(outer - inner).toBeCloseTo((ARC_THICKNESS - 3 * RING_GAP) / 4, 4);
       expect(radii).toHaveLength(2);
 
-      expect(Math.max(...radii) + fontSize / 2).toBeLessThanOrEqual(outer - strokeReach - 1);
-      expect(Math.min(...radii) - fontSize / 2).toBeGreaterThanOrEqual(inner + strokeReach + 1);
+      // Real ink, not the em box (#90). `fontSize / 2` here was the same model the cap carried, and
+      // it made this assertion inert: with both sides on the em box it reported the floor exactly
+      // whatever the real gap was, so it passed on a stack 0.64 units clear of a promised 1.00.
+      expect(Math.max(...radii) + (fontSize * INK_HEIGHT_RATIO) / 2).toBeLessThanOrEqual(
+        outer - strokeReach - TITLE_EDGE_CLEARANCE
+      );
+      expect(Math.min(...radii) - (fontSize * INK_HEIGHT_RATIO) / 2).toBeGreaterThanOrEqual(
+        inner + strokeReach + TITLE_EDGE_CLEARANCE
+      );
+    });
+
+    /**
+     * The fixture's own three-deep two-line case (#90 moved that depth from "the ring ratio wins" to
+     * "the outline wins", and the 12-hour fixture's stacked title is four deep). Driven through the
+     * real fixture and the real dial so it guards the *placement*, not a string: everything asserted
+     * here is read off the rendered attributes, so retiming `s` out of the cluster, shortening its
+     * title back to one line, or losing it to a floating label each fails a different line.
+     */
+    it("keeps the 1-hour fixture's three-deep ring on two capped lines", () => {
+      // Seeded exactly as demo mode seeds it — from the window's own start — so the fixture's own
+      // offsets decide where `s` lands rather than a time chosen to suit the assertion.
+      const time = new Date(2026, 7, 15, 4, 20, 0);
+      const { windowStart } = dialWindow(time, ONE_HOUR_SCALE);
+      const { element } = build(oneHourSampleEvents(windowStart), { time, scale: "1h" });
+
+      const group = element.querySelector('[data-testid="event-arc-group-s"]');
+      const { inner, outer } = arcRadii(group!.querySelector('[data-arc-part="fill"]')!);
+      const radii = [...group!.querySelectorAll("defs > path")].map((node) =>
+        Number(/A ([\d.]+) /.exec(node.getAttribute("d") ?? "")?.[1])
+      );
+      const fontSize = Number(
+        group!.querySelector('[data-testid="event-title-s"] text')?.getAttribute("font-size")
+      );
+      const ring = (ARC_THICKNESS - 2 * RING_GAP) / 3;
+
+      // Three rings deep, and `s` on the innermost of them — where the fixture's comment says it is.
+      expect(outer - inner).toBeCloseTo(ring, 4);
+      expect(outer).toBeCloseTo(OUTER_RADIUS - 2 * (ring + RING_GAP), 4);
+
+      // Two lines, drawn on the arc rather than promoted to a card that would sidestep the geometry.
+      expect(radii).toHaveLength(2);
+      expect(element.querySelector('[data-testid="floating-label-s"]')).toBeNull();
+
+      // And the cap binds there, which is the boundary this case exists to show.
+      expect(fontSize).toBeLessThan((outer - inner) * TITLE_FONT_SIZE_RATIO);
     });
   });
 

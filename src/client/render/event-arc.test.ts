@@ -14,7 +14,6 @@ import {
   polarToCartesian,
 } from "../../shared/clock";
 import { ARC_BAND_RATIO, RING_GAP_MIN, RING_GAP_RATIO } from "./analog-clock";
-import { oneHourSampleEvents } from "../sample-events";
 import { BAND_BACKGROUND, arcFillColor, eventArc } from "./event-arc";
 
 const CX = 300;
@@ -659,7 +658,7 @@ describe("eventArc", () => {
       const baselines = [...group.querySelectorAll("defs path")].map((node) =>
         arcRadius(node.getAttribute("d") ?? "")
       );
-      const half = twoLines.titleFontSize / 2;
+      const half = (twoLines.titleFontSize * INK_HEIGHT_RATIO) / 2;
 
       expect(Math.min(...baselines) - half).toBeGreaterThanOrEqual(INNER);
       expect(Math.max(...baselines) + half).toBeLessThanOrEqual(OUTER);
@@ -707,7 +706,7 @@ describe("eventArc", () => {
       const radii = [...group.querySelectorAll("defs path")].map((node) =>
         arcRadius(node.getAttribute("d") ?? "")
       );
-      const half = layout.titleFontSize / 2;
+      const half = (layout.titleFontSize * INK_HEIGHT_RATIO) / 2;
 
       return {
         innerClearance: Math.min(...radii) - half - innerRadius,
@@ -1136,8 +1135,9 @@ describe("eventArc's title against what is stroked on its ring", () => {
       fontSize,
       strokeWidth,
       // Real ink, not the em box (#90): `fontSize / 2` here was the same model the cap itself
-      // carried, so these cases reported 0.64 units of headroom as 1.07 and passed on a stack that
-      // was over the line.
+      // carried, which made these cases inert rather than merely optimistic. With both sides on
+      // the em box the reported figure collapses to `TITLE_EDGE_CLEARANCE` by construction — 1.0000
+      // wherever the cap bound — whatever the real gap was, and the real gap was 0.64 four deep.
       outward:
         shape.outerRadius -
         strokeWidth / 2 -
@@ -1183,7 +1183,7 @@ describe("eventArc's title against what is stroked on its ring", () => {
     // 4%. Three deep is where #90 moved the boundary — the em-box model read that ring as having
     // 0.32 units to spare when its ink was over the line. The outline is untouched either way: it
     // *is* the arc once the fill is gone, and capping it by the ring is the inversion #26's
-    // band-sizing exists to prevent. Two deep is the shallowest ring the ring ratio still wins on.
+    // band-sizing exists to prevent. Two deep is the deepest ring the ring ratio still wins on.
     const stacked = measure(4, wrappingTitle(4, 30));
     const three = measure(3, wrappingTitle(3, 30));
     const two = measure(2, wrappingTitle(2, 30));
@@ -1200,54 +1200,6 @@ describe("eventArc's title against what is stroked on its ring", () => {
     expect(two.fontSize).toBeCloseTo(
       (ring(2).outerRadius - ring(2).innerRadius) * TITLE_FONT_SIZE_RATIO,
       2
-    );
-  });
-
-  /**
-   * The fixture's three-deep two-line case, tied to the fixture rather than restated (#90 moved that
-   * depth across the cap's boundary, and the 12-hour fixture's stacked title is four deep). A title
-   * shortened back to one line would silently take the only picture of the boundary off the preview,
-   * which is the kind of quiet loosening `CLAUDE.md` rules out.
-   */
-  it("keeps the 1-hour fixture's three-deep ring on two capped lines", () => {
-    const authored = oneHourSampleEvents(new Date("2026-01-01T09:00:00Z")).find(
-      (event) => event.id === "s"
-    );
-    // The fixture writes its titles as "<colour dot> <title>", and `cleanTitle` is that title.
-    const title = (authored?.title ?? "").slice((authored?.title ?? "").indexOf(" ") + 1);
-    // Seven minutes of a 60-minute period.
-    const arcSpan = (7 / 60) * 360;
-
-    // The *innermost* of the three, which is where the fixture puts it: the cap is the same on every
-    // ring of a cluster, but the wrap is not — the budget shrinks with the radius, and asserting the
-    // outermost ring would be asserting a ring the fixture does not draw this title on.
-    const thickness = ring(3).outerRadius - ring(3).innerRadius;
-    const shape = {
-      outerRadius: OUTER - 2 * (thickness + RING_GAP),
-      innerRadius: OUTER - 2 * (thickness + RING_GAP) - thickness,
-      edgeStrokeWidth: Math.max(1, Math.min(BAND * 0.07, thickness * 0.4)),
-    };
-    const { fit, titleFontSize, titleRadius, lineOffset } = computeArcTitleLayout({
-      ...shape,
-      title,
-      arcSpan,
-    });
-
-    // Two lines that fit, so the dial draws them on the arc rather than promoting the title to a
-    // card — a card would sidestep the geometry this case exists for.
-    expect(fit.lines).toHaveLength(2);
-    expect(fit.didOverflow).toBe(false);
-
-    // And the cap binds there, which is the boundary #90 moved.
-    expect(titleFontSize).toBeLessThan(thickness * TITLE_FONT_SIZE_RATIO);
-
-    const inkReach = lineOffset + (titleFontSize * INK_HEIGHT_RATIO) / 2;
-    const strokeReach = shape.edgeStrokeWidth / 2;
-    expect(shape.outerRadius - strokeReach - (titleRadius + inkReach)).toBeGreaterThanOrEqual(
-      TITLE_EDGE_CLEARANCE
-    );
-    expect(titleRadius - inkReach - (shape.innerRadius + strokeReach)).toBeGreaterThanOrEqual(
-      TITLE_EDGE_CLEARANCE
     );
   });
 
