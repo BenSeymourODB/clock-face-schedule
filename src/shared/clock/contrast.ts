@@ -139,15 +139,18 @@ const BLEND_SEARCH_STEPS = 24;
  *
  * This is `adjustCompositeForContrast` at full strength: a stroke is the colour it was authored as,
  * so there is no composite to correct for, and it delegates to the function below rather than
- * holding a second copy of the search (#97). See there for how the blend target is chosen, and why
- * neither obvious shortcut picks it correctly.
+ * holding a second copy of the search (#97).
  *
- * One consequence of sharing that search: at an exact tie, where black and white reach the same
- * ratio against the background, the target is now white where `readableTextColor` returns black. No
- * caller can see it. A tie needs a background whose luminance is exactly `√0.0525 − 0.05`, and
- * swept over all 16,777,216 24-bit colours there is none — the nearest, `#cf0dcc`, leaves the two
- * extremes 2.4e-7 apart, and both rules pick the same one of them. The spec sweeps that space
- * rather than sampling it, because a sample finding no tie is equally consistent with a few million.
+ * Delegating adopts that function's tie-break — white, where `readableTextColor` returns black — and
+ * nothing can observe the swap. A tie needs a background whose luminance is exactly `√0.0525 − 0.05`
+ * and over all **16,777,216** 24-bit colours there is none: the nearest, `#cf0dcc`, leaves the two
+ * extremes 2.4e-7 apart, and away from a tie both rules pick the same extreme. So of the two
+ * shortcuts the function below rejects, only the luminance threshold is actually wrong at *this*
+ * alpha — `readableTextColor` agrees with the painted comparison on every one of those backgrounds,
+ * and is passed over because one search is worth more than a special case that happens to agree.
+ *
+ * The spec sweeps that space rather than sampling it: a sample finding no tie is equally consistent
+ * with there being a few million.
  */
 export function adjustForContrast(
   color: string,
@@ -205,10 +208,13 @@ export function adjustForContrast(
  *   substitution still missed a reachable floor 122 times; comparing the two *painted* misses none.
  *
  * So the target is whichever extreme reaches further **once painted at this alpha**, which is the
- * only version of the question the caller actually has. On a tie it is white, and a tie is very
- * nearly unreachable: swept over 2.26M `(ground, alpha)` pairs, every exact tie is one where `alpha`
- * is low enough that *both* composites round back to the ground — the highest at **0.003** — and
- * there both answers reach 1:1 and are equally correct. No tie of any other kind appeared.
+ * only version of the question the caller actually has. On a tie it is white, and a tie needs an
+ * `alpha` low enough that *both* composites round back to the ground — where both reach 1:1 and
+ * either answer is equally correct. That bound is exact rather than sampled: a channel rounds back
+ * while `alpha × max(bg, 255 − bg) ≤ 0.5`, worst at a mid-grey channel, so `alpha` caps at
+ * **0.5/128 = 0.00390625**, attained on `#808080`. No caller is near it — fills paint at 0.85 and
+ * `adjustForContrast` at 1 — and no tie of any other kind appeared over 2.26M `(ground, alpha)`
+ * pairs.
  */
 export function adjustCompositeForContrast(
   color: string,

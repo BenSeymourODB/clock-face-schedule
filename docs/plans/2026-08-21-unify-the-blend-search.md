@@ -45,7 +45,7 @@ needed, because a background is an arbitrary hex, not a grey. Checked exhaustive
 crossover luminance   L* = √0.0525 − 0.05 = 0.179128784747792
 exact ties                0
 nearest colour            #cf0dcc   (L = 0.179128790747105)
-  black reaches           4.582575814940
+  black reaches           4.582575814942
   white reaches           4.582575574970
   apart by                2.3997e-7
 ```
@@ -90,24 +90,39 @@ With one search left, there is one place for the target rule to be explained and
   full-strength case of the function below, pointing there for the target rule rather than
   restating it.
 
+  With one caveat that has to be said there rather than borrowed: **only one of the two rejected
+  shortcuts is actually wrong at `alpha` 1.** `readableTextColor` agrees with the painted comparison
+  on all 16,777,216 backgrounds — necessarily, since disagreement requires a tie and there is none —
+  so a reader of `adjustForContrast` sent to a two-item rejection list would find one item whose
+  stated reason ("the comparison does not survive `alpha`") is vacuous at the only alpha this
+  function uses. It is passed over because keeping one search beats keeping a special case that
+  happens to agree, and that is a different argument from the general one.
+
 ## Tests
 
 Three additions; nothing existing weakens, and the whole `adjustForContrast` block stays as the
 regression guard on the wrapper.
 
 1. **The wrapper passes `alpha` of 1 and nothing else.** A pinned literal —
-   `adjustForContrast("#1F2937", BAND)` is `#7b8189`, the elapsed outline's colour that
+   `adjustForContrast("#1F2937", BAND)` is `#747b83`, the elapsed outline's colour that
    `event-arc.test.ts` already depends on — plus the existing palette-wide equivalence spec, which
    is now true by construction and pins that no second argument drifted.
 2. **The tie-break rule, at an `alpha` where a tie is reachable.** At `alpha` 0 both composites
    *are* the ground, both ratios are exactly 1, and the target is `WHITE` — where
    `readableTextColor` on the same ground answers `BLACK`. Low `alpha` is the only place a tie was
    found: over **2.26M `(ground, alpha)` pairs** — the 256 greys plus 2,000 random grounds, each at
-   1,001 alphas — every exact tie is one where both composites round back to the ground, and the
-   highest is at `alpha` **0.003**. No tie of any other kind appeared, which is why the docstring
-   says "very nearly unreachable" rather than "unreachable": a sweep this size is strong evidence
-   and not a proof, and the exact-float coincidence it would take is not one worth ruling out by
-   construction.
+   1,001 alphas — every exact tie is one where both composites round back to the ground. That
+   family has a **closed-form bound rather than a sampled one**, which is what the docstring states:
+   a channel rounds back while `alpha × max(bg, 255 − bg) ≤ 0.5`, worst at a mid-grey channel, so
+   `alpha` caps at `0.5/128 = `**`0.00390625`**, attained exactly on `#808080` (half-up rounding
+   makes the bound inclusive). Confirmed at 1e-6 resolution over the greys: 1,536,256 pairs, highest
+   tie at 0.003906, none of any other kind.
+
+   Worth recording why the first draft of this said "the highest at 0.003": that was the largest
+   *grid point* of a 0.001-step sweep, printed as though it were the largest alpha. It understated
+   the real bound by 30%, and no amount of extra sampling would have caught it — only deriving the
+   thing the sweep was approximating. A sweep resolution stated as a measurement is exactly the
+   failure `CLAUDE.md` warns about, one level up: the number was computed, and still wrong.
 3. **The tie is unreachable at `alpha` 1**, exhaustively over all 16,777,216 colours: zero ties,
    nearest `#cf0dcc`. The loop runs in ~0.1 s because each channel's luminance contribution is
    taken from `relativeLuminance` once, over 768 calls, and summed in the module's own order — so

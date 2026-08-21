@@ -395,8 +395,15 @@ describe("adjustForContrast", () => {
       expect(closest).toBeCloseTo(2.3997e-7, 10);
 
       // And the nearest miss is not a disagreement: away from an exact tie both rules pick the true
-      // maximum, so the two functions agree on it at every floor either side of where they cross.
+      // maximum. Asserted on each rule's *own* answer, because the delegation cannot show this —
+      // both sides of `adjustForContrast === adjustCompositeForContrast` now run the same rule, so
+      // that comparison is blind to which rule it is. The painted rule's target is observable
+      // through the unreachable-floor fallback, which returns the extreme it picked: black, from an
+      // input that is neither extreme.
       expect(readableTextColor(nearest)).toBe(BLACK);
+      expect(adjustCompositeForContrast("#3B82F6", nearest, 1, 21)).toBe(BLACK);
+
+      // The delegation itself, either side of where the two extremes cross on this ground.
       for (const floor of [4.5, 4.5825755, 4.5825758, 4.5825761, 6]) {
         expect(adjustForContrast("#3B82F6", nearest, floor)).toBe(
           adjustCompositeForContrast("#3B82F6", nearest, 1, floor)
@@ -441,9 +448,11 @@ describe("adjustCompositeForContrast", () => {
     // exactly 1:1 and the comparison is a genuine tie. On a white ground the disagreement is
     // visible — the painted rule answers white, `readableTextColor` answers black.
     //
-    // Low alpha is the only place a tie was found: over 2.26M `(ground, alpha)` pairs every exact
-    // tie is one where both composites round back to the ground, the highest at alpha 0.003. At
-    // this function's own alpha of 1 no ground reaches a tie at all, which the sweep above shows.
+    // Low alpha is the only place a tie was found. A channel rounds back while
+    // `alpha × max(bg, 255 − bg) ≤ 0.5`, worst at a mid-grey channel, so a round-back tie caps at
+    // alpha `0.5/128 = 0.00390625` — a closed form, not a sweep resolution. Over 2.26M
+    // `(ground, alpha)` pairs no tie of any other kind appeared, and at this function's own alpha of
+    // 1 no ground reaches a tie at all, which the sweep above shows exhaustively.
     expect(compositeOver("#ffffff", WHITE, 0)).toBe("#ffffff");
     expect(compositeOver("#ffffff", BLACK, 0)).toBe("#ffffff");
     expect(contrastRatio("#ffffff", "#ffffff")).toBe(1);
