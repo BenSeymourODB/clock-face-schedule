@@ -44,7 +44,11 @@ clearance = lookbehindDegrees − FEATHER_DEGREES − FEATHER_DEGREES / 2 − pa
   lands on `now` itself.
 - `FEATHER_DEGREES` is the feather's full reach from the edge; the drain ramp straddles its boundary,
   so it contributes only half.
-- `padDegrees` is `buildFadeMask`'s wedge pad as an angle at the outer radius.
+- `padDegrees` is `buildFadeMask`'s wedge pad as an angle at the outer radius, and it applies to the
+  **fill mask only**: that mask's drain wedge pads *toward* the feather, where the spent mask's drain
+  wedge — anchored at the other end of the same span — pads away from it. So the spent mask clears by
+  the bare `lookbehindDegrees − 1.5 × FEATHER_DEGREES` and the fill mask by that less the pad, which
+  is why the fill mask is the binding one.
 
 **The overlap becomes reachable when `min(lookbehindDegrees, lookaheadDegrees)` drops below
 `1.5 × FEATHER_DEGREES + padDegrees`** — about 15.7°, which is 2.6 minutes of look-behind on the
