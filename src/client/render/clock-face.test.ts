@@ -453,7 +453,7 @@ describe("clockFace", () => {
         );
       });
 
-      it("dilates the glyphs by twice a hand's halo, measured per side", () => {
+      it("dilates the glyphs by two and a half times a hand's halo, measured per side", () => {
         const { element } = build(at(6, 30));
         const perSide = (el: Element | null, own: number) =>
           Number(el?.getAttribute("stroke-width")) / 2 - own / 2;
@@ -462,11 +462,67 @@ describe("clockFace", () => {
         // hands' own halo adds `faceRadius * 0.01` beyond each side of their line.
         const halo = Number(find(element, "period-indicator-halo")?.getAttribute("stroke-width"));
 
-        expect(halo / 2).toBeCloseTo(2 * FACE_RADIUS * 0.01, 4);
+        expect(halo / 2).toBeCloseTo(2.5 * FACE_RADIUS * 0.01, 4);
         expect(perSide(find(element, "minute-hand-halo"), FACE_RADIUS * 0.028)).toBeCloseTo(
           FACE_RADIUS * 0.01,
           4
         );
+      });
+
+      /**
+       * The soft edge. A hard-edged halo cuts the hand it crosses with a glyph-shaped notch; this
+       * lets the hand fade into the label instead. Both non-default filter attributes are asserted
+       * because both are load-bearing and both fail *silently* — the default region clips the blur
+       * into the straight edge it exists to remove, and `linearRGB` is not the space the ramp was
+       * measured in.
+       */
+      describe("the halo's soft edge", () => {
+        const { element } = build(at(6, 30));
+        const halo = find(element, "period-indicator-halo");
+        const filterId = "period-indicator-halo-blur";
+        const filter = element.querySelector(`filter#${filterId}`);
+
+        it("blurs the halo, by a filter the halo actually references", () => {
+          expect(halo?.getAttribute("filter")).toBe(`url(#${filterId})`);
+          expect(filter).not.toBeNull();
+          expect(filter?.parentElement?.tagName).toBe("defs");
+        });
+
+        it("blurs by a fraction of the face radius, so it grows with the dial", () => {
+          const sigmaAt = (faceRadius: number) =>
+            Number(
+              clockFace({ faceRadius, cx: CX, cy: CY, time: at(6, 30) })
+                .element.querySelector("feGaussianBlur")
+                ?.getAttribute("stdDeviation")
+            );
+
+          expect(sigmaAt(FACE_RADIUS)).toBeCloseTo(FACE_RADIUS * 0.005, 3);
+          expect(sigmaAt(FACE_RADIUS * 2)).toBeCloseTo(sigmaAt(FACE_RADIUS) * 2, 3);
+        });
+
+        it("widens the filter region past the default, which would clip the blur", () => {
+          // The SVG default is x/y -10% and width/height 120%, narrower than the blur reaches.
+          expect(filter?.getAttribute("x")).toBe("-50%");
+          expect(filter?.getAttribute("y")).toBe("-50%");
+          expect(filter?.getAttribute("width")).toBe("200%");
+          expect(filter?.getAttribute("height")).toBe("200%");
+        });
+
+        it("states sRGB rather than inheriting SVG's linearRGB default", () => {
+          expect(filter?.getAttribute("color-interpolation-filters")).toBe("sRGB");
+        });
+
+        it("leaves the glyphs' own ink fully backed", () => {
+          // The blur erodes the halo from its outer boundary inward, and the ink sits a whole
+          // dilation inside that. Keeping σ well under the dilation is what holds the text at
+          // ~7:1 rather than letting the hand show through the ground beneath it.
+          const sigma = Number(
+            element.querySelector("feGaussianBlur")?.getAttribute("stdDeviation")
+          );
+          const dilation = Number(halo?.getAttribute("stroke-width")) / 2;
+
+          expect(sigma).toBeLessThan(dilation / 2);
+        });
       });
 
       it("matches the indicator's own geometry, so the halo sits exactly under it", () => {
