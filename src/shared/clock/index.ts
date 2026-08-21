@@ -75,6 +75,11 @@ export {
 } from './fit-label';
 export { arcCharBudget, fitTitleToArc, type FitTitleResult } from './fit-title';
 export {
+  planOptionalLines,
+  type GrowthOffer,
+  type GrowthPlan
+} from './grow-labels';
+export {
   CHAR_WIDTH_RATIO,
   charBudget,
   normaliseText,
