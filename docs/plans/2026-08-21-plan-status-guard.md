@@ -33,44 +33,74 @@ ships the plan. Nothing is left for anyone to remember.
 
 ## Measured, over every plan in the repo
 
-For each of the 24 plans on `main` at `f2a19b3`, the status in the commit that **added** the file
-against the status the file carries **now**:
+The status each of the 24 plans on `main` at `f2a19b3` carried **at the merge that landed it** — the
+first-parent commit on `main` that added the file, not the branch commit that drafted it. That
+distinction matters and was got wrong first time round: six plans were drafted with one status and
+updated before their PR merged, so the drafting commit is not what shipped.
 
-| status when it landed | plans | since edited by a later PR |
+| status at the merge that landed it | plans | since corrected |
 | --- | --- | --- |
-| `in review` | **12** | 11 of 12 |
-| `in progress` | 9 | 8 of 9 |
-| `done` | 2 | 0 |
+| `in review` | **16** | 15 of 16 |
+| `in progress`, naming nothing outstanding | **4** | 4 of 4 |
+| `done` | 3 | 0 of 3 — none needed it |
 | no status header | 1 (the mvp plan) | — |
 
-So **21 of 24 plans required a post-merge status edit by somebody other than the PR that shipped
-them**, and the two that did not are the two that wrote `done` in the shipping PR — the convention
-below already exists in this repo, it is simply not the default. The remaining `in review` is
-`2026-08-21-unify-the-blend-search.md`, whose PR (#109) merged at `7271004`; it is the twelfth
-instance the issue counts and this plan retires it.
+```bash
+for f in docs/plans/*.md; do
+  land=$(git log --first-parent f2a19b3 --diff-filter=A --format=%H -- "$f" | tail -1)
+  echo "$(basename "$f") $(git show "$land:$f" | grep -m1 '^\*\*Status:\*\*')"
+done
+```
 
-The 9 `in progress` cases matter as much as the 12. They are the reason the guard cannot key on the
-word `in review` alone: a plan reading `in progress` after its work shipped is stale in exactly the
-same way, and 8 of the 9 were later corrected to `done`.
+So **20 of 24 plans landed carrying a status that a later PR had to correct**, and the 3 that did not
+are the 3 that wrote `done` in the shipping PR — `2026-08-17-wrap-aware-arc-geometry.md`,
+`2026-08-18-rolling-window.md` and `2026-08-18-inline-emoji-title.md`. The convention below already
+exists in this repo and already works; it is simply not the default.
+
+The single uncorrected one is `2026-08-21-unify-the-blend-search.md`, whose PR (#109) merged at
+`7271004` and which still reads `in review` on `main`. #111's body tabulates ten plans by name and
+predates this file, so it is a thirteenth instance of the mechanism rather than one of the ten the
+issue lists — worth stating precisely, because the count belongs to the mechanism and not to the
+issue.
+
+The 4 bare `in progress` cases carry as much weight as the 16. They are the reason the guard cannot
+key on the word `in review` alone: a plan reading `in progress` after its work shipped is stale in
+exactly the same way, and all 4 were later corrected to `done`.
 
 ## The vocabulary
 
-Two states, each of which stays true through a merge:
+Three states, each of which stays true through a merge:
 
 - **`done`**, optionally `done — shipped in #NN`. The plan describes what shipped. Written in the
   shipping PR, once its number exists.
 - **`in progress — … #NN`**, which **must cite an issue or PR reference**. The plan describes work
   not finished by the PR carrying it, and the reference is what says which work. The mvp plan is the
   real case: `W10 outstanding as #10`.
+- **`superseded by #NN`**, same requirement. The plan describes an approach that was abandoned or
+  reversed.
 
 `in review` is gone. It was the only status whose truth had an expiry date — it means "a PR is open",
 and the merge that ends the review is the one edit that cannot update it.
 
-Requiring the reference on `in progress` is what makes the check offline. Distinguishing a plan
-legitimately in progress from one left behind needs to know whether work is outstanding; demanding
-the plan *name* what is outstanding turns that into something a parser can see, and it is the same
-demand `CLAUDE.md` already makes of brainstorms — "state the constraints any answer must keep, name
-what is still undecided".
+`superseded` is here because without it a reversed plan can only open with `done`, and the guard
+would *enforce* that: `superseded by #99` would be rejected while `done — abandoned, see #99` passed.
+A cold reader takes `done` to mean "this describes what shipped", so leaving the state out would
+reintroduce exactly the harm the rule exists to stop, in the one case the vocabulary could not
+express, and make CI insist on it. This is not anticipation — this project reverses decisions on
+measurement, and ADR 0009 retired #88's ellipse outright ("not needed and should not be built") after
+it had been derived and rendered.
+
+Requiring the reference on `in progress` and `superseded` is what makes the check offline.
+Distinguishing a plan legitimately in progress from one left behind needs to know whether work is
+outstanding; demanding the plan *name* it turns that into something a parser can see, and it is the
+same demand `CLAUDE.md` already makes of brainstorms — "state the constraints any answer must keep,
+name what is still undecided". `done` carries no such requirement, since there is nothing left to
+point at.
+
+The reference has to be a reference rather than any `#` followed by a digit, or a link's own fragment
+satisfies the one thing the plan is being asked to state. The boundary admits `[` as well as
+whitespace and `(`, because every reference in this repo's plans is written as a markdown link —
+`[#10](…)`, which is the form the mvp plan uses.
 
 ## Why a vitest spec and not a workflow step
 
@@ -117,7 +147,7 @@ mechanism are untouched.
    checks it; `scripts/plan-status.test.mjs` covers the vocabulary as a truth table, then reads the
    real `docs/plans/` and asserts every plan passes. The third vitest project, and
    `npm run check-plans` for a one-command local answer.
-2. **The convention, written down, and the twelfth instance retired.** `CLAUDE.md` and
+2. **The convention, written down, and the outstanding instance retired.** `CLAUDE.md` and
    `.claude/commands/implement-issue.md` — whose step 1 currently asks each run to do the chore by
    hand, which is the instruction this replaces. `2026-08-21-unify-the-blend-search.md` to
    `done — shipped in #109`.
@@ -132,9 +162,18 @@ resolves to nothing.
 ## Visual verification
 
 **Inapplicable, not skipped.** The diff touches `scripts/`, `vitest.config.ts`, two markdown
-conventions files and one plan header. No module under `src/` changes, so `build/preview.html` is
-byte-identical apart from the bundle's own hashing, and there is no rendered output for a screenshot
-to disagree about. Confirmed by building before and after and diffing `build/`.
+conventions files and one plan header. No module under `src/` changes, so there is no rendered output
+for a screenshot to disagree about. Confirmed rather than assumed: `main` and this branch were both
+built and the whole of `build/` — `preview.html` included, generated footer included — is
+byte-identical, `3abd827c0c52615e99a690a148c8b1f59dd1c361280f7626db16d2f702f8ad65` either side.
+
+## Also in scope, and worth naming
+
+The guard checks the filename against `YYYY-MM-DD-<slug>.md` as well as the status. That is one
+assertion and it is what makes the directory sort by date, but it is a second rule in a change about
+statuses, so: it means a non-plan `docs/plans/README.md` would fail the suite. Left strict rather
+than exempted — a plan directory holding only plans is the assumption the retire pass was always
+written against, and an unused exemption is a road not taken.
 
 ## Deferred
 

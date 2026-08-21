@@ -14,7 +14,7 @@ open design reasoning, and `.claude/commands/` the agentic workflows.
 ```bash
 npm run build        # esbuild bundles both entry points and generates the server footer
 npm run check-types  # both tsconfigs — catches ES2019 violations and the shared/ split
-npm test             # vitest: node project for shared/ + server/, jsdom for client/
+npm test             # vitest: node for shared/ + server/, jsdom for client/, node for scripts/
 ```
 
 All three must pass before a commit. `npm run push` deploys via clasp.
@@ -123,12 +123,13 @@ board, and waiting for someone's real day to contain a useful overlap is not a p
   what is still undecided, and record what was rejected and why.
 - **Issues state their readiness explicitly** — "fully implementable as specified" or "not ready to
   build" with the open decisions listed. `/implement-issue` triages on that line.
-- **A plan's status header must still be true after its own PR merges.** Two states, checked by
+- **A plan's status header must still be true after its own PR merges.** Three states, checked by
   `scripts/plan-status.test.mjs`: `done` — write `done — shipped in #NN` in the shipping PR, once its
-  number exists — or `in progress` **naming the outstanding issue or PR**. `in review` is retired: it
-  means a PR is open, and the merge that ends the review is the one edit that PR cannot make to
-  itself, so it went stale on 21 of the first 24 plans (#111). `npm run check-plans` reports it
-  offline; `npm test` gates it.
+  number exists — or `in progress` / `superseded`, each **naming the issue or PR** that says what is
+  outstanding or what replaced it. `in review` is retired: it means a PR is open, and the merge that
+  ends the review is the one edit that PR cannot make to itself, so 20 of the first 24 plans landed
+  on `main` needing a later correction (#111). `npm run check-plans` reports it offline; `npm test`
+  gates it.
 - **SVG attribute names are the real ones** — `stroke-width`, not `strokeWidth`. A camelCase name is
   not an error; it sets an attribute nothing reads, and the element renders unstyled with nothing
   logged. Specs assert on rendered attribute names for this reason.

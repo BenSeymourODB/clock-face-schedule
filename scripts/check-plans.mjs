@@ -6,7 +6,7 @@ import { checkPlans } from "./plan-status.mjs";
 
 export const PLANS_DIR = resolve(dirname(fileURLToPath(import.meta.url)), "..", "docs", "plans");
 
-/** Every plan document, by name, in directory order — which is date order, given the naming rule. */
+/** Sorted, which the filename rule makes date order, so a report reads oldest-first. */
 export async function readPlans(dir = PLANS_DIR) {
   const names = (await readdir(dir)).filter((name) => name.endsWith(".md")).sort();
 
@@ -30,11 +30,14 @@ async function main() {
     for (const problem of problems) console.error(`docs/plans/${name} ${problem}`);
   }
 
-  console.error(
+  // The verdict goes to stdout so it can be captured; the problems stay on stderr with it.
+  const verdict =
     stale.length === 0
       ? `${plans.length} plans checked, every status still true after its merge.`
-      : `${stale.length} of ${plans.length} plans need a status edit.`,
-  );
+      : `${stale.length} of ${plans.length} plans need a status edit.`;
+
+  if (stale.length === 0) console.log(verdict);
+  else console.error(verdict);
 
   process.exitCode = stale.length === 0 ? 0 : 1;
 }
