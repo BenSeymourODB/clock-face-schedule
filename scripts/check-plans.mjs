@@ -33,8 +33,9 @@ async function main() {
   // The verdict goes to stdout so it can be captured; the problems stay on stderr with it.
   const verdict =
     stale.length === 0
-      ? `${plans.length} plans checked, every status still true after its merge.`
-      : `${stale.length} of ${plans.length} plans need a status edit.`;
+      ? `${plans.length} plans checked, all three headers present and every status still true ` +
+        "after its merge."
+      : `${stale.length} of ${plans.length} plans need a header edit.`;
 
   if (stale.length === 0) console.log(verdict);
   else console.error(verdict);

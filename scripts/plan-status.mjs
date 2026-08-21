@@ -1,6 +1,6 @@
 /**
- * The `**Status:**` header a plan document in `docs/plans/` carries, and the rule that keeps it
- * true after the PR carrying it merges.
+ * The headers a plan document in `docs/plans/` carries — `**Status:**`, `**Issue:**`, `**Docs:**` —
+ * and the rule that keeps the status true after the PR carrying it merges.
  *
  * A plan's status is the only thing that says whether the document describes what shipped or what
  * was proposed, and these documents are written to be picked up cold. 20 of the repo's first 24
@@ -17,7 +17,31 @@ const PLAN_FILENAME = /^\d{4}-\d{2}-\d{2}-[a-z0-9]+(?:-[a-z0-9]+)*\.md$/;
  * First match wins, not first line: the header sits under the title, and a plan discussing the
  * vocabulary further down is stating a rule rather than its own status.
  */
-const STATUS_HEADER = /^\*\*Status:\*\*[ \t]*(.+)$/m;
+function headerPattern(name) {
+  return new RegExp(`^\\*\\*${name}:\\*\\*[ \\t]*(.+)$`, "m");
+}
+
+/**
+ * The two headers besides the status, both asked for by `.claude/commands/implement-issue.md` step 4
+ * and neither checked until #126. `**Issue:**` is the one that makes a plan findable from the issue a
+ * later run is triaging; `**Docs:**` is what a cold reader reads first.
+ *
+ * Each carries what an absent header costs and what to write instead, because the reader of this
+ * report is fixing a document rather than debugging this file.
+ */
+export const PLAN_HEADERS = [
+  {
+    name: "Issue",
+    costs: "nothing says which issue it implements",
+    write:
+      "`**Issue:** #NN` under the status, or `**Issue:** none — <why>` for a plan nobody filed",
+  },
+  {
+    name: "Docs",
+    costs: "nothing says what a reader picking this up cold should read first",
+    write: "`**Docs:** <the ADRs, plans and issues this leans on>` under the status",
+  },
+];
 
 /**
  * An issue or PR number, which is what makes an unfinished plan say *what* is unfinished. The
@@ -46,14 +70,22 @@ function normalise(status) {
     .toLowerCase();
 }
 
-/** The header's value, trimmed, or `null` for a plan that carries no usable status header. */
-export function readStatus(markdown) {
-  const found = STATUS_HEADER.exec(markdown);
-  const status = found ? found[1].trim() : "";
+/**
+ * A named header's value, trimmed, or `null` for a plan that carries no usable one. A `**Docs:**`
+ * value may run on over several lines; only the first is read, which is all a presence rule needs.
+ */
+export function readHeader(markdown, name) {
+  const found = headerPattern(name).exec(markdown);
+  const value = found ? found[1].trim() : "";
 
   // `[ \t]*` backtracks to let `(.+)` claim a space, so a header followed by whitespace alone
-  // matches and yields "". That is the no-status case, not an unknown state.
-  return status === "" ? null : status;
+  // matches and yields "". That is the no-header case, not a value.
+  return value === "" ? null : value;
+}
+
+/** The header's value, trimmed, or `null` for a plan that carries no usable status header. */
+export function readStatus(markdown) {
+  return readHeader(markdown, "Status");
 }
 
 /**
@@ -113,6 +145,18 @@ export function checkStatus(status) {
   return null;
 }
 
+/**
+ * A problem with one of the other two headers, or `null`. Presence and a non-empty value is the
+ * whole rule: `2026-08-21-soft-halo-edge.md` legitimately carries `**Issue:** none — …`, so a stated
+ * `none` passes and only silence fails. Requiring a `#NN` here would fail a correct plan; that rule
+ * lives in `checkStatus`, where an unfinished plan has to say what is outstanding.
+ */
+export function checkHeader({ name, costs, write }, value) {
+  if (value !== null) return null;
+
+  return `carries no \`**${name}:**\` header, so ${costs}. Write ${write}.`;
+}
+
 export function checkPlan({ name, markdown }) {
   const problems = [];
 
@@ -122,6 +166,12 @@ export function checkPlan({ name, markdown }) {
 
   const problem = checkStatus(readStatus(markdown));
   if (problem !== null) problems.push(problem);
+
+  // Every missing header, not the first: one run of the report should be enough to fix a plan.
+  for (const header of PLAN_HEADERS) {
+    const missing = checkHeader(header, readHeader(markdown, header.name));
+    if (missing !== null) problems.push(missing);
+  }
 
   return problems;
 }
