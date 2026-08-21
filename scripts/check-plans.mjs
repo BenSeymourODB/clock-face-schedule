@@ -35,7 +35,8 @@ async function main() {
     stale.length === 0
       ? `${plans.length} plans checked, all three headers present and every status still true ` +
         "after its merge."
-      : `${stale.length} of ${plans.length} plans need a header edit.`;
+      : // Not "a header edit": a plan can fail on its filename alone, and the fix is a rename.
+        `${stale.length} of ${plans.length} plans need an edit.`;
 
   if (stale.length === 0) console.log(verdict);
   else console.error(verdict);

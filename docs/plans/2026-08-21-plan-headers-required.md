@@ -39,25 +39,50 @@ on a real, correct plan, and the reference rule already exists where it earns it
 
 ## Shape of the change
 
-- `readStatus` becomes one caller of a general `readHeader(markdown, name)`. The pattern it holds is
-  already the right one — anchored to a line start so a header *discussed* further down is not read as
-  the document's own claim, and first-match-wins.
+- `readStatus` becomes one caller of a general `readHeader(markdown, name)`, whose patterns are built
+  once from the closed set of three names rather than from the caller's string.
+- **Fenced blocks and HTML comments come out before anything is read.** A line-start anchor is not
+  enough: a plan *about* this rule quotes the header block in a fence — this document does — and
+  `^\*\*Issue:\*\*` inside a fence matches exactly like a claim. First-match-wins is no defence when
+  the missing headers are the real ones, so a headerless plan whose subject is these headers would
+  have passed with zero problems. Found in review, and it is the whole rule defeated by the one
+  document most likely to trip it. A blockquote needs no handling: `> **Status:**` does not start
+  with `**`.
 - `checkHeader(name, value)` returns prose naming the header and what to write, matching
   `checkStatus`'s existing style: the reader needs the fix, not a code.
 - `checkPlan` reports every missing header rather than the first, so one run of `npm run check-plans`
   is enough to fix a plan.
-- `check-plans.mjs`'s verdict stops saying "status" — it now speaks for three headers.
+- `check-plans.mjs`'s verdict stops saying "status" — it now speaks for three headers, and its
+  failure line stops naming a header at all, since a plan can fail on its filename and the fix there
+  is a rename.
 
 ## Tests
 
-In `scripts/plan-status.test.mjs`, against the node project:
+In `scripts/plan-status.test.mjs`, which runs under vitest's `tools` project:
 
 - `readHeader` reads each of the three, and ignores a mention that is not at a line start.
+- **A fenced example, in each of the shapes a plan uses** — language-tagged, bare, tilde, indented,
+  unterminated — plus an HTML comment and a blockquote, is not read as the document's own header; and
+  `checkPlan` on a plan whose only headers are inside a fence reports all three as missing. Six of
+  these fail if the fence stripping is removed, which is how the hole was confirmed rather than
+  argued.
+- A real header above a fenced example of one is still read, and a ``` inside a `~~~` block does not
+  end the block.
 - `checkPlan` on a plan carrying only `**Status:**` reports **both** missing headers, not one.
-- The message names the header and what to write, so the fix does not need the source file.
-- `**Issue:** none — …` passes, pinned as the case the repo actually contains.
+- The message names the header and what to write, so the fix does not need the source file — for the
+  absent `**Status:**` too, which said what it cost and stopped there.
+- `readHeader` throws on a name outside the three, rather than compiling a pattern that matches
+  something else.
+- **`**Issue:** none — …` is asserted against `2026-08-21-soft-halo-edge.md` on disk**, not a
+  synthetic string. An "accepts" case built in the spec cannot fail — there is no reference rule for
+  it to violate, so it passed against the code from before this rule existed, which review caught.
+  Read from the file, it fails the day someone tightens the rule the plan doc says not to.
 - The existing repo-wide guard covers the backfill: it reads every plan through `checkPlans`, so the
   mvp plan's two new headers are asserted by the same spec that asserts every status.
+
+**Left strict deliberately:** `**Issue**: #1`, with the colon outside the bold, renders identically
+and is rejected. Every plan in the repo writes `**Issue:**`, the report quotes the exact form to
+write, and one spelling is what makes these headers greppable.
 
 ## Not in scope
 

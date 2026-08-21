@@ -89,6 +89,12 @@ describe("the status a plan may carry", () => {
     expect(checkStatus("in review")).toContain("done — shipped in #NN");
   });
 
+  // The same, for the header that is absent rather than wrong — the one report line that used to
+  // name the cost and stop there, while the two headers beside it said what to write.
+  it("says what to write when the header is missing entirely", () => {
+    expect(checkStatus(null)).toContain("done — shipped in #NN");
+  });
+
   it.each([
     ["# A plan\n\nNo header here.\n", "no header at all"],
     // The regex backtracks to let `(.+)` claim a space, so this matches and yields "". Reporting
@@ -170,11 +176,18 @@ describe("the other two headers a plan owes", () => {
    * The case that decides the rule is presence rather than a reference:
    * `2026-08-21-soft-halo-edge.md` is a real plan for work nobody filed an issue for, and saying so
    * is what the header is for. Requiring a `#NN` here would fail a correct plan.
+   *
+   * Asserted against that file rather than a synthetic one, because a synthetic "accepts" case
+   * cannot fail — there is no reference rule for it to violate, so it passed against the code from
+   * before this rule existed. Read from disk, it fails the day someone tightens the rule.
    */
-  it("accepts a stated absence, which is the form the repo already contains", () => {
-    const markdown = headers({ issue: "none — a follow-up asked for directly, on the back of #113" });
+  it("accepts the stated absence the repo actually contains", async () => {
+    const plans = await readPlans();
+    const stated = plans.find((plan) => plan.name === "2026-08-21-soft-halo-edge.md");
 
-    expect(checkPlan({ name, markdown })).toEqual([]);
+    expect(stated).toBeDefined();
+    expect(readHeader(stated.markdown, "Issue")).toMatch(/^none\b/);
+    expect(checkPlan(stated)).toEqual([]);
   });
 
   it.each([
@@ -182,6 +195,20 @@ describe("the other two headers a plan owes", () => {
     ["**Docs:**", "**Status:** done\n**Issue:** #2\n**Docs:**\n"],
   ])("counts %s with nothing after it as absent", (header, markdown) => {
     expect(checkPlan({ name, markdown })[0]).toContain(header);
+  });
+
+  /**
+   * The whole rule, defeated: a plan whose subject *is* these headers quotes the block it is about,
+   * and a line-anchored pattern reads the example as the claim. All three headers would be satisfied
+   * by a document carrying none.
+   */
+  it("does not let a plan satisfy the rule by quoting the headers in a fence", () => {
+    const markdown = `# The header rule\n\nEvery plan head must read:\n\n\`\`\`md\n${headers()
+      .split("\n")
+      .slice(2)
+      .join("\n")}\`\`\`\n`;
+
+    expect(checkPlan({ name, markdown })).toHaveLength(3);
   });
 });
 
@@ -196,6 +223,41 @@ describe("reading a named header", () => {
 
   it("ignores a header discussed rather than declared", () => {
     expect(readHeader("A plan whose **Issue:** is named in prose.\n", "Issue")).toBeNull();
+  });
+
+  /**
+   * The form a real plan takes when it discusses the headers: quoted in a fence, at a line start,
+   * where `^` alone cannot tell it from a claim. A plan whose *subject* is this rule is the likeliest
+   * document to carry one, and it is the one that could then ship with no headers of its own — so
+   * this is checked on the shapes a plan actually uses, not just mid-sentence prose.
+   */
+  it.each([
+    ["a fenced example", "```md\n**Issue:** #5\n```\n"],
+    ["a fence with no language", "```\n**Issue:** #5\n```\n"],
+    ["a tilde fence", "~~~\n**Issue:** #5\n~~~\n"],
+    ["an indented fence", "  ```\n  **Issue:** #5\n  ```\n"],
+    ["an html comment", "<!--\n**Issue:** #5\n-->\n"],
+    ["an unterminated fence", "```md\n**Issue:** #5\n"],
+    ["a blockquote", "> **Issue:** #5\n"],
+  ])("does not read %s as the document's own header", (_shape, markdown) => {
+    expect(readHeader(markdown, "Issue")).toBeNull();
+  });
+
+  it("still reads a real header above a fenced example of one", () => {
+    const markdown = `${headers()}\n## The rule\n\n\`\`\`md\n**Issue:** #999\n\`\`\`\n`;
+
+    expect(readHeader(markdown, "Issue")).toBe("#2");
+  });
+
+  // A ``` inside a ~~~ block is content, not a close, or the rest of the document falls out.
+  it("keeps a nested fence inside its own block", () => {
+    const markdown = "~~~\n```\n~~~\n\n**Issue:** #7\n";
+
+    expect(readHeader(markdown, "Issue")).toBe("#7");
+  });
+
+  it("throws on a header it does not know, rather than matching nothing", () => {
+    expect(() => readHeader(headers(), "I.sue")).toThrow(/Unknown plan header/);
   });
 
   // `**Docs:**` values run over several lines in this repo; a presence rule needs only the first.
