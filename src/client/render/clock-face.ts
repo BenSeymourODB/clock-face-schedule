@@ -41,7 +41,23 @@ const RADIUS = {
    * numeral, which is that "12" at 6.32.
    */
   numeralOneHour: 0.7,
-  periodIndicator: 0.35,
+  /**
+   * Pulled in from 0.35 so the indicator's halo does not amputate a hand (#107).
+   *
+   * The halo mounts above the hands, so the band it dilates — the glyphs' ink plus
+   * `PERIOD_HALO_MULTIPLE` either side, 21.05 units at the shipped 204.4 face radius — is a stretch
+   * of every hand that gets erased. That is the intended reading where a hand runs on past it. It
+   * is not where the hand *ends* just beyond it, and the 1-hour scale's shortened hour hand did:
+   * tipping at 87.89 against a band ending at 82.07, it kept a 5.83-unit stub, shorter than its own
+   * 9.20-unit width, so at 06:00 and 18:00 all that survived past the label was a detached lozenge
+   * sitting on the inner "6".
+   *
+   * A stub reads as a line rather than a mark at about twice the width it is drawn at, which caps
+   * the band's outer edge at 69.5 and this ratio at 0.2885. 0.28 leaves 20.13 units — 2.19× — and
+   * still holds the band's inner edge 39 units clear of the centre dot. Nothing else lies between:
+   * the 12-hour hour hand keeps 63 units past the band and the minute hand 116.
+   */
+  periodIndicator: 0.28,
   /**
    * Hand lengths, each reaching the thing it is read against.
    *
@@ -127,6 +143,48 @@ const STROKE = {
  * under them.
  */
 const HAND_HALO_RATIO = 0.01;
+
+/**
+ * Halo dilating the AM/PM indicator's own glyphs, as a multiple of `HAND_HALO_RATIO`.
+ *
+ * More than the hands' halo, because the job is not symmetric: a hand's halo separates a 9.2-unit
+ * bright line from the arcs behind it, while this one has to separate a ~2-unit grey letter stem
+ * from that same bright line. Measured at 18:30, where the hour hand abuts the "P", on the 600-px
+ * raster the board actually renders (#115): ×1 leaves a single antialiased pixel of face between
+ * the two, which is the amount a display's own bloom swallows.
+ *
+ * 2.5 rather than the 2 that first shipped, because `PERIOD_HALO_BLUR_RATIO` softens the halo's
+ * outer edge and spends part of the dilation doing it — at ×2 the fully-dark run between hand and
+ * stem fell from three pixels to two, and ×2.5 puts it back. ×3 is the ceiling from the other
+ * direction: it takes the band wide enough that the 1-hour hand's stub drops below
+ * `RADIUS.periodIndicator`'s floor by 0.31 units.
+ *
+ * That measurement governs a hand passing *beside* a stem, which is the case legibility turns on.
+ * A hand running along the word's own axis — every half hour for the minute hand — is broken
+ * outright instead, because the gap between two capitals is narrower than the two dilations that
+ * meet across it. Deliberate: a label interrupting a hand is a date window, and the eye completes
+ * the line. `RADIUS.periodIndicator` is what keeps that break away from a hand's tip.
+ */
+const PERIOD_HALO_MULTIPLE = 2.5;
+
+/**
+ * Gaussian blur softening the indicator halo's outer edge, as a fraction of the face radius.
+ *
+ * A hard-edged halo cuts the hand it crosses with a glyph-shaped notch; blurring the halo lets the
+ * hand fade into the label instead. Costs contrast, because the ground under the glyph is no longer
+ * pure `var(--card)` — but only at the halo's *outer* boundary, and the glyphs sit a full dilation
+ * inside that. At the shipped radius this is σ = 1.02 units, which leaves the halo fully opaque
+ * where the ink is and holds the text at 6.98:1; σ = 4 is the hard ceiling, at 4.49:1 against the
+ * 4.5:1 floor.
+ *
+ * A ratio rather than a length so it grows with the face like every other number here — which
+ * matters more than usual, since the effect is a single pixel wide at today's 600-px dial and only
+ * becomes properly visible once #115 lets the dial render at the size ADR 0009 assumes.
+ */
+const PERIOD_HALO_BLUR_RATIO = 0.005;
+
+/** Filter id for that blur. One dial per page, so it needs no per-instance suffix. */
+const PERIOD_HALO_BLUR_ID = "period-indicator-halo-blur";
 
 export interface ClockFaceParams {
   /**
@@ -290,6 +348,75 @@ export function clockFace({
     }
   }
 
+  const periodText = (at: Date) => (at.getHours() >= 12 ? "PM" : "AM");
+
+  /**
+   * The blur behind `periodIndicatorHalo`.
+   *
+   * Both non-default attributes are load-bearing. The filter region defaults to the bbox inset by
+   * -10%/+10%, which is narrower than the blur and clips it into a visible straight edge — the
+   * opposite of the point. And `color-interpolation-filters` defaults to `linearRGB` in SVG 1.1,
+   * which is not what the ramp was measured in; it happens to render identically for a single
+   * opaque colour blurred against transparency, but it is stated rather than relied on.
+   */
+  const periodHaloBlur = svg("defs", {}, [
+    svg(
+      "filter",
+      {
+        id: PERIOD_HALO_BLUR_ID,
+        x: "-50%",
+        y: "-50%",
+        width: "200%",
+        height: "200%",
+        "color-interpolation-filters": "sRGB",
+      },
+      [
+        svg("feGaussianBlur", {
+          stdDeviation: roundCoord(faceRadius * PERIOD_HALO_BLUR_RATIO),
+        }),
+      ]
+    ),
+  ]);
+
+  /**
+   * AM/PM, drawn twice for the same reason the hands are (#107).
+   *
+   * A hand crossing this used to *erase* it rather than overlap it: the indicator was appended
+   * before the hands' halos, so the halo painted `var(--card)` straight over the glyphs and "PM"
+   * read as "P И" for roughly an hour a day. There is nowhere on the face to move it to — every
+   * hand starts at the centre — and simply drawing it after the hands puts `--muted-foreground`
+   * over a `--card-foreground` hand at 2.4:1, under the 3:1 floor a graphical object gets.
+   *
+   * So the label gets its own halo instead and the pair mounts last. The hand is interrupted by the
+   * letters rather than the other way round, and the text keeps its full 7:1 because `var(--card)`
+   * is what is now behind it. Two elements rather than `paint-order: stroke fill`: the file already
+   * has that idiom for the hands, and an SVG2 attribute the board's browser ignores would fail
+   * silently, which is precisely the failure this fixes.
+   */
+  const periodIndicatorHalo = svg(
+    "text",
+    {
+      "data-testid": "period-indicator-halo",
+      x: cx,
+      y: roundCoord(cy + faceRadius * RADIUS.periodIndicator),
+      "text-anchor": "middle",
+      "dominant-baseline": "central",
+      "font-size": roundCoord(faceRadius * SCALE.periodIndicator),
+      "font-weight": 600,
+      fill: "var(--card)",
+      stroke: "var(--card)",
+      // Doubled: a stroke straddles the outline it follows, so half of it falls inside the glyph
+      // and only half becomes dilation. `fill` is what covers the glyph's own interior.
+      "stroke-width": roundCoord(2 * PERIOD_HALO_MULTIPLE * faceRadius * HAND_HALO_RATIO),
+      "stroke-linejoin": "round",
+      filter: `url(#${PERIOD_HALO_BLUR_ID})`,
+      "font-family": FONT_STACK,
+      // The word is already in the tree once, on the element below.
+      "aria-hidden": "true",
+    },
+    [periodText(time)]
+  );
+
   const periodIndicator = svg(
     "text",
     {
@@ -303,7 +430,7 @@ export function clockFace({
       fill: "var(--muted-foreground)",
       "font-family": FONT_STACK,
     },
-    [time.getHours() >= 12 ? "PM" : "AM"]
+    [periodText(time)]
   );
 
   const angles = handAngles(time);
@@ -398,7 +525,7 @@ export function clockFace({
   // top of every hour, and a per-hand pairing would let the minute halo — wider than the hour
   // hand's own line — paint over and thin it. Painting every halo first keeps each hand's colour
   // on top regardless of which other hand shares its angle.
-  element.append(periodIndicator, hourHalo, minuteHalo);
+  element.append(hourHalo, minuteHalo);
   if (secondHalo) element.append(secondHalo);
   element.append(hourHand, minuteHand);
   if (secondHand) element.append(secondHand);
@@ -413,6 +540,10 @@ export function clockFace({
     })
   );
 
+  // Last of everything on the face, so nothing drawn here can cover it — including whatever the
+  // timer eventually draws inside this radius (#48).
+  element.append(periodHaloBlur, periodIndicatorHalo, periodIndicator);
+
   return {
     element,
     setTime(next: Date): void {
@@ -423,7 +554,9 @@ export function clockFace({
       minuteHand.setAttribute("transform", rotateAbout(updated.minute));
       secondHalo?.setAttribute("transform", rotateAbout(updated.second));
       secondHand?.setAttribute("transform", rotateAbout(updated.second));
-      periodIndicator.textContent = next.getHours() >= 12 ? "PM" : "AM";
+      // Both copies, or the halo keeps yesterday's word and stops fitting the one on top of it.
+      periodIndicatorHalo.textContent = periodText(next);
+      periodIndicator.textContent = periodText(next);
     },
   };
 }

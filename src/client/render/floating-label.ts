@@ -12,6 +12,7 @@
 import {
   type ClockBox,
   type Rect,
+  adjustCompositeForContrast,
   clampLabelPosition,
   faceClearanceLimit,
   fitLabelToWidth,
@@ -21,6 +22,7 @@ import {
   rectEdgeIntersection,
   roundCoord,
 } from "../../shared/clock";
+import { BAND_BACKGROUND } from "./event-arc";
 import { cardStrokeWidth, eventCardNodes, RECT_PADDING_X, RECT_PADDING_Y } from "./event-card";
 import { svg } from "../svg";
 
@@ -39,7 +41,45 @@ const MAX_LINES = 3;
 
 const CONNECTOR_OPACITY = 0.6;
 
+/**
+ * Contrast floor for the connector's own stroke, against the page (#93).
+ *
+ * WCAG 1.4.11's floor for a non-text object, the same number and the same reasoning as #66's
+ * `FILL_MIN_CONTRAST`: this is a line, not text. #27's 4.5:1 would move eight of the nine
+ * colour-dots instead of five and turn every connector but ⚪ into a pastel of itself — and matching
+ * its arc's colour is half of how a viewer pairs a card with the arc it came from, so a floor that
+ * launders the hue costs the element one job to buy it the other.
+ */
+const CONNECTOR_MIN_CONTRAST = 3;
+
 const DEFAULT_FONT_SIZE = 14;
+
+/**
+ * The colour the connector is actually stroked in — the authored colour, floored so the line exists
+ * (#93).
+ *
+ * Composited at `CONNECTOR_OPACITY` over the page, ⚫ gray-800 measured **1.15:1** and 🟤 amber-800
+ * 1.68:1: not faint lines but no line, on the one element that says which arc a card belongs to.
+ * 🔴, 🔵 and 🟣 also fell short, at 2.48, 2.60 and 2.46.
+ *
+ * Its own call at its own alpha rather than reuse of #66's `arcFillColor`: 0.6 mixes back more
+ * ground than the arcs' 0.85 does, so a colour floored for the fill still under-reads as a stroke.
+ *
+ * `BAND_BACKGROUND` is `--page`'s hex and the only place it is spelled — the connector runs from the
+ * band's outer edge out across the page, so the name is about where that constant was first needed
+ * rather than a mismatch here.
+ *
+ * Exported so a spec can ask what is painted instead of keeping its own copy of the floor and the
+ * opacity; the premise is the part these measurements keep getting wrong (#74).
+ */
+export function connectorColor(color: string): string {
+  return adjustCompositeForContrast(
+    color,
+    BAND_BACKGROUND,
+    CONNECTOR_OPACITY,
+    CONNECTOR_MIN_CONTRAST
+  );
+}
 
 export interface FloatingLabelParams {
   /** Stable id, normally the event id — used for test ids. */
@@ -52,7 +92,11 @@ export interface FloatingLabelParams {
   anchorRadius: number;
   /** Radius of the circle the label centre sits on, before the vertical clamp. */
   labelRadius: number;
-  /** Event colour, used for the connector and the card border. */
+  /**
+   * Event colour, washed over the card and used for the border, and — floored by `connectorColor`
+   * — for the connector. The card's two uses keep the authored value: they sit on the light
+   * `--card-foreground` field rather than on the page, so the floor the page needs does not apply.
+   */
   color: string;
   cx: number;
   cy: number;
@@ -159,7 +203,7 @@ export function floatingLabel(params: FloatingLabelParams): SVGGElement {
       y1: roundCoord(anchor.y),
       x2: roundCoord(connectorEnd.x),
       y2: roundCoord(connectorEnd.y),
-      stroke: color,
+      stroke: connectorColor(color),
       "stroke-opacity": CONNECTOR_OPACITY,
       "stroke-width": cardStrokeWidth(fontSize),
     }),

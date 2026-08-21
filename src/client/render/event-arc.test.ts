@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
   FEATHER_DEGREES,
+  FEATHER_MAX_SPAN_RATIO,
   INK_HEIGHT_RATIO,
+  ONE_HOUR_SCALE,
+  TWELVE_HOUR_SCALE,
   TITLE_EDGE_CLEARANCE,
   TITLE_FONT_SIZE_RATIO,
   TITLE_LINE_OFFSET_RATIO,
@@ -14,12 +17,24 @@ import {
   polarToCartesian,
 } from "../../shared/clock";
 import { ARC_BAND_RATIO, RING_GAP_MIN, RING_GAP_RATIO } from "./analog-clock";
-import { BAND_BACKGROUND, arcFillColor, eventArc } from "./event-arc";
+import { BAND_BACKGROUND, arcEdgeStrokeWidth, arcFillColor, eventArc } from "./event-arc";
 
 const CX = 300;
 const CY = 300;
 const INNER = 244;
 const OUTER = 292;
+
+/**
+ * How far every mask wedge — and the mask's own region — reaches past the arc's edges: the width of
+ * the widest stroke the arc draws, which is the elapsed outline and not the separator (#114).
+ *
+ * Derived, because a written-down copy of it is what let the outline escape. The full width rather
+ * than the half a straddling stroke needs: rendering at 8× showed half still leaking an antialiased
+ * step of the outline at the wedge's own edge. The pad is uniform across masks rather than per-arc,
+ * so a live arc that draws no outline is padded for one anyway — the cost is a fraction of a degree
+ * of extra ramp, and the alternative is two geometries.
+ */
+const MASK_PAD = arcEdgeStrokeWidth(OUTER - INNER, OUTER - INNER);
 
 function makeEvent(overrides: Partial<ClockEvent> = {}): ClockEvent {
   const startAngle = overrides.startAngle ?? 0;
@@ -658,7 +673,7 @@ describe("eventArc", () => {
       const baselines = [...group.querySelectorAll("defs path")].map((node) =>
         arcRadius(node.getAttribute("d") ?? "")
       );
-      const half = twoLines.titleFontSize / 2;
+      const half = (twoLines.titleFontSize * INK_HEIGHT_RATIO) / 2;
 
       expect(Math.min(...baselines) - half).toBeGreaterThanOrEqual(INNER);
       expect(Math.max(...baselines) + half).toBeLessThanOrEqual(OUTER);
@@ -706,7 +721,7 @@ describe("eventArc", () => {
       const radii = [...group.querySelectorAll("defs path")].map((node) =>
         arcRadius(node.getAttribute("d") ?? "")
       );
-      const half = layout.titleFontSize / 2;
+      const half = (layout.titleFontSize * INK_HEIGHT_RATIO) / 2;
 
       return {
         innerClearance: Math.min(...radii) - half - innerRadius,
@@ -824,16 +839,19 @@ describe("eventArc at a period boundary", () => {
     expect(angleOf(at("x2"), at("y2"))).toBeCloseTo(FEATHER_DEGREES, 4);
   });
 
-  it("covers the separator stroke, which would otherwise cap the boundary with a crisp line", () => {
+  it("covers the widest stroke, which would otherwise cap the boundary with a crisp line", () => {
     const [wedge] = fade({ startAngle: 0, endAngle: 60, continuesBefore: true }).wedges;
     const d = wedge.getAttribute("d") ?? "";
     // `matchAll` would be tidier, but the target is ES2019.
     const radii = d.split("A ").slice(1).map(parseFloat);
 
     // The stroke straddles the path by half its width in every direction — radially…
-    expect(radii).toEqual([OUTER + SEPARATOR, INNER - SEPARATOR]);
-    // …and angularly, past the boundary, where a bare wedge would leave a hairline behind.
-    const padDegrees = (SEPARATOR / OUTER) * (180 / Math.PI);
+    expect(radii).toEqual([OUTER + MASK_PAD, INNER - MASK_PAD]);
+    // …and angularly, past the boundary, where a bare wedge would leave a hairline behind. The
+    // separator this once asserted is the narrower of the two strokes, so a pad sized to it left
+    // the elapsed outline outside every wedge (#114).
+    expect(MASK_PAD).toBeGreaterThan(SEPARATOR);
+    const padDegrees = (MASK_PAD / OUTER) * (180 / Math.PI);
     expect(wedgeSpan(d)).toBeCloseTo(FEATHER_DEGREES + padDegrees, 3);
   });
 
@@ -1134,8 +1152,18 @@ describe("eventArc's title against what is stroked on its ring", () => {
       radii,
       fontSize,
       strokeWidth,
-      outward: shape.outerRadius - strokeWidth / 2 - (Math.max(...radii) + fontSize / 2),
-      inward: Math.min(...radii) - fontSize / 2 - (shape.innerRadius + strokeWidth / 2),
+      // Real ink, not the em box (#90): `fontSize / 2` here was the same model the cap itself
+      // carried, which made these cases inert rather than merely optimistic. With both sides on
+      // the em box the reported figure collapses to `TITLE_EDGE_CLEARANCE` by construction — 1.0000
+      // wherever the cap bound — whatever the real gap was, and the real gap was 0.64 four deep.
+      outward:
+        shape.outerRadius -
+        strokeWidth / 2 -
+        (Math.max(...radii) + (fontSize * INK_HEIGHT_RATIO) / 2),
+      inward:
+        Math.min(...radii) -
+        (fontSize * INK_HEIGHT_RATIO) / 2 -
+        (shape.innerRadius + strokeWidth / 2),
     };
   }
 
@@ -1167,17 +1195,28 @@ describe("eventArc's title against what is stroked on its ring", () => {
     expect(inward).toBeGreaterThanOrEqual(TITLE_EDGE_CLEARANCE);
   });
 
-  it("is the four-deep ring that binds, and it yields only the text", () => {
-    // Where the fix shows: four deep the stack wanted 4.58 units of half-height in the 4.12 the
-    // outline leaves, so the font gives up 10%. The outline is untouched — it *is* the arc once the
-    // fill is gone, and capping it by the ring is the inversion #26's band-sizing exists to prevent.
+  it("is the three- and four-deep rings that bind, and they yield only the text", () => {
+    // Where the fix shows: four deep the stack's ink wants 5.45 units of half-height in the 4.12 the
+    // outline leaves, so the font gives up 24%; three deep it wants 7.79 against 7.48 and gives up
+    // 4%. Three deep is where #90 moved the boundary — the em-box model read that ring as having
+    // 0.32 units to spare when its ink was over the line. The outline is untouched either way: it
+    // *is* the arc once the fill is gone, and capping it by the ring is the inversion #26's
+    // band-sizing exists to prevent. Two deep is the deepest ring the ring ratio still wins on.
     const stacked = measure(4, wrappingTitle(4, 30));
     const three = measure(3, wrappingTitle(3, 30));
+    const two = measure(2, wrappingTitle(2, 30));
 
-    expect(stacked.fontSize).toBeLessThan((ring(4).outerRadius - ring(4).innerRadius) * TITLE_FONT_SIZE_RATIO);
+    for (const [depth, drawn] of [
+      [4, stacked],
+      [3, three]
+    ] as const) {
+      const ratioFont = (ring(depth).outerRadius - ring(depth).innerRadius) * TITLE_FONT_SIZE_RATIO;
+      expect(drawn.fontSize).toBeLessThan(ratioFont);
+    }
+
     expect(stacked.strokeWidth).toBe(measure(1, "Lunch").strokeWidth);
-    expect(three.fontSize).toBeCloseTo(
-      (ring(3).outerRadius - ring(3).innerRadius) * TITLE_FONT_SIZE_RATIO,
+    expect(two.fontSize).toBeCloseTo(
+      (ring(2).outerRadius - ring(2).innerRadius) * TITLE_FONT_SIZE_RATIO,
       2
     );
   });
@@ -1298,9 +1337,10 @@ describe("eventArc while the event is draining", () => {
    * left 65–83% of the spent side at full fill; these pin the occluding region that fixes it.
    */
   describe("what the masks actually hide", () => {
-    // (OUTER − INNER) × ARC_SEPARATOR_RATIO, as an angle at the outer radius: how far every wedge
-    // reaches past its far edge to swallow the stroke straddling the path there.
-    const PAD_DEGREES = (1.44 / OUTER) * (180 / Math.PI);
+    // `MASK_PAD` as an angle at the outer radius: how far every wedge reaches past its far edge to
+    // swallow the stroke straddling the path there. This was the separator's 1.44 against an
+    // outline of 3.36 that overshot it by 0.24, and nine assertions here called that correct.
+    const PAD_DEGREES = (MASK_PAD / OUTER) * (180 / Math.PI);
 
     /** Angle of a point, in the dial's 0°-at-twelve convention. */
     function angleOf(x: number, y: number): number {
@@ -1332,7 +1372,7 @@ describe("eventArc while the event is draining", () => {
     }
 
     /** The padded radii every wedge is drawn at, so a mis-sized occlusion cannot pass. */
-    const WEDGE_RADII = [OUTER + 1.44, INNER - 1.44];
+    const WEDGE_RADII = [OUTER + MASK_PAD, INNER - MASK_PAD];
 
     function occlusion(group: SVGGElement, maskId: string): Element | null {
       return group.querySelector(`mask#${maskId} [data-mask-part="occlusion"]`);
@@ -1427,6 +1467,66 @@ describe("eventArc while the event is draining", () => {
       expect(wedgeEdges(occlusion(group, "arc-fade-e1")).largeArc).toBe(0);
     });
 
+    // Ring 48 against a band of 48 / 96 / 192 — a lone arc, then two- and four-deep stacking, which
+    // is where the two quantities diverge: the separator is sized from the ring and the outline from
+    // the band, so the deeper the stack the further the outline reaches past a ring-sized pad. On
+    // the fixture's four-deep cluster the escaped hairline measured 1.66 units, wider than the
+    // whole separator beside it.
+    it.each([48, 96, 192])(
+      "swallows the widest stroke the arc draws, on a band of %i",
+      (bandThickness) => {
+        const group = eventArc({
+          event: makeEvent({ startAngle: 0, endAngle: 60 }),
+          cx: CX,
+          cy: CY,
+          innerRadius: INNER,
+          outerRadius: OUTER,
+          bandThickness,
+          nowAngle: 15,
+        });
+
+        // Read off the rendered attributes, so the pad cannot drift from the stroke it has to
+        // swallow — recomputing the width here is how the old assertion agreed with the old bug.
+        const outline = Number(
+          group.querySelector('[data-arc-part="outline"]')?.getAttribute("stroke-width")
+        );
+        const separator = Number(
+          group.querySelector('[data-arc-part="separator"]')?.getAttribute("stroke-width")
+        );
+        const { radii } = wedgeEdges(occlusion(group, "arc-drain-e1"));
+
+        // The premise the spec's own MASK_PAD rests on: the outline is the wider of the two, always.
+        expect(outline).toBeGreaterThan(separator);
+        expect(radii[0]).toBeGreaterThanOrEqual(OUTER + outline / 2);
+        expect(radii[1]).toBeLessThanOrEqual(INNER - outline / 2);
+      }
+    );
+
+    it("keeps the mask's own region wide enough for the outline it must not clip", () => {
+      // The half of #114 a wedge-radius assertion cannot see. Outside its region a mask has no
+      // value at all, so a region that stopped at the arc's own edge would clip the *legitimate*
+      // elapsed outline wherever the wedge now reaches past it — trading one hairline for a gap.
+      const group = eventArc({
+        event: makeEvent({ startAngle: 0, endAngle: 60 }),
+        cx: CX,
+        cy: CY,
+        innerRadius: INNER,
+        outerRadius: OUTER,
+        bandThickness: 192,
+        nowAngle: 15,
+      });
+      const outline = Number(
+        group.querySelector('[data-arc-part="outline"]')?.getAttribute("stroke-width")
+      );
+      const mask = group.querySelector("mask#arc-drain-e1");
+      const left = Number(mask?.getAttribute("x"));
+      const size = Number(mask?.getAttribute("width"));
+
+      // The region is a square, so its inscribed circle is what has to reach the outline's rim.
+      expect(CX - left).toBeGreaterThanOrEqual(OUTER + outline / 2);
+      expect(left + size - CX).toBeGreaterThanOrEqual(OUTER + outline / 2);
+    });
+
     it("keeps the window feather on the spent mask too, when the arc is clamped as well", () => {
       const group = eventArc({
         event: makeEvent({ startAngle: 0, endAngle: 60, continuesBefore: true }),
@@ -1445,6 +1545,64 @@ describe("eventArc while the event is draining", () => {
         "arc-drain-e1-drain",
       ]);
       expect(mask?.querySelector('[data-mask-part="occlusion"]')).not.toBeNull();
+    });
+
+    /**
+     * #58: the two ramps on a clamped, draining arc are painted onto one mask in sequence, and the
+     * issue asks what happens where they overlap. They never do — but the margin is a function of
+     * the scale's look-behind, and #34's 1-hour scale cut it from 74.3° to 14.3° with nothing
+     * watching. This is the assertion that watches.
+     *
+     * Built at the tightest position each scale can reach: clamped at the look-behind edge, so the
+     * drain boundary lands exactly `lookbehindDegrees` from it, with enough of the arc left ahead of
+     * `now` that both ramps are at their full `FEATHER_DEGREES` depth. Clearance decomposes as
+     * `lookbehindDegrees − 1.5 × FEATHER_DEGREES` — the feather reaches its full depth from the
+     * edge, the drain ramp straddles its boundary and so contributes half — less the wedge pad on
+     * the fill mask, whose drain wedge pads *toward* the feather where the spent mask's pads away.
+     *
+     * The pad is read back off the rendered wedge rather than written down, so #114 changing it
+     * moves this with it; the look-ahead side is 240°/300° away and never binds.
+     */
+    it.each([
+      ["12-hour", TWELVE_HOUR_SCALE],
+      ["1-hour", ONE_HOUR_SCALE],
+    ])("keeps a window feather's ramp clear of the drain ramp, on the %s scale", (_label, scale) => {
+      const lookbehindDegrees = (scale.lookbehindMinutes / scale.periodMinutes) * 360;
+      // Away from 0° so no wedge's padded edge wraps, which would only complicate the arithmetic.
+      const startAngle = 100;
+      // Enough remaining that `min(remaining, spent) × FEATHER_MAX_SPAN_RATIO` clears
+      // FEATHER_DEGREES, which is what puts the drain ramp at full depth — the tightest it gets.
+      const endAngle = startAngle + lookbehindDegrees + FEATHER_DEGREES / FEATHER_MAX_SPAN_RATIO;
+      const group = eventArc({
+        event: makeEvent({ startAngle, endAngle, continuesBefore: true }),
+        cx: CX,
+        cy: CY,
+        innerRadius: INNER,
+        outerRadius: OUTER,
+        nowAngle: startAngle + lookbehindDegrees,
+      });
+
+      const ramp = (maskId: string, key: string): Element | null =>
+        [...group.querySelectorAll(`mask#${maskId} [data-mask-part="ramp"]`)].find(
+          (node) => node.getAttribute("fill") === `url(#${maskId}-${key})`
+        ) ?? null;
+
+      const feather = wedgeEdges(ramp("arc-fade-e1", "start"));
+      const padDegrees = ((feather.radii[0] - OUTER) / OUTER) * (180 / Math.PI);
+      const bare = lookbehindDegrees - 1.5 * FEATHER_DEGREES;
+
+      for (const [maskId, expected] of [
+        ["arc-fade-e1", bare - padDegrees],
+        ["arc-drain-e1", bare],
+      ] as const) {
+        const featherWedge = wedgeEdges(ramp(maskId, "start"));
+        const drainWedge = wedgeEdges(ramp(maskId, "drain"));
+        const clearance = drainWedge.from - featherWedge.to;
+
+        // The invariant #58 needs, and the number that says how much room is left before it fails.
+        expect(clearance).toBeGreaterThan(0);
+        expect(clearance).toBeCloseTo(expected, 3);
+      }
     });
   });
 
