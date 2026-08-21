@@ -486,6 +486,16 @@ describe("floatingLabel against the dial's real geometry", () => {
         expect(innerEdge(angle, 234.5 + 8)).toBeGreaterThanOrEqual(FACE);
       }
     });
+
+    /**
+     * `>= FACE` is satisfiable with nothing to spare, and #118 spent 6 of the units that were spare:
+     * clearance to the face at the binding angle went 13.86 → **7.86**. Pinned as a floor rather than
+     * left to the inequality, because the next change to a card's width is the one that would find
+     * out by rendering — which is how #21 was found in the first place.
+     */
+    it.each([90, 270])("keeps 7.86 units between the card and the face at %i degrees", (angle) => {
+      expect(innerEdge(angle, 234.5 + 8) - FACE).toBeCloseTo(7.86, 2);
+    });
   });
 
   /**

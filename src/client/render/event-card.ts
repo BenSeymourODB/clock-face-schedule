@@ -90,14 +90,18 @@ function cardRect({ x, y, width, height }: EventCardGeometry) {
  * through it. Sharing one `geometry` object, rather than recomputing it per rect, is what makes
  * it structurally impossible for the three to drift apart.
  *
- * The swatch is the card's identity channel (#118), and the caller has already taken
- * `SWATCH_RESERVE` out of the width it passes — a card that has not is simply one character wider
- * than it should be, not one whose text runs under the patch, because the text centres on the room
- * that remains either way.
+ * The swatch is the card's identity channel (#118), and the caller must take `SWATCH_RESERVE` out of
+ * the width it passes — `floatingLabel` does, before it wraps. A card sized to its text alone has no
+ * room for the patch to be in: its first line's ink lands 2 units over the patch and hard against the
+ * far border, measured at the dial's own font. That is the caller's arithmetic and not something this
+ * function can centre its way out of, so it is a contract rather than a defence, and
+ * `event-card.test.ts` asserts both halves of it.
  *
  * **Its outline carries the contrast, not its fill.** Full-opacity paint on the card's own washed
- * field measures 1.001:1 for ⚪ and under 1.5:1 for nine of the twenty-one colours the dial can be
- * handed, so a bare patch reproduces the defect it was chosen to fix. `var(--card)` — the card's own
+ * field measures 1.001:1 for ⚪, misses WCAG 1.4.11's 3:1 for a graphical object on **18 of the 21**
+ * colours the dial can be handed, and is under 1.5:1 on six of them (⚪ 1.001, Graphite 1.148, Banana
+ * 1.207, Sage 1.270, Tangerine 1.412, Peacock 1.445) — so a bare patch reproduces the defect it was
+ * chosen to fix rather than merely under-reading. `var(--card)` — the card's own
  * text token — is 10.93:1 or better against every one of those fields, and outlining rather than
  * flooring keeps the authored hue, which is what #118 rejected flooring the border to protect. On a
  * dark fill the outline vanishes into it (⚫ measures 1.21:1 inside) and the patch reads as one

@@ -168,10 +168,14 @@ export function floatingLabelGeometry({
     )
   );
   // The swatch's room comes out of the text budget and goes back into the card's width, so the
-  // card's *total* width is bounded by exactly the same number as before (#118). Widening the card
-  // instead would move the bound every guard here is written against — the face clearance, the
-  // horizontal clamp, and #98's coverage of the band — for a change that is about the card's
-  // contents.
+  // card's *total* width is bounded by the same number as before (#118) for every card that carries
+  // text. Widening the card instead would move the bound every guard here is written against — the
+  // face clearance, the horizontal clamp, and #98's coverage of the band — for a change that is
+  // about the card's contents.
+  //
+  // The exception is the empty chip `clamp-label.ts` already documents: where the budget floors to
+  // zero characters the card is its padding alone, which the reserve makes 24 units rather than 12,
+  // both past a `maxWidth` of 12 or less. Only reachable at dial sizes and allowances no board has.
   const { lines, width, height } = fitLabelToWidth(
     text,
     Math.max(0, maxWidth - SWATCH_RESERVE),

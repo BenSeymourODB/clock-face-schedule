@@ -5,6 +5,7 @@ import {
   SWATCH_WIDTH,
   compositeOver,
   contrastRatio,
+  textWidth,
 } from "../../shared/clock";
 import { cardStrokeWidth, eventCardNodes } from "./event-card";
 
@@ -97,16 +98,24 @@ describe("eventCardNodes", () => {
   });
 
   it("renders one text element per line, centred on the room left by the swatch", () => {
-    const group = render({ lines: ["First line", "Second line"] });
+    const lines = ["First line", "Second line"];
+    const group = render({ lines });
     const rect = part(group, "rect");
     const [x, y, width, height] = numbers(rect, "x", "y", "width", "height");
     const first = line(group, 0);
     const second = line(group, 1);
     const textCentre = x + (width + SWATCH_RESERVE) / 2;
 
-    expect([first?.textContent, second?.textContent]).toEqual(["First line", "Second line"]);
+    expect([first?.textContent, second?.textContent]).toEqual(lines);
     expect(Number(first?.getAttribute("x"))).toBeCloseTo(textCentre, 4);
     expect(Number(second?.getAttribute("x"))).toBeCloseTo(textCentre, 4);
+
+    // And the centre is a position the text actually fits at: `GEOMETRY` is wide enough to carry the
+    // reserve, so the widest line clears the patch by at least the gap. This is the half that says
+    // the formula is right rather than merely consistent with itself.
+    const widest = Math.max(...lines.map((text) => textWidth(text, 14)));
+
+    expect(textCentre - widest / 2).toBeGreaterThanOrEqual(6 + SWATCH_WIDTH + SWATCH_GAP);
     // Two lines straddle the vertical centre symmetrically.
     const centreY = y + height / 2;
     expect(Number(first?.getAttribute("y")) - centreY).toBeCloseTo(
@@ -175,8 +184,14 @@ describe("eventCardNodes", () => {
 
     /**
      * The assertion a bare patch would have failed, and the reason the outline exists. Full-opacity
-     * paint on the card's own washed field is 1.001:1 for ⚪ and under 1.5:1 for nine of these
-     * twenty-one colours — the swatch would have reproduced the defect it was chosen to fix.
+     * paint on the card's own washed field misses 3:1 on 18 of these 21 colours and is under 1.5:1 on
+     * six — the swatch would have reproduced the defect it was chosen to fix.
+     *
+     * The stroke's *width* is asserted against `cardStrokeWidth` and not merely as positive: a
+     * contrast ratio says nothing about how much of it is painted, and a hairline thinned to nothing
+     * would clear every ratio here while taking the element with it. That is the shape of the defect
+     * `CLAUDE.md` records for the elapsed outline — a test encoding the same wrong assumption as the
+     * code.
      */
     it.each(EVERY_COLOUR)("%s reads as a patch against the field it sits on", (_label, color) => {
       const swatch = part(render({ color }), "swatch");
@@ -185,7 +200,17 @@ describe("eventCardNodes", () => {
       // resolved value. Asserting both keeps the measurement tied to the paint (ADR 0007).
       expect(swatch?.getAttribute("stroke")).toBe("var(--card)");
       expect(contrastRatio(CARD, field(color))).toBeGreaterThanOrEqual(AA_GRAPHICAL_OBJECT);
-      expect(Number(swatch?.getAttribute("stroke-width"))).toBeGreaterThan(0);
+      expect(Number(swatch?.getAttribute("stroke-width"))).toBeCloseTo(cardStrokeWidth(14), 4);
+    });
+
+    it("leaves most of the patch as colour rather than as outline", () => {
+      // 8 units carrying a 1.4-unit stroke at the dial's own label font leaves 6.6 units of the
+      // authored hue — 10.1 px at 1920×1080. The outline is what makes the patch locatable; it is not
+      // supposed to become the patch.
+      const swatch = part(render({ fontSize: 17.52 }), "swatch");
+      const stroke = Number(swatch?.getAttribute("stroke-width"));
+
+      expect(Number(swatch?.getAttribute("width")) - stroke).toBeGreaterThan(SWATCH_WIDTH * 0.75);
     });
 
     it.each([
@@ -193,10 +218,21 @@ describe("eventCardNodes", () => {
       ["Graphite", "#e1e1e1", 1.148],
       ["Banana", "#fbd75b", 1.207],
       ["Sage", "#7ae7bf", 1.27],
+      ["Tangerine", "#ffb878", 1.412],
+      ["Peacock", "#46d6db", 1.445],
     ])("would have been invisible for %s as a bare fill, at %s:1", (_label, color, bare) => {
       // The fill is still that ratio — the outline is what makes the patch locatable, so a later
       // tidy-up dropping the stroke would take the whole element with it.
       expect(contrastRatio(color, field(color))).toBeCloseTo(bare as number, 2);
+    });
+
+    it("is the whole of the light half of the palette, not a couple of outliers", () => {
+      // The count is the argument: a floor applied to the fill would have to move most of the palette,
+      // which is why the outline carries it instead (#118 declined laundering the hue).
+      const bare = EVERY_COLOUR.map(([, color]) => contrastRatio(color, field(color)) as number);
+
+      expect(bare.filter((ratio) => ratio < AA_GRAPHICAL_OBJECT)).toHaveLength(18);
+      expect(bare.filter((ratio) => ratio < 1.5)).toHaveLength(6);
     });
 
     it("paints above the wash, so the patch is the colour and not a tint of it", () => {
@@ -206,6 +242,43 @@ describe("eventCardNodes", () => {
       expect(rects.indexOf(part(group, "swatch") as Element)).toBeGreaterThan(
         rects.indexOf(part(group, "wash") as Element)
       );
+    });
+
+    /**
+     * The contract, asserted from the failing side. A caller that sizes a card to its text alone —
+     * `fitLabelToWidth`'s own return, which is what #39's agenda card will reach for — has no room
+     * for the patch to be in, and centring cannot invent it. The comment on `eventCardNodes` says so;
+     * this is the number behind it, so the next caller finds a failing spec rather than a paragraph.
+     */
+    it("has no room for the patch when the caller did not reserve it", () => {
+      const font = 17.52;
+      const text = "Assembly";
+      const unreserved = textWidth(text, font) + 6 * 2;
+      const group = render({ ...GEOMETRY, width: unreserved, lines: [text], fontSize: font });
+      const [swatchX, swatchWidth] = numbers(part(group, "swatch"), "x", "width");
+      const textLeft = Number(line(group)?.getAttribute("x")) - textWidth(text, font) / 2;
+
+      // For a card sized to `textWidth + 2 × padding.x` the widest line's left edge lands at
+      // `x + 2 × padding.x` whatever the text is, and the patch ends at `x + padding.x + 8` — so the
+      // overlap is `padding.x − SWATCH_WIDTH`, a constant 2 units, and the right edge lands exactly
+      // on the border.
+      expect(textLeft - (swatchX + swatchWidth)).toBeCloseTo(6 - SWATCH_WIDTH, 4);
+      expect(Number(line(group)?.getAttribute("x")) + textWidth(text, font) / 2).toBeCloseTo(
+        GEOMETRY.x + unreserved,
+        4
+      );
+      // Which is the same thing said the other way: reserving is what buys the gap back.
+      const reserved = render({
+        ...GEOMETRY,
+        width: unreserved + SWATCH_RESERVE,
+        lines: [text],
+        fontSize: font,
+      });
+      const [rx, rw] = numbers(part(reserved, "swatch"), "x", "width");
+
+      expect(
+        Number(line(reserved)?.getAttribute("x")) - textWidth(text, font) / 2 - (rx + rw)
+      ).toBeCloseTo(SWATCH_GAP, 4);
     });
 
     it("leaves the gap between the patch and the text it labels", () => {

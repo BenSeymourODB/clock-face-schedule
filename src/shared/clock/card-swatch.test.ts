@@ -42,6 +42,22 @@ describe('cardSwatchLayout', () => {
   });
 
   /**
+   * Not reachable through `floatingLabel`, whose narrowest card is 24 units — but the next caller is
+   * #39's agenda card, whose widths come from a panel. A patch painted outside its own border is the
+   * kind of defect that renders plausibly and logs nothing.
+   */
+  it.each([
+    ['narrower than the patch and its padding', 16, 4],
+    ['padding only', 12, 0],
+    ['narrower than its own padding', 8, 0]
+  ])('keeps the patch inside a card %s', (_label, width, expected) => {
+    const { swatch } = cardSwatchLayout({ x: 0, y: 0, width, height: 30 }, PADDING);
+
+    expect(swatch.width).toBe(expected);
+    expect(swatch.x + swatch.width).toBeLessThanOrEqual(width);
+  });
+
+  /**
    * #30's costing is what chose 8 over 4, and it is an arithmetic claim rather than a taste one: the
    * budget floors to whole characters, so the wide swatch is free. If `CHAR_WIDTH_RATIO` or the
    * label font ever moves, this is the assertion that says the choice needs re-pricing.

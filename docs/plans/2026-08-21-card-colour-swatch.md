@@ -31,9 +31,27 @@ The owner settled the remedy on #118: **give the card its colour back as a glyph
 a 4-unit gap, before the title** — extended to every card rather than only merged ones. A rect over
 an emoji deliberately: it costs no glyph and cannot be dropped by a font fallback (#91).
 
-#30's arithmetic is what makes the wide one free. At `CHAR_WIDTH_RATIO = 0.6` and the dial's 17.52
+#30's arithmetic is what priced the wide one as free. At `CHAR_WIDTH_RATIO = 0.6` and the dial's 17.52
 label font a character is 10.512 units, so a 4-unit swatch and an 8-unit swatch floor to the same
 integer: **one character a line** on both 16:9 (13 → 12) and 16:10 (8 → 7).
+
+**Rendering says that is true per line and false per card**, which is the one place this plan departs
+from the decision's reasoning while keeping its answer. Swept over every half hour on both scales —
+251 cards — counting wrapped title lines:
+
+| | title lines | ellipsized | durations |
+| --- | --- | --- | --- |
+| before the swatch | 384 | 33 | 208 |
+| 4 + 3 | 398 | 36 | 208 |
+| **8 + 4, as decided** | **421** | 36 | 208 |
+
+The narrow version costs 14 lines and the wide one 37. The two diverge because #30 priced them against
+ADR 0009's band-clearing widths (151.3 and 98.0 units) and today's cards are bound by
+`faceClearanceLimit` at 186.88, where the reserves floor differently. ⚫ Staff Debrief at `?now=03:00`
+is the visible case: two lines at 4 + 3, three at 8 + 4.
+
+**Built at 8 + 4 regardless**, because the width is the owner's call and not this plan's; the
+measurement is recorded on #118 and moving it is two constants in `card-swatch.ts`.
 
 **What the decision does not settle is whether a bare rect is visible**, and measuring says it is
 not. The swatch is full-opacity paint on the card's own washed field, so for the light half of the
@@ -45,9 +63,12 @@ palette it reproduces the defect it was chosen to fix:
 | Graphite `#e1e1e1` | 1.148 |
 | Banana `#fbd75b` | 1.207 |
 | Sage `#7ae7bf` | 1.270 |
+| Tangerine `#ffb878` | 1.412 |
+| Peacock `#46d6db` | 1.445 |
 | ⚫ gray-800 | 9.030 |
 
-Nine of the twenty-one colours the dial can be handed land under 1.5:1. So the swatch needs an
+**18 of the 21** colours the dial can be handed miss WCAG 1.4.11's 3:1 as a bare fill, and six are
+under 1.5:1. So the swatch needs an
 **outline**, and the outline — not the fill — is what carries the 3:1 floor:
 
 | outline, `var(--card)` over the field | outside | inside the fill |
@@ -82,8 +103,10 @@ identity job, but the card's *shape* is 11.9–17.5:1 on the page and never in d
 
 A card is centred on the locus and grows about its own centre, so a wider card reaches further into
 the band — #98, which `floating-label.test.ts` pins at 90° and 270°. Those figures move, and the new
-ones are recorded there and on #98. The face-clearance bound does not move: it is a bound on the
-card's total width, and the reserve is taken out of the text budget rather than added to it.
+ones are recorded there and on #98. The face-clearance *bound* does not move: it is a bound on the
+card's total width, and the reserve is taken out of the text budget rather than added to it — but the
+slack inside it does, from 13.86 units to 7.86 at the binding angle, so that is pinned as a floor
+beside the coverage figures rather than left to `>= faceRadius`.
 
 ## Verification
 
