@@ -670,7 +670,7 @@ describe("eventArc", () => {
       const baselines = [...group.querySelectorAll("defs path")].map((node) =>
         arcRadius(node.getAttribute("d") ?? "")
       );
-      const half = twoLines.titleFontSize / 2;
+      const half = (twoLines.titleFontSize * INK_HEIGHT_RATIO) / 2;
 
       expect(Math.min(...baselines) - half).toBeGreaterThanOrEqual(INNER);
       expect(Math.max(...baselines) + half).toBeLessThanOrEqual(OUTER);
@@ -718,7 +718,7 @@ describe("eventArc", () => {
       const radii = [...group.querySelectorAll("defs path")].map((node) =>
         arcRadius(node.getAttribute("d") ?? "")
       );
-      const half = layout.titleFontSize / 2;
+      const half = (layout.titleFontSize * INK_HEIGHT_RATIO) / 2;
 
       return {
         innerClearance: Math.min(...radii) - half - innerRadius,
@@ -1149,8 +1149,18 @@ describe("eventArc's title against what is stroked on its ring", () => {
       radii,
       fontSize,
       strokeWidth,
-      outward: shape.outerRadius - strokeWidth / 2 - (Math.max(...radii) + fontSize / 2),
-      inward: Math.min(...radii) - fontSize / 2 - (shape.innerRadius + strokeWidth / 2),
+      // Real ink, not the em box (#90): `fontSize / 2` here was the same model the cap itself
+      // carried, which made these cases inert rather than merely optimistic. With both sides on
+      // the em box the reported figure collapses to `TITLE_EDGE_CLEARANCE` by construction — 1.0000
+      // wherever the cap bound — whatever the real gap was, and the real gap was 0.64 four deep.
+      outward:
+        shape.outerRadius -
+        strokeWidth / 2 -
+        (Math.max(...radii) + (fontSize * INK_HEIGHT_RATIO) / 2),
+      inward:
+        Math.min(...radii) -
+        (fontSize * INK_HEIGHT_RATIO) / 2 -
+        (shape.innerRadius + strokeWidth / 2),
     };
   }
 
@@ -1182,17 +1192,28 @@ describe("eventArc's title against what is stroked on its ring", () => {
     expect(inward).toBeGreaterThanOrEqual(TITLE_EDGE_CLEARANCE);
   });
 
-  it("is the four-deep ring that binds, and it yields only the text", () => {
-    // Where the fix shows: four deep the stack wanted 4.58 units of half-height in the 4.12 the
-    // outline leaves, so the font gives up 10%. The outline is untouched — it *is* the arc once the
-    // fill is gone, and capping it by the ring is the inversion #26's band-sizing exists to prevent.
+  it("is the three- and four-deep rings that bind, and they yield only the text", () => {
+    // Where the fix shows: four deep the stack's ink wants 5.45 units of half-height in the 4.12 the
+    // outline leaves, so the font gives up 24%; three deep it wants 7.79 against 7.48 and gives up
+    // 4%. Three deep is where #90 moved the boundary — the em-box model read that ring as having
+    // 0.32 units to spare when its ink was over the line. The outline is untouched either way: it
+    // *is* the arc once the fill is gone, and capping it by the ring is the inversion #26's
+    // band-sizing exists to prevent. Two deep is the deepest ring the ring ratio still wins on.
     const stacked = measure(4, wrappingTitle(4, 30));
     const three = measure(3, wrappingTitle(3, 30));
+    const two = measure(2, wrappingTitle(2, 30));
 
-    expect(stacked.fontSize).toBeLessThan((ring(4).outerRadius - ring(4).innerRadius) * TITLE_FONT_SIZE_RATIO);
+    for (const [depth, drawn] of [
+      [4, stacked],
+      [3, three]
+    ] as const) {
+      const ratioFont = (ring(depth).outerRadius - ring(depth).innerRadius) * TITLE_FONT_SIZE_RATIO;
+      expect(drawn.fontSize).toBeLessThan(ratioFont);
+    }
+
     expect(stacked.strokeWidth).toBe(measure(1, "Lunch").strokeWidth);
-    expect(three.fontSize).toBeCloseTo(
-      (ring(3).outerRadius - ring(3).innerRadius) * TITLE_FONT_SIZE_RATIO,
+    expect(two.fontSize).toBeCloseTo(
+      (ring(2).outerRadius - ring(2).innerRadius) * TITLE_FONT_SIZE_RATIO,
       2
     );
   });
