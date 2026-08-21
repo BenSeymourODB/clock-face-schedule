@@ -22,6 +22,15 @@ interface FixtureRefreshOptions {
   scale: DialScaleId;
   /** The pin, which decides where the fixture is anchored rather than which clock is read. */
   pin: ClockPin | null;
+  /**
+   * The instant the dial's first frame is drawn at, which is where the fixture is anchored (#152).
+   *
+   * The caller's, not this function's, and required rather than defaulted. Taking it from `now()`
+   * here reads the clock *later* than the dial did — after the append and the label measurement —
+   * and the fixture's `at(3, 0)` event ends exactly on the anchor boundary, so the load frame drew
+   * a drain that vanished one tick later. A default would let a caller reproduce that silently.
+   */
+  loadedAt: Date;
   /** The dial's own clock. Read on every refresh, and the reason this function takes arguments. */
   now: TimeSource;
   setEvents: (events: ClockEventInput[]) => void;
@@ -45,11 +54,19 @@ interface FixtureRefreshOptions {
  * single copy loses its elapsed arc within three minutes, is down to one arc by fifty, and is empty
  * at seventy — where the 12-hour one takes about thirteen hours to go blank.
  */
-export function fixtureRefresher({ scale, pin, now, setEvents }: FixtureRefreshOptions): () => void {
+export function fixtureRefresher({
+  scale,
+  pin,
+  loadedAt,
+  now,
+  setEvents
+}: FixtureRefreshOptions): () => void {
   const fixture = demoFixture(scale);
-  // Once, at load. A per-refresh anchor would re-seat the fixture on the moving window, which is
-  // the "freeze the picture instead" answer #62 rejected: nothing would ever elapse or drain (#76).
-  const anchor = fixtureAnchor(pin, now(), scale);
+  // Once, at load, from the caller's load instant rather than a fresh read. A per-refresh anchor
+  // would re-seat the fixture on the moving window, which is the "freeze the picture instead"
+  // answer #62 rejected: nothing would ever elapse or drain (#76). A *later* read is #152: the
+  // anchor and the dial's first frame disagree by however long the load took.
+  const anchor = fixtureAnchor(pin, loadedAt, scale);
   /**
    * Null rather than "", which is what an empty copy list would join to. Defensive rather than
    * load-bearing: copies abut exactly, by construction (`DemoFixture.periodMinutes`), so the tiling

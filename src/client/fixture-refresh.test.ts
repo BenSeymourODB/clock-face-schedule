@@ -2,8 +2,16 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   type ClockEventInput,
   type ClockPin,
+  type DialScale,
   type DialScaleId,
-  createTimeSource
+  TWELVE_HOUR_SCALE,
+  angleForTime,
+  computeDrainFraction,
+  createTimeSource,
+  dialOrigin,
+  dialWindow,
+  eventsToClockEvents,
+  filterEventsForPeriod
 } from "../shared/clock";
 import { fixtureRefresher } from "./fixture-refresh";
 
@@ -41,17 +49,44 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-/** A refresher on a real `TimeSource`, collecting what it hands the dial. */
-function refresher(pin: ClockPin | null, scale: DialScaleId) {
+/**
+ * A refresher on a real `TimeSource`, collecting what it hands the dial.
+ *
+ * `loadedAt` defaults to a read taken now, which is what a caller constructing the dial and the
+ * refresher in one breath would pass. #152's tests pass an earlier one on purpose.
+ */
+function refresher(pin: ClockPin | null, scale: DialScaleId, loadedAt?: Date) {
   const emissions: ClockEventInput[][] = [];
+  const now = createTimeSource(pin);
   const refresh = fixtureRefresher({
     scale,
     pin,
-    now: createTimeSource(pin),
+    loadedAt: loadedAt ?? now(),
+    now,
     setEvents: (events) => emissions.push(events)
   });
 
   return { refresh, emissions };
+}
+
+/**
+ * Which of the emitted arcs the dial would draw mid-drain at `now`, in the terms the renderer
+ * decides it in: the drawn set, resolved to *true* (window-clamped) angles, through
+ * `computeDrainFraction`. An event clamped to the window's edge has a true angle its raw timestamps
+ * do not show, which is why this goes the long way round rather than comparing dates.
+ */
+function drainingIds(events: ClockEventInput[], now: Date, scale: DialScale): string[] {
+  const view = dialWindow(now, scale);
+  const drawn = filterEventsForPeriod(events, view.windowStart, view.windowEnd);
+  const origin = dialOrigin(view.windowStart, scale);
+  const nowAngle = angleForTime(now, origin, scale.periodMinutes);
+
+  return eventsToClockEvents(drawn, origin, view.windowStart, view.windowEnd, scale.periodMinutes)
+    .filter(
+      (event) =>
+        computeDrainFraction(event.trueStartAngle, event.trueEndAngle, nowAngle) !== undefined
+    )
+    .map((event) => event.id);
 }
 
 /** `?now=2026-01-12T04:15&freeze=1` — the clock displaced *and* held. */
@@ -166,5 +201,67 @@ describe("fixtureRefresher, under a running clock", () => {
     refresh();
 
     expect(emissions).toHaveLength(1);
+  });
+});
+
+/**
+ * #152 — the load frame, which is a *different* clock question from #80's.
+ *
+ * #80 is about the refresher reading a clock the dial is not reading at all. This is about it
+ * reading the same clock a moment *later*: `main.ts` builds the dial, appends it and measures the
+ * label margin before the refresher exists, so an anchor taken here rather than handed in is later
+ * than the instant the first frame is drawn at — and the fixture's `"b" 🔴 Deadline` ends exactly on
+ * the anchor boundary, so it had not finished yet by the dial's own clock and drew a drain that the
+ * next tick removed.
+ *
+ * Which corrupts the one habit `CLAUDE.md` mandates: a screenshot taken inside the first second
+ * shows a seam that is not there afterwards, on the 15.56-unit ring of the four-deep cluster.
+ */
+describe("fixtureRefresher, on the load frame", () => {
+  /**
+   * Long enough to be unmissable, short of the 1,000 ms tick that ends the defect. The real delay
+   * is an append plus a `getBoundingClientRect`, so this stands in for it rather than measuring it.
+   */
+  const LOAD_DELAY_MS = 500;
+
+  /**
+   * What the refresher hands the dial when the clock has moved on by `delayMs` between the dial's
+   * own read and the refresher's construction — the load order `main.ts` has.
+   */
+  function loadFrame(scale: DialScaleId, delayMs: number): ClockEventInput[] {
+    vi.setSystemTime(LOADED_AT);
+    const loadedAt = new Date();
+
+    vi.setSystemTime(new Date(LOADED_AT.getTime() + delayMs));
+    const { refresh, emissions } = refresher(null, scale, loadedAt);
+    refresh();
+
+    return emissions[0]!;
+  }
+
+  /**
+   * The mechanism, which needs nothing from the fixture's contents: an anchor read from the caller's
+   * load instant cannot see the delay, so the emitted events are identical. Read here instead, every
+   * timestamp in the set shifts by `LOAD_DELAY_MS` — which is the whole bug, upstream of whether any
+   * particular arc happens to straddle a boundary because of it.
+   */
+  it.each(SCALES)("hands the dial the same fixture however long the load took — %s", (scale) => {
+    expect(loadFrame(scale, LOAD_DELAY_MS)).toEqual(loadFrame(scale, 0));
+  });
+
+  /**
+   * The symptom, in the terms #152 reports it, and 12-hour only — which is a measurement rather than
+   * an omission. The race is scale-independent; the *visible* drain it opens is the 12-hour
+   * fixture's boundary coincidence. The 1-hour fixture's nearest event to its own anchor boundary is
+   * `"p"`, ending `at(3)` against a 5-minute look-behind, so no sub-second delay moves it across
+   * `now`.
+   *
+   * Asserted through `computeDrainFraction`, which is what decides a drain, rather than
+   * `hasEventInProgress`, which is the rebuild cadence and disagrees on exactly this boundary
+   * (#153): `"b"` ends *at* the frame's `now`, so the strict test reads it as elapsed and the
+   * inclusive one would not.
+   */
+  it("draws one drain on the load frame, where the delayed anchor opened two", () => {
+    expect(drainingIds(loadFrame("12h", LOAD_DELAY_MS), LOADED_AT, TWELVE_HOUR_SCALE)).toEqual(["n"]);
   });
 });
