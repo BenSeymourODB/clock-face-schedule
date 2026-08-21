@@ -11,17 +11,15 @@ import {
   createTimeSource,
   describeClockPin,
   describePinnedInstant,
-  dialScale,
-  dialWindow,
   getFetchWindow,
   getPeriodBounds,
   parseDialScaleId,
 } from "../shared/clock";
 import { decodePreferences, encodePreferences } from "../shared/preferences";
-import { fixtureAnchor, readClockPin } from "./clock-pin";
+import { readClockPin } from "./clock-pin";
+import { fixtureRefresher } from "./fixture-refresh";
 import { type PreferenceStore, preferenceStore, readPreferenceWire } from "./preferences";
 import { analogClock } from "./render/analog-clock";
-import { demoFixture, fixtureCopyIndices, recurringSampleEvents } from "./sample-events";
 import { type ScheduleStatus, describeStatus, nextStatus } from "./schedule-status";
 
 const TICK_INTERVAL_MS = 1_000;
@@ -77,6 +75,8 @@ function fetchWindow(): Promise<ClockEventInput[]> {
 }
 
 /**
+ * The templated attribute wins over the query string, so the deployed app honours a stored
+ * preference while the server-less preview can still be pointed at either scale by hand.
  */
 function chosenScale(mount: Element): DialScaleId {
   const templated = mount instanceof HTMLElement ? mount.dataset["scale"] : undefined;
@@ -151,34 +151,14 @@ function startDisplay(): void {
    * real schedule, and the whole point of the mode is that someone is standing in front of it.
    */
   if (mount instanceof HTMLElement && mount.dataset["demo"] === "1") {
-    const fixture = demoFixture(scale);
-    const anchor = fixtureAnchor(clockPin, now(), scale);
-    /** Null rather than "", which is what an empty copy list would join to. */
-    let emitted: string | null = null;
-
-    /**
-     * The window keeps moving after load, so a single copy of the fixture scrolls out of it and the
-     * dial empties (#62). The clock re-filters what it holds against the live window on every
-     * render, so the scrolling needs no help — this only hands it copies it has not been given, and
-     * only when the set changes, since `setEvents` redraws every arc.
-     *
-     * Reads the clock the same way the tick above does, and must go on doing so: #72's `?now` /
-     * `?freeze` routes every time read through one seam, and a frozen clock has to freeze the copy
-     * set too. If this kept reading real time while the dial drew a pinned window, the copies would
-     * walk out of that window and leave it blank.
-     *
-     * Both the fixture and the window it is tiled across come from the scale (#34). The 1-hour dial
-     * is what makes this recurrence load-bearing rather than a nicety: its window is 55 minutes, so
-     * a single copy loses its elapsed arc within three minutes, is down to one arc by fifty, and is
-     * empty at seventy — where the 12-hour one takes about thirteen hours to go blank.
-     */
-    function refreshFixture(): void {
-      const view = dialWindow(now(), dialScale(scale));
-      const copies = fixtureCopyIndices(fixture, anchor, view).join(",");
-      if (copies === emitted) return;
-      emitted = copies;
-      clock.setEvents(recurringSampleEvents(fixture, anchor, view));
-    }
+    // Handed the same `now` the tick above reads, which is the whole of what `fixture-refresh.ts`
+    // exists to make checkable: a pinned dial whose copy set kept moving would empty itself (#80).
+    const refreshFixture = fixtureRefresher({
+      scale,
+      pin: clockPin,
+      now,
+      setEvents: (events) => clock.setEvents(events)
+    });
 
     refreshFixture();
     setStatusText("Sample events — not a real calendar");
