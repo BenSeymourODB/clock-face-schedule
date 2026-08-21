@@ -346,7 +346,8 @@ export function analogClock({
     // title that is on a card *because* it did not fit its arc. So the duration is treated as what
     // it is — optional — and the two things that decide a card's shape and its place are settled
     // together (#136): a line is offered, the whole dial is re-displaced (#30 item 2), and the
-    // offer stands only if it left no new overlap and no card outside the clamp band.
+    // offer stands only if it left no pair of cards burying more of each other, and no card
+    // further outside the clamp band, than before it was made.
     //
     // Deciding them in sequence was what #136 measured: the duration pass compared against
     // *un-displaced* rects, so three of five cards at `?now=11:00&freeze=1` gave up their line to

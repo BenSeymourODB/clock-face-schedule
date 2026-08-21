@@ -28,6 +28,20 @@ function laidOut(offers: GrowthOffer[], plan: { accepted: boolean[]; nudges: num
   });
 }
 
+/** The worst vertical overlap between any two cards — how deeply one buries another. */
+function deepest(rects: Rect[]): number {
+  let worst = 0;
+  for (let a = 0; a < rects.length; a += 1) {
+    for (let b = a + 1; b < rects.length; b += 1) {
+      const down =
+        Math.min(rects[a].y + rects[a].height, rects[b].y + rects[b].height) -
+        Math.max(rects[a].y, rects[b].y);
+      worst = Math.max(worst, down);
+    }
+  }
+  return worst;
+}
+
 function collisions(rects: Rect[]): number {
   let count = 0;
   for (let a = 0; a < rects.length; a += 1) {
@@ -96,6 +110,21 @@ describe('planOptionalLines', () => {
     expect(collisions(laidOut(offers, planOptionalLines(offers, CY, band)))).toBeLessThanOrEqual(
       before
     );
+  });
+
+  it('grows nothing inside a pile displacement cannot separate', () => {
+    // The case a pair count cannot see, and the reason the rule is stated in overlapped *area*:
+    // every pair in an unseparable pile already collides, so "no new colliding pair" waves each
+    // growth through and the depths roughly double — 27–30 units to 52–54, measured on this pile.
+    // Burying more of a title that is on a card *because* it did not fit its arc is the exact
+    // failure the optional line was made optional for (#68).
+    const offers = Array.from({ length: 6 }, (_, index) => offer(card(578 + index * 0.7)));
+    const band: VerticalBand = { top: -50.4, bottom: 650.4 };
+
+    const plan = planOptionalLines(offers, CY, band);
+
+    expect(plan.accepted).toEqual(offers.map(() => false));
+    expect(deepest(laidOut(offers, plan))).toBeCloseTo(deepest(offers.map((each) => each.base)), 6);
   });
 
   it('measures a candidate against its neighbours at their title-only size', () => {

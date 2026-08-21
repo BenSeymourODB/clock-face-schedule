@@ -16,7 +16,7 @@
  * offer, re-displace, offer again — which terminates because every round strictly increases the
  * number of accepted lines and the card count bounds that.
  */
-import { type Rect, rectsOverlap } from './rect-edge';
+import { type Rect } from './rect-edge';
 import { type VerticalBand, displaceVertically } from './stack-labels';
 
 /**
@@ -41,19 +41,28 @@ export interface GrowthPlan {
   nudges: number[];
 }
 
-/** `a` and `b` collide, as an index pair a set can hold. */
-function pairKey(a: number, b: number): string {
-  return `${a}:${b}`;
+/**
+ * How much of one card the other buries. Zero for cards that clear each other, and for cards that
+ * merely abut — a shared boundary is not an overlap, and this dial draws cards edge to edge.
+ *
+ * Area rather than a boolean, because the thing being protected is *buried text*: a pile the
+ * displacement pass cannot separate already overlaps, and a rule that only asked "is this pair
+ * still colliding" would let every card in it grow and double the depth. Measured on a six-card
+ * pile at six o'clock, that took the overlaps from 27–30 units to 52–54.
+ */
+function overlapArea(a: Rect, b: Rect): number {
+  const across = Math.min(a.x + a.width, b.x + b.width) - Math.max(a.x, b.x);
+  const down = Math.min(a.y + a.height, b.y + b.height) - Math.max(a.y, b.y);
+  return across > 0 && down > 0 ? across * down : 0;
 }
 
-function collidingPairs(rects: Rect[]): string[] {
-  const pairs: string[] = [];
+/** One entry per pair of cards, in a fixed order, so two layouts compare element by element. */
+function overlapAreas(rects: Rect[]): number[] {
+  const areas: number[] = [];
   for (let a = 0; a < rects.length; a += 1) {
-    for (let b = a + 1; b < rects.length; b += 1) {
-      if (rectsOverlap(rects[a], rects[b])) pairs.push(pairKey(a, b));
-    }
+    for (let b = a + 1; b < rects.length; b += 1) areas.push(overlapArea(rects[a], rects[b]));
   }
-  return pairs;
+  return areas;
 }
 
 function displaced(rects: Rect[], nudges: number[]): Rect[] {
@@ -74,10 +83,12 @@ function overhang(rect: Rect, band: VerticalBand): number {
  *
  * An offer is accepted when the layout it produces satisfies both of:
  *
- * - **No new overlapping pair.** Not *no overlaps*: a pile displacement cannot separate is #30's
- *   combined-label case and is not this pass's to fix, so the test is that the colliding pairs
- *   after the offer are a subset of the ones before it. A growth that resolves nothing and breaks
- *   nothing is still worth taking; one that trades a collision for a different collision is not.
+ * - **No pair of cards buries more of each other than it already did.** Not *no overlaps*: a pile
+ *   displacement cannot separate is #30's combined-label case and is not this pass's to fix. But
+ *   "no *new* colliding pair" is too weak — inside such a pile every pair already collides, so it
+ *   would wave every line through and double the depth. Comparing the overlapped **area** per pair
+ *   covers both: a new collision goes from zero to positive, and a deeper one from positive to
+ *   larger. A growth that leaves every pair no worse off is still worth taking.
  * - **No card further outside `band` than it already was.** `displaceVertically` refuses a component
  *   it cannot place inside the band, but a card overlapping nothing is never displaced and so is
  *   never checked — and the page's frame is sized from exactly this envelope (#121, #115). Stated
@@ -99,7 +110,7 @@ export function planOptionalLines(
   let sizes = offers.map((offer) => offer.base);
   let nudges = displaceVertically(sizes, centreY, band);
   let placement = displaced(sizes, nudges);
-  let collisions = new Set(collidingPairs(placement));
+  let buried = overlapAreas(placement);
   let overhangs = placement.map((rect) => overhang(rect, band));
 
   // An acceptance changes the layout every later candidate is measured against, and it can change
@@ -117,13 +128,14 @@ export function planOptionalLines(
       const trialNudges = displaceVertically(trial, centreY, band);
       const placed = displaced(trial, trialNudges);
       const trialOverhangs = placed.map((rect) => overhang(rect, band));
+      const trialBuried = overlapAreas(placed);
 
       if (trialOverhangs.some((reach, card) => reach > overhangs[card])) return;
-      if (collidingPairs(placed).some((pair) => !collisions.has(pair))) return;
+      if (trialBuried.some((area, pair) => area > buried[pair])) return;
 
       sizes = trial;
       nudges = trialNudges;
-      collisions = new Set(collidingPairs(placed));
+      buried = trialBuried;
       overhangs = trialOverhangs;
       accepted[index] = true;
       grew = true;

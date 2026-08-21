@@ -17,10 +17,10 @@ export interface Rect {
  * Touching edges do not count: cards are drawn abutting all over this dial and a shared boundary
  * is not an overlap.
  *
- * Not the start of the displacement pass #30 asks for — nothing here moves a card. It exists so
- * that an *optional* line of card text (#35's duration) can be declined where adding it would put
- * one card over another, which would hide a title that is on a card precisely because it did not
- * fit its arc.
+ * Nothing here moves a card. It is the primitive the passes that do are built on: `stack-labels`
+ * groups cards into the components it separates, and `grow-labels` uses it to keep an optional
+ * line of card text (#35's duration) from burying a title that is on a card precisely because it
+ * did not fit its arc.
  */
 export function rectsOverlap(a: Rect, b: Rect): boolean {
   return (
