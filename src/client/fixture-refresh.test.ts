@@ -54,7 +54,7 @@ function refresher(pin: ClockPin | null, scale: DialScaleId) {
   return { refresh, emissions };
 }
 
-/** `?now=04:15&freeze=1` — the clock displaced *and* held. */
+/** `?now=2026-01-12T04:15&freeze=1` — the clock displaced *and* held. */
 const displaced: ClockPin = { origin: PINNED_AT, frozen: true, displaced: true };
 
 /**
@@ -73,7 +73,7 @@ describe("fixtureRefresher, under a frozen clock", () => {
    * unmissable rather than marginal.
    */
   it.each(SCALES.flatMap((scale) => [
-    { scale, pin: displaced, label: "?now=04:15&freeze=1" },
+    { scale, pin: displaced, label: "?now=2026-01-12T04:15&freeze=1" },
     { scale, pin: held, label: "?freeze=1" }
   ]))("emits once and never again — $scale, $label", ({ scale, pin }) => {
     const { refresh, emissions } = refresher(pin, scale);
@@ -90,10 +90,9 @@ describe("fixtureRefresher, under a frozen clock", () => {
   });
 
   /**
-   * The other half of reading the right clock, and the half a re-emission count cannot see: the
-   * fixture has to land on the day the pin names. `?now=` takes a date, a displaced pin anchors the
-   * fixture at that day's midnight, and 🟡 Lunch sits 4h30 along it — so a refresher reading real
-   * time puts this arc on the 15th while the dial draws the 12th.
+   * The other half of reading the right clock, and the half a re-emission count cannot see: *which*
+   * window the copies were tiled into. A refresher reading real time tiles them into the 15th's
+   * window while the dial draws the 12th's, and no count of emissions can tell.
    */
   it.each(SCALES)("lands the fixture beside the pinned instant, not beside today — %s", (scale) => {
     const { refresh, emissions } = refresher(displaced, scale);
