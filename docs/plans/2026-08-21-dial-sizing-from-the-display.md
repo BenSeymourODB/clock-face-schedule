@@ -163,7 +163,7 @@ No card leaves the viewport in any of the five viewports × seven pinned states 
   wraps. Reserving a fixed row for a notice that may be one line or two is a guess, and the
   alternative — taking the notice out of flow — puts it over the 6 o'clock arcs on a height-bound
   dial. On a healthy board the notice is hidden, so 922.3 is the operative figure.
-- **Reclaiming the label frame by clamping cards instead of framing them.** `clampLabelPosition`
+- **Reclaiming the label frame by clamping cards instead of framing them (#121).** `clampLabelPosition`
   already holds a card's edges inside the box horizontally and only its *centre* vertically; making
   the vertical clamp edge-based would let the frame shrink toward `2vmin` and hand the height back
   to the dial. That changes where cards land, over the band and the numerals, which is #30's and
