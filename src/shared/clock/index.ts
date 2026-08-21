@@ -84,7 +84,6 @@ export {
 } from './pack-lines';
 export { rectEdgeIntersection, rectsOverlap, type Rect } from './rect-edge';
 export {
-  DIAL_SCALES,
   displaceVertically,
   overlapComponents,
   type VerticalBand
@@ -93,6 +92,7 @@ export {
   ONE_HOUR_SCALE,
   TWELVE_HOUR_SCALE,
   dialOrigin,
+  DIAL_SCALES,
   dialScale,
   dialWindow,
   parseDialScaleId,
