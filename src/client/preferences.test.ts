@@ -507,6 +507,37 @@ describe("resetting, against the write in flight", () => {
     expect(sent).toEqual(["timerMuted=1", "showSeconds"]);
   });
 
+  it("adopts the echo of a reset that succeeded even with another reset queued behind it", async () => {
+    // A queued *reset* is not a change: it asks for what the echo already reports, since deleting an
+    // absent property does nothing. Skipping adoption there discards the only answer the client gets
+    // — and if the second reset then fails, the display keeps the value the first one removed.
+    const { save, reset, settle, fail } = controllableSave();
+    const store = preferenceStore({ wire: "showSeconds=1", save, reset });
+
+    store.set({ timerMuted: true });
+    store.reset(["showSeconds"]);
+    await settle();
+    store.reset(["showSeconds"]);
+    await settle(DEPLOYMENT_WIRE);
+    await fail();
+
+    expect(store.get().showSeconds).toBe(false);
+  });
+
+  it("keeps a queued value of `false` against an echo that says otherwise", async () => {
+    // The predicate is `queuedValues[key] !== undefined`, not a truthiness test: a queued `false`
+    // is a change the viewer made and the echo predates it. A truthiness test passes every other
+    // spec here and reverts this one silently.
+    const { save, reset, settle } = controllableSave();
+    const store = preferenceStore({ wire: "showSeconds=1", save, reset });
+
+    store.reset(["showSeconds"]);
+    store.set({ showSeconds: false });
+    await settle(encodePreferences(defaultPreferences()));
+
+    expect(store.get().showSeconds).toBe(false);
+  });
+
   it("does not let an echo undo a change made while the reset was in flight", async () => {
     // The echo predates the change: the server answered before this tab set the key again. Adopting
     // it would silently revert the control the viewer had just used, which is #84's own defect.

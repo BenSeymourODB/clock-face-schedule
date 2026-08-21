@@ -340,3 +340,26 @@ describe("resetting", () => {
     expect(() => resetPreferences("showSeconds", from(live))).toThrow("write quota exceeded");
   });
 });
+
+describe("resetting a key the store does not hold", () => {
+  it("does not write, so a put-it-all-back costs one call and not three", () => {
+    // The same stance as the save path's "a patch that survived nothing writes nothing". A reset
+    // naming every key against a store holding one is the common case for a reset control.
+    const live = stores({ "pref.timerMuted": "1" });
+    const deleted = vi.spyOn(live.user, "deleteProperty");
+
+    resetPreferences("showSeconds;timerMuted;timerDurationSeconds", from(live));
+
+    expect(deleted).toHaveBeenCalledTimes(1);
+    expect(deleted).toHaveBeenCalledWith("pref.timerMuted");
+    expect(live.user.stored).toEqual({});
+  });
+
+  it("still reports the resolved set back", () => {
+    const live = stores({}, { "pref.showSeconds": "0" });
+
+    expect(resetPreferences("showSeconds", from(live))).toBe(
+      encodePreferences({ ...defaultPreferences(), showSeconds: false })
+    );
+  });
+});

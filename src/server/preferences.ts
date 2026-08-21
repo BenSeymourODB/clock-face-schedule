@@ -39,9 +39,11 @@ export interface PropertyBag {
   /** Merges: `Properties.setProperties` only clears absent keys when told to, which it never is. */
   setProperties(properties: { [key: string]: string }): unknown;
   /**
-   * One key at a time, which is the only delete this file can safely use. `Properties` offers two
-   * batched forms — `deleteAllProperties` and `setProperties(kept, true)` — and both reach past the
-   * prefix into whatever else shares the store, which is exactly what the prefix exists to prevent.
+   * One key at a time, which is the only delete this file can safely use. Of the two batched forms
+   * `Properties` offers, `deleteAllProperties` reaches past the prefix into whatever else shares the
+   * store — exactly what the prefix exists to prevent — and `setProperties(kept, true)` is a
+   * read-modify-write over the whole store, so it rewrites every unrelated property and loses any
+   * concurrent write from another execution.
    */
   deleteProperty(key: string): unknown;
 }
@@ -156,10 +158,12 @@ export function savePreferences(
  * the deployment's answer, and a viewer resetting their own settings must not reset the school's.
  * What a reset lands on is therefore the *next* layer down, not necessarily the code default.
  *
- * Unbatched where the save path batches "write quota is per call", because the batched deletes
- * `Properties` offers reach past the prefix — see `PropertyBag.deleteProperty`. The call count is
- * bounded by the registry rather than by the request, and a reset is a deliberate act performed
- * once rather than a control held down.
+ * Unbatched where the save path batches "write quota is per call", because neither batched delete
+ * `Properties` offers is usable here — see `PropertyBag.deleteProperty`. The call count is bounded by
+ * the registry rather than by the request, and a reset is a deliberate act performed once rather
+ * than a control held down. A key the store does not hold is skipped rather than deleted, which is
+ * the same stance as the save path's "a patch that survived nothing writes nothing": the common case
+ * — a "put it all back" naming every key against a store holding one — costs one write, not three.
  *
  * Like the save path and unlike the read path, a failure reaches the caller: only the caller knows
  * a preference did not go away.
@@ -169,9 +173,11 @@ export function resetPreferences(
   acquire: PreferenceStoreSource = propertiesServiceStores
 ): string {
   const stores = acquire();
+  const held = stores.user.getProperties();
 
   for (const key of decodePreferenceKeys(keysWire)) {
-    stores.user.deleteProperty(PROPERTY_PREFIX + key);
+    const property = PROPERTY_PREFIX + key;
+    if (held[property] !== undefined) stores.user.deleteProperty(property);
   }
   return encodePreferences(resolveFrom(stores));
 }

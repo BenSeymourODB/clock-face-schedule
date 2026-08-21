@@ -147,9 +147,15 @@ export function preferenceStore({ wire, save, reset }: PreferenceStoreOptions): 
    * Take the server's answer for the keys a reset named — the only way the display learns what the
    * reset landed on, since the layer beneath the viewer's own was never sent to the browser.
    *
-   * Per key, and only where nothing has been asked of it since: a key sitting in either queue was
-   * changed while this reset was in flight, and the echo predates that. Single-flight means only one
-   * write is ever out, so "queued" is exactly "touched since". Read before `drain` empties them.
+   * Per key, and only where a **new value** is queued for it: that value was set while this reset
+   * was in flight, so the echo predates it and adopting it would revert the control the viewer just
+   * used. Single-flight means only one write is ever out, so `queuedValues` is exactly "set since".
+   * Read before `drain` empties it.
+   *
+   * A queued *reset* for the same key is deliberately not a reason to skip. It asks for what the
+   * echo already reports — the property is gone, and deleting an absent one changes nothing — so
+   * suppressing adoption there would discard the only answer the client is going to get, and leave
+   * the display on the value the reset removed if the second reset then failed.
    */
   function adopt(keys: readonly PreferenceKey[], resolved: string): void {
     // `reset` is caller-supplied and its answer arrives over the bridge as a cast rather than a
@@ -167,7 +173,7 @@ export function preferenceStore({ wire, save, reset }: PreferenceStoreOptions): 
     const next = { ...values };
 
     for (const key of keys) {
-      if (queuedValues[key] !== undefined || queuedKeys.indexOf(key) !== -1) continue;
+      if (queuedValues[key] !== undefined) continue;
 
       const value = stored[key];
       if (value === undefined) continue;
@@ -230,6 +236,11 @@ export function preferenceStore({ wire, save, reset }: PreferenceStoreOptions): 
       // `PreferenceStoreOptions.reset` has the reasoning.
       if (writing) {
         queuedKeys = normalise(queuedKeys.concat(named));
+        // The superseded value is dropped rather than sent, per the last-operation-wins rule. Note
+        // it was already applied to `values`, so a reset that supersedes a `set` and then *fails*
+        // leaves the display on a value that reached neither the store nor any layer. #157 removes
+        // that by its nature rather than by handling it: once the deployment's own wire is
+        // templated, a reset applies its real answer locally and there is no unmoored value left.
         for (const key of named) delete queuedValues[key];
       } else sendKeys(named);
     }
