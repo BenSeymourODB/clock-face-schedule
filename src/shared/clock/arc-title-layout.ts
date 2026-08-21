@@ -111,9 +111,14 @@ export interface ArcTitleLayout {
 }
 
 /**
- * How far the outermost line's glyph band reaches from the centre of the stack, per unit of font
- * size. `central` dominant-baseline puts a glyph band at ±fontSize/2 around its own baseline, and a
- * stacked line's baseline sits `TITLE_LINE_OFFSET_RATIO` further out again.
+ * How far the outermost line's ink reaches from the centre of the stack, per unit of font size. A
+ * line's ink covers `INK_HEIGHT_RATIO` centred on the point `central` dominant-baseline anchors to,
+ * and a stacked line's anchor sits `TITLE_LINE_OFFSET_RATIO` further out again.
+ *
+ * Ink and not the em box (#78): the box is `±fontSize/2`, which is what this used to charge, and it
+ * left the clearance at 0.64 units of the promised `TITLE_EDGE_CLEARANCE` where the cap binds — 0.41
+ * on a 900-unit dial. The em box is not even a conservative approximation of ink, so the shortfall
+ * was not a margin being spent, it was one that was never there.
  *
  * Keyed on the lines a title *actually takes*, not on the two the span allows: charging two-line room
  * to a one-line title cost 10% of its size four deep on a 600-unit dial and 33% on a 300-unit one,
@@ -121,7 +126,9 @@ export interface ArcTitleLayout {
  * so there is nothing to spend there for a line that is not drawn.
  */
 function stackReachRatio(lines: number): number {
-  return lines >= 2 ? TITLE_LINE_OFFSET_RATIO + 0.5 : 0.5;
+  return lines >= 2
+    ? TITLE_LINE_OFFSET_RATIO + INK_HEIGHT_RATIO / 2
+    : INK_HEIGHT_RATIO / 2;
 }
 
 export function computeArcTitleLayout(params: {
