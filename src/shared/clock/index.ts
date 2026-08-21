@@ -83,6 +83,7 @@ export {
 } from './pack-lines';
 export { rectEdgeIntersection, rectsOverlap, type Rect } from './rect-edge';
 export {
+  DIAL_SCALES,
   ONE_HOUR_SCALE,
   TWELVE_HOUR_SCALE,
   dialOrigin,

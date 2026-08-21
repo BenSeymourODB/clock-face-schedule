@@ -1,10 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
+  DIAL_SCALES,
   FEATHER_DEGREES,
   FEATHER_MAX_SPAN_RATIO,
   INK_HEIGHT_RATIO,
-  ONE_HOUR_SCALE,
-  TWELVE_HOUR_SCALE,
   TITLE_EDGE_CLEARANCE,
   TITLE_FONT_SIZE_RATIO,
   TITLE_LINE_OFFSET_RATIO,
@@ -1549,61 +1548,87 @@ describe("eventArc while the event is draining", () => {
 
     /**
      * #58: the two ramps on a clamped, draining arc are painted onto one mask in sequence, and the
-     * issue asks what happens where they overlap. They never do — but the margin is a function of
-     * the scale's look-behind, and #34's 1-hour scale cut it from 74.3° to 14.3° with nothing
+     * issue asks what happens where they overlap. They never do — but the clearance is a function of
+     * the scale's look-behind, and #34's 1-hour scale cut it from 74.6° to 14.6° with nothing
      * watching. This is the assertion that watches.
      *
      * Built at the tightest position each scale can reach: clamped at the look-behind edge, so the
-     * drain boundary lands exactly `lookbehindDegrees` from it, with enough of the arc left ahead of
-     * `now` that both ramps are at their full `FEATHER_DEGREES` depth. Clearance decomposes as
-     * `lookbehindDegrees − 1.5 × FEATHER_DEGREES` — the feather reaches its full depth from the
-     * edge, the drain ramp straddles its boundary and so contributes half — less the wedge pad on
-     * the fill mask, whose drain wedge pads *toward* the feather where the spent mask's pads away.
+     * drain boundary lands exactly `lookbehindDegrees` from it (`computeDrainFraction` reads the
+     * clamped angles, and such an arc always spans more than `MIN_ARC_DEGREES`, so no widening moves
+     * it), with the remainder chosen to hold both ramps at their deepest — which is the tightest the
+     * gap gets, since every cap only widens it.
      *
-     * The pad is read back off the rendered wedge rather than written down, so #114 changing it
-     * moves this with it; the look-ahead side is 240°/300° away and never binds.
+     * On the dial's own lone-arc ring, not this file's 48-unit one: the pad comes from
+     * `separatorWidth`, which is sized from the ring, and a lone arc is the thickest ring the dial
+     * draws, so it carries the widest pad and the smallest clearance. A deeper stack has a thinner
+     * ring, a smaller pad and more room.
+     *
+     * Scales are iterated rather than listed. A hand-written pair is exactly how the 1-hour scale
+     * got past the arithmetic that closed this issue the first time, and `DialScaleId` forces an
+     * entry in `DIAL_SCALES` for every scale that exists.
+     *
+     * The pad is read back off the rendered wedge rather than written down, so #114 changing it moves
+     * this with it; the look-ahead side is 240°/300° away and never binds.
      */
-    it.each([
-      ["12-hour", TWELVE_HOUR_SCALE],
-      ["1-hour", ONE_HOUR_SCALE],
-    ])("keeps a window feather's ramp clear of the drain ramp, on the %s scale", (_label, scale) => {
-      const lookbehindDegrees = (scale.lookbehindMinutes / scale.periodMinutes) * 360;
-      // Away from 0° so no wedge's padded edge wraps, which would only complicate the arithmetic.
-      const startAngle = 100;
-      // Enough remaining that `min(remaining, spent) × FEATHER_MAX_SPAN_RATIO` clears
-      // FEATHER_DEGREES, which is what puts the drain ramp at full depth — the tightest it gets.
-      const endAngle = startAngle + lookbehindDegrees + FEATHER_DEGREES / FEATHER_MAX_SPAN_RATIO;
-      const group = eventArc({
-        event: makeEvent({ startAngle, endAngle, continuesBefore: true }),
-        cx: CX,
-        cy: CY,
-        innerRadius: INNER,
-        outerRadius: OUTER,
-        nowAngle: startAngle + lookbehindDegrees,
-      });
+    it.each(Object.values(DIAL_SCALES))(
+      "keeps a window feather's ramp clear of the drain ramp, on the $id scale",
+      (scale) => {
+        const spent = (scale.lookbehindMinutes / scale.periodMinutes) * 360;
+        // Deep enough that the drain ramp is capped by the *spent* side rather than by this one —
+        // the spent side is the look-behind, which is the quantity under test.
+        const remaining = FEATHER_DEGREES / FEATHER_MAX_SPAN_RATIO;
+        // Away from 0° so no wedge's padded edge wraps, which would only complicate the arithmetic.
+        const startAngle = 100;
+        const group = eventArc({
+          event: makeEvent({
+            startAngle,
+            endAngle: startAngle + spent + remaining,
+            continuesBefore: true,
+          }),
+          cx: CX,
+          cy: CY,
+          // The band, undivided: what the dial gives a single arc with nothing overlapping it.
+          innerRadius: OUTER - OUTER * ARC_BAND_RATIO,
+          outerRadius: OUTER,
+          nowAngle: startAngle + spent,
+        });
 
-      const ramp = (maskId: string, key: string): Element | null =>
-        [...group.querySelectorAll(`mask#${maskId} [data-mask-part="ramp"]`)].find(
-          (node) => node.getAttribute("fill") === `url(#${maskId}-${key})`
-        ) ?? null;
+        const ramp = (maskId: string, key: string): Element | null =>
+          [...group.querySelectorAll(`mask#${maskId} [data-mask-part="ramp"]`)].find(
+            (node) => node.getAttribute("fill") === `url(#${maskId}-${key})`
+          ) ?? null;
 
-      const feather = wedgeEdges(ramp("arc-fade-e1", "start"));
-      const padDegrees = ((feather.radii[0] - OUTER) / OUTER) * (180 / Math.PI);
-      const bare = lookbehindDegrees - 1.5 * FEATHER_DEGREES;
+        // Both depths are capped the way the code caps them, rather than assumed to reach
+        // FEATHER_DEGREES: below a 28.6° look-behind the drain ramp is capped by the spent side and
+        // shrinks with it, so a `1.5 × FEATHER_DEGREES` shortcut would assert a clearance 24% out on
+        // the very scales this exists to catch.
+        const drainHalf =
+          Math.min(FEATHER_DEGREES, Math.min(remaining, spent) * FEATHER_MAX_SPAN_RATIO) / 2;
+        const featherDepth = Math.min(
+          FEATHER_DEGREES,
+          (spent + remaining) * FEATHER_MAX_SPAN_RATIO
+        );
+        const padDegrees =
+          ((wedgeEdges(ramp("arc-fade-e1", "start")).radii[0] - OUTER) / OUTER) * (180 / Math.PI);
+        const bare = spent - drainHalf - featherDepth;
 
-      for (const [maskId, expected] of [
-        ["arc-fade-e1", bare - padDegrees],
-        ["arc-drain-e1", bare],
-      ] as const) {
-        const featherWedge = wedgeEdges(ramp(maskId, "start"));
-        const drainWedge = wedgeEdges(ramp(maskId, "drain"));
-        const clearance = drainWedge.from - featherWedge.to;
+        // The fill mask's drain wedge pads *toward* the feather; the spent mask's, anchored at the
+        // other end of the same span, pads away. So the fill mask carries the smaller number — but
+        // the spent mask carries the one that could ever show, since the fill mask's start feather
+        // lies wholly inside `fillOccluded` and paints onto black.
+        for (const [maskId, expected] of [
+          ["arc-fade-e1", bare - padDegrees],
+          ["arc-drain-e1", bare],
+        ] as const) {
+          const clearance =
+            wedgeEdges(ramp(maskId, "drain")).from - wedgeEdges(ramp(maskId, "start")).to;
 
-        // The invariant #58 needs, and the number that says how much room is left before it fails.
-        expect(clearance).toBeGreaterThan(0);
-        expect(clearance).toBeCloseTo(expected, 3);
+          // The invariant #58 needs, and the number that says how much room is left before it fails.
+          expect(clearance).toBeGreaterThan(0);
+          expect(clearance).toBeCloseTo(expected, 3);
+        }
       }
-    });
+    );
   });
 
   /**
