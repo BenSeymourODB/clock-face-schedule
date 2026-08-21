@@ -1,6 +1,6 @@
 # Offering a declined duration line back, once displacement has made room
 
-**Status:** in progress — the fixed point outstanding as [#136](https://github.com/BenSeymourODB/clock-face-schedule/issues/136)
+**Status:** done — shipped in [#142](https://github.com/BenSeymourODB/clock-face-schedule/pull/142)
 **Issue:** [#136](https://github.com/BenSeymourODB/clock-face-schedule/issues/136)
 **Docs:** [#134](https://github.com/BenSeymourODB/clock-face-schedule/pull/134) (the displacement
 pass this cooperates with), [#68](https://github.com/BenSeymourODB/clock-face-schedule/issues/68) /
@@ -101,3 +101,9 @@ change. The pins to watch for a gain are the ones whose declined cards are not i
   unaffordable there; deciding this pass first keeps that from being discovered twice.
 - **Anything that moves a card horizontally, or off the locus.** Vertical displacement is #30's
   decided mechanism and this pass only chooses sizes.
+- **Whether a duration may be bought with title characters.** Measured on the way through: of the
+  ten lines handed back, six leave the title untouched and four ellipsize its tail, because a card
+  asking for a duration is cleared against `MAX_LINES + 1` and so narrows before a character is
+  placed. That is #35/#68's own sizing rather than anything here, and #136's acceptance rule is
+  stated purely in terms of overlaps — filed as [#141](https://github.com/BenSeymourODB/clock-face-schedule/issues/141)
+  with the four candidate rules.
