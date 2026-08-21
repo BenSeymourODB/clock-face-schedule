@@ -12,6 +12,7 @@
 import {
   type ClockBox,
   type Rect,
+  SWATCH_RESERVE,
   adjustCompositeForContrast,
   clampLabelPosition,
   faceClearanceLimit,
@@ -166,22 +167,28 @@ export function floatingLabelGeometry({
       labelCardHeight(maxCardLines, fontSize, RECT_PADDING_Y)
     )
   );
+  // The swatch's room comes out of the text budget and goes back into the card's width, so the
+  // card's *total* width is bounded by exactly the same number as before (#118). Widening the card
+  // instead would move the bound every guard here is written against — the face clearance, the
+  // horizontal clamp, and #98's coverage of the band — for a change that is about the card's
+  // contents.
   const { lines, width, height } = fitLabelToWidth(
     text,
-    maxWidth,
+    Math.max(0, maxWidth - SWATCH_RESERVE),
     fontSize,
     MAX_LINES,
     { x: RECT_PADDING_X, y: RECT_PADDING_Y },
     duration
   );
+  const cardWidth = width + SWATCH_RESERVE;
 
-  const centre = clampLabelPosition(natural, clockBox, width / 2);
+  const centre = clampLabelPosition(natural, clockBox, cardWidth / 2);
 
   return {
     rect: {
-      x: centre.x - width / 2,
+      x: centre.x - cardWidth / 2,
       y: centre.y + verticalNudge - height / 2,
-      width,
+      width: cardWidth,
       height,
     },
     lines,
