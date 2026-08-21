@@ -194,7 +194,9 @@ Recorded on #30 and costed there; none of it is invalidated by a move to side ar
 
 ### A. Keep the ring
 
-Finish #30's mechanism: vertical displacement (shipped) plus the merge fallback above, at the granted
+Finish #30's mechanism: vertical displacement and the duration fixed point are both shipped (#134,
+then #136 in #142, which put both in one `planOptionalLines` pass), so what remains on this branch is
+**the merge fallback alone**, at the granted
 margin and the band-clearing locus on the sides.
 
 - Cards stay near the arcs they name; a connector points a short distance.
@@ -266,7 +268,15 @@ decide by looking.** The comparison, from #134's own measurements:
 - **`?now=13:00&freeze=1`** — 4 cards, and the 29.47-unit pair. **Not** a three-card pile; an earlier
   draft of this document attributed the pile to both pins, which would send a reviewer looking for
   something that is not there.
+- **`?now=19:00&freeze=1`** — the worst decline case #142 found, four of six cards giving up a duration
+  line. It is the pin most sensitive to a placement change, and it postdates #136's own table.
 - **The unpinned dial**, which is what a board actually renders.
+
+Note the sizing pass these pins exercise has moved since #136 was filed: #142's `planOptionalLines`
+iterates displacement and duration sizing together, so a locus change now feeds a fixed point rather
+than two independent passes. Whichever branch lands has to be judged with that pass in place, and its
+acceptance rule — *no new colliding pair, no card further outside the clamp band than it already was* —
+is stated in terms a new locus changes the inputs to but not the meaning of.
 
 At 16:9 **and** 16:10 — not for a width penalty, which the corrected margins remove, but because the
 aspect changes where cards land and what the sector's ends reach. `#status` hidden, per `CLAUDE.md`, for
@@ -280,7 +290,8 @@ anything about size — except when checking #135, where `#status` is the thing 
 | #117 connector never draws | needs `gap > 0`, which is still an open decision | same — `gap` is the open term either way |
 | #121 frame costs 10% of the dial | still needs one of its four answers | unnecessary **only at a locus near today's**; past the box at the band-clearing one |
 | #135 card over the status line | still needs one of its three answers | same conditional as #121 — not free at the wide locus |
-| #136 duration lines handed back | in flight, and load-bearing | likely the rare path |
+| #136 duration lines handed back | **shipped** in #142 — `planOptionalLines` iterates displacement and sizing to a fixed point | the pass survives, but its offers are re-priced against whatever locus lands |
+| #141 may a duration be bought with title characters | open, four candidate rules — and it is #142's deferred half | same question, and the answer may differ by position |
 | #88 elliptical locus | close as superseded | close as superseded |
 
 The two conditional rows are the point of the fork rather than a caveat on it: **Branch B's headline
