@@ -1,6 +1,6 @@
 # The drain in the default picture, and the guard that was missing
 
-**Status:** in progress — outstanding as [#76](https://github.com/BenSeymourODB/clock-face-schedule/issues/76)
+**Status:** done — shipped in [#150](https://github.com/BenSeymourODB/clock-face-schedule/pull/150)
 **Issue:** [#76](https://github.com/BenSeymourODB/clock-face-schedule/issues/76)
 **Docs:** `CLAUDE.md` ("Render before you believe it works", which restates the stale claim), README's
 pin table, #71 (the drain that never drained), #28 / #27 (the two releases it shipped through), #104
