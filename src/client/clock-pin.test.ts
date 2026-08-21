@@ -3,11 +3,12 @@ import readme from "../../README.md?raw";
 import {
   ROLLING_WINDOW_LOOKAHEAD_HOURS,
   ROLLING_WINDOW_LOOKBEHIND_HOURS,
-  filterEventsForPeriod,
-  getRollingWindow
+  dialScale,
+  dialWindow,
+  filterEventsForPeriod
 } from "../shared/clock";
 import { fixtureAnchor, readClockPin } from "./clock-pin";
-import { sampleEvents } from "./sample-events";
+import { TWELVE_HOUR_FIXTURE, recurringSampleEvents, sampleEvents } from "./sample-events";
 
 const REFERENCE = new Date(2026, 7, 18, 14, 37, 0);
 
@@ -114,13 +115,19 @@ describe("fixtureAnchor", () => {
  * How many fixture arcs the dial would actually draw. The anchor is only meaningful through this:
  * an anchoring rule that is arithmetically tidy and puts the whole fixture outside the window is
  * still a broken one, and asserting on the anchor's own timestamp cannot tell the difference.
+ *
+ * Counts what the renderer is handed — `recurringSampleEvents` over the scale's own window, exactly
+ * as `main.ts` builds them and `analog-clock.ts` re-filters them. `sampleEvents` alone is one copy,
+ * and the app has tiled copies since #62/#79; counting one copy here is what let README claim an
+ * evening pin is empty while the dial draws a full one (#127).
  */
 function drawnArcs(pinQuery: string, at: Date): number {
   const pin = readClockPin(dial(), pinQuery, at);
   const now = pin ? pin.origin : at;
-  const { windowStart, windowEnd } = getRollingWindow(now);
+  const view = dialWindow(now, dialScale("12h"));
+  const events = recurringSampleEvents(TWELVE_HOUR_FIXTURE, fixtureAnchor(pin, now), view);
 
-  return filterEventsForPeriod(sampleEvents(fixtureAnchor(pin, now)), windowStart, windowEnd).length;
+  return filterEventsForPeriod(events, view.windowStart, view.windowEnd).length;
 }
 
 describe("what the anchor leaves on the dial", () => {
@@ -152,18 +159,21 @@ describe("what the anchor leaves on the dial", () => {
   });
 
   /**
-   * A displaced pin trades that guarantee for control, and the range it holds over is a fact about
-   * what the fixture covers (23:10 the previous day to 13:15) rather than about the anchoring.
-   * Pinned to the afternoon the window has walked off the fixture entirely — documented in README
-   * and asserted here so the boundary cannot move without someone noticing.
+   * A displaced pin trades that guarantee for control, but the fixture *recurs* (#62/#79): the app
+   * tiles copies end to end, so a pin never walks off it and the dial carries roughly a dozen arcs
+   * at every hour. The evening figures are the ones that reverse — a single copy is empty from
+   * 17:00, but the next copy has already arrived, so the dial is at its fullest there. Asserted here
+   * so a recurrence that stopped recurring — which would drop the evening counts back to zero —
+   * cannot land unnoticed.
    */
-  it("puts the fixture on the dial for a morning pin and off it for an evening one", () => {
+  it("keeps a displaced pin on a full dial at every hour, because the fixture recurs", () => {
     const at = new Date(2026, 7, 18, 14, 37);
 
     expect(drawnArcs("?now=03:00&freeze=1", at)).toBe(16);
-    expect(drawnArcs("?now=09:00&freeze=1", at)).toBe(6);
-    expect(drawnArcs("?now=12:00&freeze=1", at)).toBe(3);
-    expect(drawnArcs("?now=17:00&freeze=1", at)).toBe(0);
+    expect(drawnArcs("?now=09:00&freeze=1", at)).toBe(12);
+    expect(drawnArcs("?now=12:00&freeze=1", at)).toBe(13);
+    expect(drawnArcs("?now=17:00&freeze=1", at)).toBe(16);
+    expect(drawnArcs("?now=23:00&freeze=1", at)).toBe(12);
   });
 });
 
@@ -210,7 +220,7 @@ describe("the fixture figures README states in prose", () => {
    * them.
    */
   it("counts the same arcs at each hour README names", () => {
-    const [, list] = readmeSays(/arcs drop away through the afternoon: ([^.]*)\./);
+    const [, list] = readmeSays(/carries a full count at every hour: ([^.]*)\./);
     const stated = /(\d+|none) (?:arcs )?(?:at|from) (\d{2}:\d{2})/g;
     const pairs: Array<[string, number]> = [];
 
@@ -227,11 +237,12 @@ describe("the fixture figures README states in prose", () => {
     // way past a red count. Add hours freely; removing one has to be deliberate.
     expect(pairs.length).toBeGreaterThanOrEqual(5);
 
-    // The two claims the sentence actually makes, asserted rather than left to the prose: arcs
-    // "drop away through the afternoon", and the dial is "empty by the evening".
+    // The claim the sentence makes, asserted rather than left to the prose: the fixture recurs, so a
+    // displaced pin never lands on an empty dial (#127). This is the reversal — the pre-recurrence
+    // guard required the counts to fall monotonically to zero, which described one copy, not the
+    // dial. A recurrence that stopped recurring drops the evening hours back to zero and this bites.
     const counts = pairs.map(([, count]) => count);
-    expect(counts.slice().sort((left, right) => right - left)).toEqual(counts);
-    expect(counts[counts.length - 1]).toBe(0);
+    expect(Math.min(...counts)).toBeGreaterThan(0);
 
     for (const [hour, count] of pairs) {
       expect(drawnArcs(`?now=${hour}&freeze=1`, at), `README says ${count} arcs at ${hour}`).toBe(
