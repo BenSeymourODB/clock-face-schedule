@@ -401,6 +401,12 @@ move what production is pinned to. It also keeps `SCRIPT_ID` and the manifest si
   defaulting it to `''`, so a redeploy without a description does not preserve the old one — it
   blanks it. Since Apps Script has no *name* for a deployment, that description is the only label
   distinguishing the slots, and the workflow rebuilds it from the slot, ref, commit and run number.
+- **Both configuration checks run before the first mutation, and they are different checks.** A
+  missing variable is caught in the job's first step. A variable that is present but names a
+  deployment in *another* script project is invisible until the project's deployments are listed —
+  and if that is discovered at the redeploy, the push has already changed this project's content and
+  left an orphan version behind. So the list runs before the push, and its error names the slot, the
+  deployment, the script, and what the project actually contains. One extra API call.
 - **`redeploy` is chosen over the identical `deploy -i` for its failure mode.** They call the same
   function, but `deploy` treats a falsy deployment ID as "create", so a misconfigured slot would
   quietly publish a second, unlisted web app URL. `redeploy` refuses it. A preflight step refuses

@@ -127,6 +127,37 @@ jobs:
           printf '%s' "$CLASPRC_JSON" > .clasprc.json
           printf '{"scriptId":"%s","rootDir":"build"}\n' "$SCRIPT_ID" > .clasp.json
 
+      # The last check before anything remote changes. A deployment ID can be perfectly valid and
+      # still belong to a *different* script project — two slots need not live in one — and that
+      # pairing fails only at the redeploy, by which point the push has changed this project's
+      # content and left an orphan version behind it. One list call turns that into a clean
+      # pre-mutation failure that names both halves of the mismatch.
+      - name: Check the slot exists in this project
+        shell: bash
+        env:
+          DEPLOYMENT_ID: ${{ vars.CLASP_DEPLOYMENT_ID }}
+          SCRIPT_ID: ${{ vars.SCRIPT_ID }}
+        run: |
+          npx clasp deployments --json > "$RUNNER_TEMP/before.json"
+          node -e '
+            const fs = require("fs");
+            const id = process.env.DEPLOYMENT_ID;
+            const all = JSON.parse(fs.readFileSync(process.env.RUNNER_TEMP + "/before.json", "utf8"));
+            if (all.some((d) => d.deploymentId === id)) {
+              console.log(`Slot ${id} is present in script ${process.env.SCRIPT_ID}`);
+            } else {
+              const known = all
+                .map((d) => `  ${d.deploymentId} — ${d.description || "(no description)"}`)
+                .join("\n");
+              throw new Error(
+                `The ${process.env.SLOT} slot names deployment ${id}, which is not in script ` +
+                `${process.env.SCRIPT_ID}.\nCheck CLASP_DEPLOYMENT_ID on that environment, and ` +
+                `whether this slot lives in a different Apps Script project — SCRIPT_ID can be ` +
+                `set per environment to cover that.\nDeployments in this project:\n${known}`
+              );
+            }
+          '
+
       # `--force` for the reason ADR 0002 gives: the Apps Script UI writes back to appsscript.json,
       # and on a drifted manifest clasp without --force auto-declines on a non-TTY, prints
       # "Skipping push." and exits 0 — uploading nothing and reporting success.

@@ -307,7 +307,11 @@ project; defining it on an environment overrides it, should the slots ever need 
 projects. Neither ID is secret: the deployment ID *is* the public web app URL.
 
 A missing value fails the job's first step with a message naming what to add, before anything is
-built or uploaded.
+built or uploaded. A value that is *present but wrong* fails just before the push, for the same
+reason: a deployment ID can be valid and still belong to a different script project — nothing
+requires the two slots to share one — and that pairing is only visible by listing the project's
+deployments. The job lists them first and names both halves of any mismatch, so it never gets as far
+as changing the wrong project's content.
 
 ### Why a stored refresh token rather than a service account
 

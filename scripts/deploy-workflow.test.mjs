@@ -139,6 +139,20 @@ describe("the deploy workflow's safety rails", () => {
   });
 
   /**
+   * A deployment ID can be valid and still belong to a different script project, since nothing says
+   * two slots must share one. That pairing is only detectable by listing, and if it is discovered
+   * *after* `clasp push` the project's content has already moved and an orphan version exists. The
+   * check is therefore worthless unless it runs first, which is what this pins.
+   */
+  it("checks the slot exists before the push can mutate anything", () => {
+    const listed = executable.indexOf("npx clasp deployments --json");
+    const pushed = executable.indexOf("npx clasp push");
+
+    expect(listed).toBeGreaterThan(-1);
+    expect(listed).toBeLessThan(pushed);
+  });
+
+  /**
    * The gate is re-run here rather than inherited from ci.yml because a promotion dispatch can name
    * any ref — including a commit whose CI run predates a dependency change. Deploying is the one
    * job that must not take an earlier run's word for it.
