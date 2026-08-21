@@ -205,7 +205,32 @@ interface FadeMaskGeometry {
   cy: number;
   innerRadius: number;
   outerRadius: number;
-  separatorWidth: number;
+  /**
+   * How far every wedge — and the mask region holding them — reaches past the arc's own edges, so
+   * that the widest stroke drawn on the arc is swallowed rather than left sticking out of the region
+   * meant to hide it. See `fadeWedgePad`.
+   */
+  wedgePad: number;
+}
+
+/**
+ * The wedge pad for an arc: the width of whichever stroke the arc draws widest.
+ *
+ * A stroke straddles its path by *half* its width, and this pads by the whole of it — the slop the
+ * separator has always had here. Measured on the fixture's four-deep cluster, half is not enough:
+ * at exactly half the wedge's antialiased edge coincides with the stroke's own, and a single
+ * device pixel of the outline survives at 6–26% alpha, which on the wall is the faint hairline this
+ * pad exists to remove.
+ *
+ * Which stroke is the widest is the part that was wrong (#114). The separator is sized from the
+ * *ring* and the elapsed outline from the *band* (deliberately — see `arcEdgeStrokeWidth`), so the
+ * gap between them widens with stacking depth: padding by the separator left the outline escaping by
+ * 1.66 units on a four-deep ring, wider than the separator itself. Outside a wedge the mask ground
+ * is opaque white, so the escaped sliver painted at full strength on the side of the arc that has
+ * not happened yet, and its radial cap closed off the window edge the feather exists to open.
+ */
+function fadeWedgePad(separatorWidth: number, edgeStrokeWidth: number): number {
+  return roundCoord(Math.max(separatorWidth, edgeStrokeWidth));
 }
 
 interface NamedSpan {
@@ -244,18 +269,21 @@ function feathersToSpans(feathers: ArcFeathers): NamedSpan[] {
 function buildFadeMask(
   maskId: string,
   spans: NamedSpan[],
-  { cx, cy, innerRadius, outerRadius, separatorWidth }: FadeMaskGeometry,
+  { cx, cy, innerRadius, outerRadius, wedgePad }: FadeMaskGeometry,
   occlusions: OccludedSpan[] = []
 ): SVGMaskElement | undefined {
   if (spans.length === 0 && occlusions.length === 0) return undefined;
 
-  // The wedge has to swallow the stroke, which straddles the path by half its width in every
+  // The wedge has to swallow the widest stroke, which straddles the path by half its width in every
   // direction — including angularly, past the boundary.
-  const padDegrees = (separatorWidth / outerRadius) * (180 / Math.PI);
+  const padDegrees = (wedgePad / outerRadius) * (180 / Math.PI);
+  // The region has to grow with the wedges. Left behind, its inscribed circle clips the *legitimate*
+  // outline within a few degrees of each cardinal — which is where it was incidentally hiding the
+  // escaped hairline before.
   const box = {
-    x: roundCoord(cx - outerRadius - separatorWidth),
-    y: roundCoord(cy - outerRadius - separatorWidth),
-    size: roundCoord((outerRadius + separatorWidth) * 2),
+    x: roundCoord(cx - outerRadius - wedgePad),
+    y: roundCoord(cy - outerRadius - wedgePad),
+    size: roundCoord((outerRadius + wedgePad) * 2),
   };
   // A linear gradient runs along a straight axis, and over ten degrees the chord it follows is
   // indistinguishable from the arc: a radial offset is perpendicular to that axis, so it projects
@@ -287,8 +315,8 @@ function buildFadeMask(
     describeArc(
       cx,
       cy,
-      outerRadius + separatorWidth,
-      Math.max(0, innerRadius - separatorWidth),
+      outerRadius + wedgePad,
+      Math.max(0, innerRadius - wedgePad),
       Math.min(fromAngle, toAngle),
       Math.max(fromAngle, toAngle)
     );
@@ -421,7 +449,17 @@ export function eventArc({
   const separatorWidth = roundCoord(
     Math.max(ARC_SEPARATOR_MIN, arcHeight * ARC_SEPARATOR_RATIO)
   );
-  const geometry: FadeMaskGeometry = { cx, cy, innerRadius, outerRadius, separatorWidth };
+  // Derived here rather than beside the stroke it sizes, because the masks are built before that
+  // stroke is drawn and have to be padded to swallow it (#114).
+  const band = bandThickness ?? arcHeight;
+  const edgeStrokeWidth = arcEdgeStrokeWidth(arcHeight, band);
+  const geometry: FadeMaskGeometry = {
+    cx,
+    cy,
+    innerRadius,
+    outerRadius,
+    wedgePad: fadeWedgePad(separatorWidth, edgeStrokeWidth),
+  };
   const featherSpans = feathersToSpans(computeArcFeathers(event));
 
   // A still-running event drains continuously (#28) rather than flipping straight from live to
@@ -474,8 +512,6 @@ export function eventArc({
   // the fill goes and the outline stays. Sharing one path, as this did, forces the two to move
   // together.
   const d = describeArc(cx, cy, outerRadius, innerRadius, startAngle, endAngle);
-  const band = bandThickness ?? arcHeight;
-  const edgeStrokeWidth = arcEdgeStrokeWidth(arcHeight, band);
 
   group.append(
     svg("path", {

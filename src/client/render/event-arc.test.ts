@@ -14,7 +14,7 @@ import {
   polarToCartesian,
 } from "../../shared/clock";
 import { ARC_BAND_RATIO, RING_GAP_MIN, RING_GAP_RATIO } from "./analog-clock";
-import { BAND_BACKGROUND, arcFillColor, eventArc } from "./event-arc";
+import { BAND_BACKGROUND, arcEdgeStrokeWidth, arcFillColor, eventArc } from "./event-arc";
 
 const CX = 300;
 const CY = 300;
@@ -755,6 +755,15 @@ describe("eventArc", () => {
 
 describe("eventArc at a period boundary", () => {
   const SEPARATOR = 1.44; // (OUTER − INNER) × ARC_SEPARATOR_RATIO
+  /**
+   * How far every wedge reaches past the arc's own edges: the width of whichever stroke the arc
+   * draws widest.
+   *
+   * Derived from `arcEdgeStrokeWidth` rather than written as a number, because the number is what
+   * went wrong (#114) — the outline is 3.36 units in this geometry against the separator's 1.44, and
+   * a pad of `SEPARATOR` let it out while this spec called that correct.
+   */
+  const WEDGE_PAD = Math.max(SEPARATOR, arcEdgeStrokeWidth(OUTER - INNER, OUTER - INNER));
 
   function fade(overrides: Partial<ClockEvent>) {
     const group = render(overrides);
@@ -824,17 +833,30 @@ describe("eventArc at a period boundary", () => {
     expect(angleOf(at("x2"), at("y2"))).toBeCloseTo(FEATHER_DEGREES, 4);
   });
 
-  it("covers the separator stroke, which would otherwise cap the boundary with a crisp line", () => {
+  it("covers the widest stroke, which would otherwise cap the boundary with a crisp line", () => {
     const [wedge] = fade({ startAngle: 0, endAngle: 60, continuesBefore: true }).wedges;
     const d = wedge.getAttribute("d") ?? "";
     // `matchAll` would be tidier, but the target is ES2019.
     const radii = d.split("A ").slice(1).map(parseFloat);
 
-    // The stroke straddles the path by half its width in every direction — radially…
-    expect(radii).toEqual([OUTER + SEPARATOR, INNER - SEPARATOR]);
+    // A stroke straddles the path by half its width in every direction — radially…
+    expect(radii).toEqual([OUTER + WEDGE_PAD, INNER - WEDGE_PAD]);
     // …and angularly, past the boundary, where a bare wedge would leave a hairline behind.
-    const padDegrees = (SEPARATOR / OUTER) * (180 / Math.PI);
+    const padDegrees = (WEDGE_PAD / OUTER) * (180 / Math.PI);
     expect(wedgeSpan(d)).toBeCloseTo(FEATHER_DEGREES + padDegrees, 3);
+  });
+
+  it("sizes the mask region to the wedges it holds, so nothing is clipped near a cardinal", () => {
+    // The region is a square box, so its inscribed circle is what a wedge near 0/90/180/270° has to
+    // fit inside. Left at the separator's pad while the wedges grew, it would clip the *legitimate*
+    // elapsed outline exactly where the old bug's hairline happened to be hidden (#114).
+    const { mask } = fade({ continuesBefore: true });
+    const at = (name: string) => Number(mask?.getAttribute(name));
+
+    expect(at("width")).toBeCloseTo((OUTER + WEDGE_PAD) * 2, 4);
+    expect(at("height")).toBeCloseTo((OUTER + WEDGE_PAD) * 2, 4);
+    expect(at("x")).toBeCloseTo(CX - OUTER - WEDGE_PAD, 4);
+    expect(at("y")).toBeCloseTo(CY - OUTER - WEDGE_PAD, 4);
   });
 
   it("leaves the title unmasked, so the name stays readable where the band does not", () => {
@@ -1298,9 +1320,11 @@ describe("eventArc while the event is draining", () => {
    * left 65–83% of the spent side at full fill; these pin the occluding region that fixes it.
    */
   describe("what the masks actually hide", () => {
-    // (OUTER − INNER) × ARC_SEPARATOR_RATIO, as an angle at the outer radius: how far every wedge
-    // reaches past its far edge to swallow the stroke straddling the path there.
-    const PAD_DEGREES = (1.44 / OUTER) * (180 / Math.PI);
+    // The widest stroke the arc draws, as an angle at the outer radius: how far every wedge reaches
+    // past its far edge to swallow the stroke straddling the path there. The separator's 1.44 was
+    // the literal here, and this arc also draws a 3.36-unit outline (#114).
+    const WEDGE_PAD = arcEdgeStrokeWidth(OUTER - INNER, OUTER - INNER);
+    const PAD_DEGREES = (WEDGE_PAD / OUTER) * (180 / Math.PI);
 
     /** Angle of a point, in the dial's 0°-at-twelve convention. */
     function angleOf(x: number, y: number): number {
@@ -1332,7 +1356,7 @@ describe("eventArc while the event is draining", () => {
     }
 
     /** The padded radii every wedge is drawn at, so a mis-sized occlusion cannot pass. */
-    const WEDGE_RADII = [OUTER + 1.44, INNER - 1.44];
+    const WEDGE_RADII = [OUTER + WEDGE_PAD, INNER - WEDGE_PAD];
 
     function occlusion(group: SVGGElement, maskId: string): Element | null {
       return group.querySelector(`mask#${maskId} [data-mask-part="occlusion"]`);
@@ -1365,6 +1389,66 @@ describe("eventArc while the event is draining", () => {
       expect(span).toBeCloseTo(45 - HALF_RAMP + PAD_DEGREES, 3);
       expect(radii).toEqual(WEDGE_RADII);
       expect(largeArc).toBe(0);
+    });
+
+    /**
+     * #114: every wedge was padded by `separatorWidth`, which is sized from the *ring*, while the
+     * widest stroke the arc draws — the elapsed outline — is sized from the *band*. The gap between
+     * them widens with stacking depth, so the escaped hairline is worst where there is least room:
+     * 1.66 units on a four-deep ring, wider than the whole 1.0-unit separator beside it. Outside a
+     * wedge the mask ground is opaque white, so it painted at full strength on the side of the arc
+     * that has not happened yet.
+     *
+     * Asserted against the outline's own *rendered* `stroke-width` rather than a recomputed pad,
+     * because recomputing is how the assertions above came to encode the code's own wrong
+     * assumption — and against a whole stack of depths, because at ring = band the two quantities
+     * are close enough that the lone-arc case alone hides most of the error.
+     *
+     * The whole stroke width and not the half it straddles by: at exactly half, rendering the fixture
+     * left one device pixel of the outline surviving at 6–26% alpha where the wedge's antialiased
+     * edge coincides with the stroke's own. Half is what the arithmetic asks for and it is not what
+     * the screen needs.
+     */
+    it.each([
+      ["a lone arc", 75.92],
+      ["a two-deep ring", 35.6824],
+      ["a four-deep ring", 15.5636],
+    ])("swallows the outline's whole stroke on %s, not just the separator's", (_label, thickness) => {
+      const BAND = 75.92;
+      // Float noise: the wedge radii are `radius ± pad` unrounded, so containment is asserted to
+      // within a billionth of a unit rather than exactly. The defect being guarded is 0.38 units.
+      const EPSILON = 1e-9;
+      // The span is recovered from path endpoints `roundCoord` quantises to four places, which at
+      // this radius is worth ~1e-5°. The defect being guarded is 0.0745° at this depth.
+      const QUANTISATION_DEGREES = 1e-4;
+      const innerRadius = OUTER - thickness;
+      const group = eventArc({
+        event: makeEvent({ startAngle: 0, endAngle: 60 }),
+        cx: CX,
+        cy: CY,
+        innerRadius,
+        outerRadius: OUTER,
+        bandThickness: BAND,
+        nowAngle: 15,
+      });
+      const outline = Number(
+        group.querySelector('[data-arc-part="outline"]')?.getAttribute("stroke-width")
+      );
+      const { radii, span } = wedgeEdges(occlusion(group, "arc-drain-e1"));
+      const region = Number(group.querySelector("mask#arc-drain-e1")?.getAttribute("width"));
+
+      // Radially, at both rims: the escaped sliver traced the whole live arc on the inner one and
+      // all but 2.9° of each cardinal on the outer.
+      expect(radii[0]).toBeGreaterThanOrEqual(OUTER + outline - EPSILON);
+      expect(radii[1]).toBeLessThanOrEqual(innerRadius - outline + EPSILON);
+      // Angularly, so the stroke's radial cap at the arc's far end goes with it — the cap across the
+      // band at the window's leading edge is the failure `buildFadeMask`'s docstring names.
+      expect(span).toBeGreaterThanOrEqual(
+        45 - HALF_RAMP + (outline / OUTER) * (180 / Math.PI) - QUANTISATION_DEGREES
+      );
+      // And the region has to reach as far as the wedges inside it: its inscribed circle is what a
+      // wedge near a cardinal fits within, so a box left behind clips the outline instead.
+      expect(region / 2).toBeGreaterThanOrEqual(OUTER + outline - EPSILON);
     });
 
     it.each([
