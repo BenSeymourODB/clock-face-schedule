@@ -213,16 +213,21 @@ dial turns. **So judge anything about label placement or crowding on a pinned di
 pin** — an unpinned screenshot of a card collision is not reproducible, including by you.
 
 That constant offset is what puts a drain in the default look: 🟡 Tidy Up and Line Up spans `now`
-whatever the wall clock says, so an unpinned preview draws one draining arc once it has settled.
-**It is the thin one.** It joins the four-deep cluster through 🔴 Deadline, so it renders at that
-cluster's 15.56-unit ring rather than a lone arc's 75.92 — the thinnest ring the dial opens. Reach
+whatever the wall clock says, so an unpinned preview draws one draining arc — from the first frame,
+not once it has settled (#152). **It is the thin one.** It joins the four-deep cluster through
+🔴 Deadline, so it renders at that cluster's 15.56-unit ring rather than a lone arc's 75.92 — the
+thinnest ring the dial opens. Reach
 for `?now=04:15` when you want a drain without the ring-thinning confound: ⚫ Staff Debrief draws it
 at 35.68 units, clear of the cluster.
 
-⚠️ **"Once it has settled" is load-bearing** (#152). For about the first second of an unpinned load
-the dial draws *two* drains, not one: 🔴 Deadline ends exactly on the fixture's anchor boundary and
-the anchor is read a few milliseconds after the clock the first frame draws with. A screenshot taken
-inside that second shows a seam that is not there afterwards. Sample after the first tick, or pin.
+**The load frame is the settled frame** (#152), and it took a fix to be. The fixture's anchor and the
+dial's first frame come from one clock read, so a screenshot at 150 ms and one at 2 s carry the same
+drain. They did not before: 🔴 Deadline ends exactly on the anchor boundary, the anchor was read a few
+milliseconds later than the clock the first frame drew with, and the arc had therefore not finished
+yet — so the load frame carried *two* drains for about a second, and a capture taken inside it showed
+a seam that was gone afterwards. Sampled on the built preview at 150, 300, 600, 1,200 and 2,500 ms,
+the gradient list now reads the same four entries at every one of them — `arc-fade-z-start`,
+`arc-fade-n-drain`, `arc-drain-n-drain`, `arc-fade-y-end` — so exactly one of them is a drain.
 
 Two consequences of that anchoring worth knowing before you pin something:
 
