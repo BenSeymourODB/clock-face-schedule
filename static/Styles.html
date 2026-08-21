@@ -39,33 +39,102 @@
     line-height: 1.5;
   }
 
-  /* The display carries nothing but the dial and, when something is wrong, one line of text. */
+  /*
+   * The display carries nothing but the dial and, when something is wrong, one line of text.
+   *
+   * Both tracks are declared, and that is the whole of #115. An auto-sized column is sized from
+   * its items' max-content, and the dial's contribution to that is the SVG's own `width="600"`
+   * attribute — a percentage counts as `auto` while intrinsic sizes are being resolved. So a
+   * percentage width on #dial resolved against a track the dial had just sized, `min(88vmin, 600)`
+   * picked 600, and the rule was a fixed point at its own attribute: 600 px on a 4K board and on a
+   * laptop alike. The only thing that broke the cycle was a *sibling* wider than 600 — the status
+   * line — which made a failed fetch grow the dial by 58% while nothing about the schedule changed.
+   *
+   * Declaring both tracks moves the notice's cost into the axis it belongs in: it takes height from
+   * the dial, and the dial's width stops depending on how long the sentence is.
+   */
   #display {
-    min-height: 100vh;
+    height: 100vh;
     display: grid;
-    place-content: center;
+    grid-template-columns: minmax(0, 1fr);
+    /*
+     * `minmax(0, 1fr)` and not `1fr`: a bare `1fr` floors the track at its content's own height,
+     * and the dial's content wants to be as tall as the column is wide, so the track would grow to
+     * 1877 px on a 1080-tall board and the page would scroll. Flooring it at zero makes the track
+     * the height actually available, which is what the dial then takes a percentage of.
+     */
+    grid-template-rows: minmax(0, 1fr) auto;
+    align-items: center;
     justify-items: center;
-    gap: 1.5rem;
-    padding: 2vmin;
+    /*
+     * The frame the floating labels paint into, and the reason the dial's height is not the whole
+     * of the board's. Cards sit outside the SVG box by design and `clampLabelPosition` bounds how
+     * far: a card's *edges* are held within `OVERFLOW_RATIO` (0.1) of the dial's 584-unit box,
+     * which past the 600-unit viewBox is 50.4 units on either axis, and a four-line card at twelve
+     * o'clock reaches 49.9 — so 50.4 covers every card the renderer can produce, on both axes.
+     * Solving `A = 50.4·V / (600 + 2 × 50.4)` for the frame that leaves exactly that beside a dial
+     * sized from what is left gives 7.19% of the shorter viewport axis. 7.3 provides 51.3 units —
+     * 0.9 of cushion, at a cost of 2.2 px of dial on a 1080-tall board.
+     *
+     * The `2vmin` this replaces was never the constraint — a 600 px dial centred in a 1080 px page
+     * had 240 px of slack above it, and the slack is what the labels were using. Sizing the dial to
+     * the board takes the slack away, so the frame has to be stated.
+     *
+     * It is not free: at 1920×1080 this is a 924.5 px dial that never clips a card against a
+     * 1036.8 px one that clips at twelve and six. A clipped card is the only copy of a title that
+     * did not fit its arc, so it wins — and this is the one number to retune if #39 allocates
+     * differently.
+     */
+    padding: 7.3vmin;
   }
 
   /*
-   * Sized from the smaller viewport axis so the dial fills a display of any shape, with a little
-   * held back for floating labels, which paint outside the SVG box by design.
+   * ADR 0009: the dial keeps the board's full height, and is centred in the width that remains
+   * after the panel. This box is that remainder; the drawing inside it fits the shorter axis, so
+   * height binds on anything wider than it is tall — every 16:9 and 16:10 board — and width binds
+   * on a portrait or near-square one instead of the dial painting off the frame.
+   *
+   * --panel-share is ADR 0009's 180-unit agenda panel (#36), which does not exist yet, expressed as
+   * a share *of the dial* rather than of the board: 180 units against the dial's 600 is 0.3, and
+   * `100% / 1.3` is then the width at which the two together exactly fill the board. A pixel length
+   * could not say that, because the panel's pixels are a function of the dial's size. Zero today,
+   * and #39 is the issue that gives it a number — reserving it now would change nothing at 16:9 or
+   * 16:10, where height binds either way, and would shrink the dial on a near-square display for a
+   * panel that is not there.
    */
   #dial {
-    width: min(88vmin, 100%);
+    --panel-share: 0;
+    /* The remainder is one-sided, because the panel is: `start`, not a centred box with half the
+     * reserve either side. With the share at zero the two are the same thing. */
+    justify-self: start;
+    width: calc(100% / (1 + var(--panel-share)));
+    height: 100%;
   }
 
+  /*
+   * The box is the room available; the drawing is the square inside it. `preserveAspectRatio`
+   * defaults to `xMidYMid meet`, so the dial scales to fit the shorter axis and centres on the
+   * other — which is "keep the board's height, centre in the remaining width" on any landscape
+   * board, and clamps to the width on a portrait one, with no distortion either way. The SVG's own
+   * `width`/`height` attributes are a fallback for a page with no stylesheet and deliberately have
+   * no say here: both axes of the box are definite, so nothing resolves against them — which is the
+   * property that has to hold, since resolving against them is what #115 was.
+   */
   #dial svg {
     display: block;
     width: 100%;
-    height: auto;
+    height: 100%;
     overflow: visible;
   }
 
   #status {
-    margin: 0;
+    /*
+     * The dial's separation from the notice is this margin and not the grid's `gap`, so that
+     * `display: none` takes it away with the notice. A gap is charged between tracks whether or not
+     * the second one has anything in it, and 24 px of it is the difference between a healthy board
+     * showing the dial at 1036.8 px — ADR 0009's full height, to the pixel — and at 1012.8.
+     */
+    margin: 1.5rem 0 0;
     text-align: center;
     /* Read from a distance, but never competing with the dial. */
     font-size: clamp(1rem, 2.2vmin, 1.5rem);
