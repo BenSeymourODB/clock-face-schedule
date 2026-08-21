@@ -107,6 +107,31 @@ describe("fixtureRefresher, under a frozen clock", () => {
     }
   });
 
+  /**
+   * Both scale-dependent reads, pinned. Sweeping `SCALES` through the assertions above buys nothing
+   * on its own: replacing either `demoFixture(scale)` or `dialScale(scale)` with the literal `"12h"`
+   * leaves all 1,289 tests green, and `demoFixture` has no other caller and no spec of its own — so
+   * the plumbing that makes the 1-hour mode draw its own fixture in its own window was unchecked
+   * while a `SCALES` sweep read as though it were covered.
+   *
+   * The two halves need different evidence. The fixture shows in the ids, which do not overlap
+   * across the two fixtures except for "n" and "w". The window shows in how many copies reach it:
+   * both real pairings admit at most two, where the 1-hour fixture inside an 11-hour window admits
+   * nine — the state #34 exists to avoid, drawn as full-band arcs continuing past both edges.
+   */
+  it.each([
+    { scale: "12h" as const, own: "d", foreign: "q" },
+    { scale: "1h" as const, own: "q", foreign: "d" }
+  ])("draws the fixture and the window the scale names — $scale", ({ scale, own, foreign }) => {
+    const { refresh, emissions } = refresher(displaced, scale);
+    refresh();
+
+    const copies = emissions[0]!.map((event) => event.id.split("@"));
+    expect(copies.map(([id]) => id)).toContain(own);
+    expect(copies.map(([id]) => id)).not.toContain(foreign);
+    expect(new Set(copies.map(([, index]) => index)).size).toBeLessThanOrEqual(2);
+  });
+
   it("anchors copy 0 at the pinned day's midnight, keeping the bare ids everything names", () => {
     const { refresh, emissions } = refresher(displaced, "12h");
     refresh();

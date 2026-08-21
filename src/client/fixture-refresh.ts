@@ -17,7 +17,7 @@ import {
 import { fixtureAnchor } from "./clock-pin";
 import { demoFixture, fixtureCopyIndices, recurringSampleEvents } from "./sample-events";
 
-export interface FixtureRefreshOptions {
+interface FixtureRefreshOptions {
   /** Which dial scale is being drawn — it picks the fixture and sizes the window (#34). */
   scale: DialScaleId;
   /** The pin, which decides where the fixture is anchored rather than which clock is read. */
@@ -50,7 +50,11 @@ export function fixtureRefresher({ scale, pin, now, setEvents }: FixtureRefreshO
   // Once, at load. A per-refresh anchor would re-seat the fixture on the moving window, which is
   // the "freeze the picture instead" answer #62 rejected: nothing would ever elapse or drain (#76).
   const anchor = fixtureAnchor(pin, now(), scale);
-  /** Null rather than "", which is what an empty copy list would join to. */
+  /**
+   * Null rather than "", which is what an empty copy list would join to. Defensive rather than
+   * load-bearing: copies abut exactly, by construction (`DemoFixture.periodMinutes`), so the tiling
+   * covers the whole timeline and no window can come back with nothing in it.
+   */
   let emitted: string | null = null;
 
   return function refresh(): void {

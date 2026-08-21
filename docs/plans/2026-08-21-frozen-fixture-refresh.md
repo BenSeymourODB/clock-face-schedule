@@ -1,6 +1,6 @@
 # A seam the fixture refresh can be tested through, and the frozen-clock assertion
 
-**Status:** in progress — outstanding as [#80](https://github.com/BenSeymourODB/clock-face-schedule/issues/80)
+**Status:** in progress — outstanding as [#128](https://github.com/BenSeymourODB/clock-face-schedule/pull/128)
 **Issue:** [#80](https://github.com/BenSeymourODB/clock-face-schedule/issues/80)
 **Docs:** [../DESIGN.md](../DESIGN.md) (ADR 0005, browser-local time), `src/shared/clock/time-source.ts`
 (#72's one seam), `src/client/sample-events.ts` (#62's recurrence)
@@ -50,9 +50,22 @@ itself move.
 | assertion | what breaks it |
 | --- | --- |
 | a frozen clock emits once, with real time advanced 14 h then 40 days between calls | reading `new Date()` (or `Date.now()`) instead of the seam |
-| the emitted events all intersect the **pinned** window, and copy 0 keeps its bare ids | deriving the window from one clock and the anchor from another |
+| every emitted event starts within a day of the **pinned** instant | tiling the copies into one clock's window while the dial draws another's |
+| 🟡 Lunch draws at 04:30 on the pinned *day*, and copy 0 keeps its bare ids | taking the anchor from real time — the only mutation the re-emission counts miss |
+| each scale's own fixture ids, in a window admitting at most two copies | dropping the scale plumbing, so the 1-hour dial draws the 12-hour fixture |
 | an unpinned clock advanced 14 h emits a second, later copy set | a dedupe that never re-emits, i.e. #62 undone |
 | an unpinned clock advanced one minute emits nothing further | dropping the copy-set comparison, so every poll redraws every arc |
+
+The pin sits three days before the fake load time deliberately: midnight of *today* is the same
+instant whichever clock is read, so a same-day pin cannot discriminate — the 12-hour fixture's copy
+set is `[0, 1]` from either window.
+
+The scale row is there because sweeping both scales through the other assertions buys nothing on its
+own. Replacing either `demoFixture(scale)` or `dialScale(scale)` with the literal `"12h"` left all
+1,289 tests green, and `demoFixture` has no other caller and no spec of its own — a `SCALES` sweep
+that reads as coverage and is not. The fixture half shows in the ids (the two fixtures share only
+"n" and "w"); the window half shows in the copy count, since the 1-hour fixture inside an 11-hour
+window admits nine copies against two.
 
 Both pins are exercised: `?now=…&freeze=1` (displaced *and* frozen) and `?freeze=1` alone — the
 "second, quieter half" #80 names, where the origin *is* real time and the copy set must still hold
@@ -68,5 +81,6 @@ window-widths there against a bit over one on the 12-hour dial.
   than fixed here. It wants doing beside #104, which is open on the state descriptions in the same
   README table and for the same reason; correcting the counts alone would leave the rows above them
   describing the same pre-recurrence dial.
-- **Closing or retitling #80.** The fix landing in passing is worth recording, but which of those
-  the issue becomes is the maintainer's call.
+- **Retitling #80 rather than closing it.** The PR closes it on the reading that the assertion was
+  the outstanding half; whether the maintainer would rather it stayed open under a narrower title is
+  theirs to say, and nothing here depends on which.

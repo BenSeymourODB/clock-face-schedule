@@ -244,8 +244,8 @@ export const FIXTURE_PERIOD_MINUTES = TWELVE_HOUR_FIXTURE.periodMinutes;
  * Which copies of `fixture` reach `[windowStart, windowEnd)`, as offsets in whole periods from the
  * load-time anchor.
  *
- * Usually one, two across a seam. `main.ts` re-emits only when this changes, so it must be stable
- * between advances rather than recomputed into a new-looking value every poll.
+ * Usually one, two across a seam. `fixture-refresh.ts` re-emits only when this changes, so it must
+ * be stable between advances rather than recomputed into a new-looking value every poll.
  *
  * A copy is bounded by its span, and a fixture need not be contiguous — the 12-hour one's largest
  * internal gap is 55 minutes. So a window narrower than that gap could be handed a copy with

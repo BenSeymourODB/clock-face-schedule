@@ -75,6 +75,8 @@ function fetchWindow(): Promise<ClockEventInput[]> {
 }
 
 /**
+ * The templated attribute wins over the query string, so the deployed app honours a stored
+ * preference while the server-less preview can still be pointed at either scale by hand.
  */
 function chosenScale(mount: Element): DialScaleId {
   const templated = mount instanceof HTMLElement ? mount.dataset["scale"] : undefined;
