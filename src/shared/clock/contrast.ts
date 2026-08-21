@@ -137,48 +137,24 @@ const BLEND_SEARCH_STEPS = 24;
  * A curated table cannot close this — one colour source is an arbitrary calendar hex — so the
  * adjustment is computed.
  *
- * Blends toward whichever extreme contrasts better with the background — usually white on a dark
- * ground and black on a light one — by the smallest fraction that clears the ratio. Mixing toward a
- * neutral keeps HSL hue exactly while raising lightness and shedding saturation — the "lighten *and*
- * desaturate on dark" Material prescribes, and its mirror on light. Contrast is monotonic in that
- * fraction, so a binary search lands the minimal adjustment: a colour already clearing the floor is
- * returned untouched, and one that fails moves no further than it must.
+ * This is `adjustCompositeForContrast` at full strength: a stroke is the colour it was authored as,
+ * so there is no composite to correct for, and it delegates to the function below rather than
+ * holding a second copy of the search (#97). See there for how the blend target is chosen, and why
+ * neither obvious shortcut picks it correctly.
  *
- * `readableTextColor` picks the extreme rather than a luminance threshold, because black and white
- * change places at L ≈ 0.1791 — where `(L + 0.05)² = 1.05 × 0.05` — and not at the midpoint. On a
- * ground inside `(0.1791, 0.5)` a midpoint test blends toward the *nearer* extreme: on `#bbbbbb`
- * that returns white at 1.92:1 where black reaches 10.94:1, and the guard below then reports the
- * losing extreme as the best available answer.
- *
- * Returns `color` unchanged if either value is not a parseable hex — the same parseability guard the
- * rest of this module makes, so an unresolvable colour degrades to its authored form rather than
- * throwing.
+ * One consequence of sharing that search: at an exact tie, where black and white reach the same
+ * ratio against the background, the target is now white where `readableTextColor` returns black. No
+ * caller can see it. A tie needs a background whose luminance is exactly `√0.0525 − 0.05`, and
+ * swept over all 16,777,216 24-bit colours there is none — the nearest, `#cf0dcc`, leaves the two
+ * extremes 2.4e-7 apart, and both rules pick the same one of them. The spec sweeps that space
+ * rather than sampling it, because a sample finding no tie is equally consistent with a few million.
  */
 export function adjustForContrast(
   color: string,
   background: string,
   minRatio: number = DEFAULT_MIN_CONTRAST
 ): string {
-  const current = contrastRatio(color, background);
-  if (current === null) return color;
-  if (current >= minRatio) return color;
-
-  const target = readableTextColor(background);
-  // Even the better extreme may not clear a very high `minRatio` (e.g. black on a mid-grey at 12:1);
-  // then it is still the best available answer, since the other extreme reaches less by definition.
-  if ((contrastRatio(target, background) ?? 0) < minRatio) return target;
-
-  let lo = 0;
-  let hi = 1;
-  for (let step = 0; step < BLEND_SEARCH_STEPS; step += 1) {
-    const mid = (lo + hi) / 2;
-    const candidate = compositeOver(color, target, mid);
-    const ratio = candidate === null ? null : contrastRatio(candidate, background);
-    if (ratio !== null && ratio >= minRatio) hi = mid;
-    else lo = mid;
-  }
-
-  return compositeOver(color, target, hi) ?? target;
+  return adjustCompositeForContrast(color, background, 1, minRatio);
 }
 
 /**
@@ -196,36 +172,42 @@ export function adjustForContrast(
  * `fill-opacity` mixes back in is part of what is on the wall. The two differ by enough to matter —
  * flooring the *authored* ⚫ at 3:1 gives `#58606a`, which paints at 2.52:1 — still short.
  *
- * Callers pass the graphical-object floor (3:1) rather than the text floor `adjustForContrast`
- * defaults to. That is not a relaxation for its own sake: `readableTextColor`'s black/white
+ * Callers pass the graphical-object floor (3:1) rather than the `DEFAULT_MIN_CONTRAST` text floor.
+ * That is not a relaxation for its own sake: `readableTextColor`'s black/white
  * crossover for ⚫ sits at a floor of 3.34:1, so 3:1 is the largest round floor that raises every
  * palette fill without flipping any title that sits on one — which is the difference between a
  * one-attribute change and a redesign of the filled state.
  *
- * Shares `adjustForContrast`'s search and its guarantees: blends toward the ground's far extreme by
- * the smallest fraction that clears the ratio, so hue survives and a colour already clearing the
- * floor is returned untouched; returns the extreme where even that cannot clear `minRatio`; returns
- * `color` unchanged for anything unparseable. At `alpha` of 1 the composite *is* the colour, so on
- * any ground where the two agree on a blend target it reduces exactly to `adjustForContrast` — which
- * the spec asserts rather than assumes, over the palette and the ground the dial actually uses.
+ * Blends toward the ground's far extreme by the smallest fraction that clears the ratio. Mixing
+ * toward a neutral keeps HSL hue exactly while raising lightness and shedding saturation — the
+ * "lighten *and* desaturate on dark" Material prescribes, and its mirror on light. Contrast is
+ * monotonic in that fraction, so a binary search lands the minimal adjustment: a colour already
+ * clearing the floor is returned untouched, one that fails moves no further than it must, the
+ * extreme is returned where even that cannot clear `minRatio`, and anything unparseable comes back
+ * as authored.
+ *
+ * At `alpha` of 1 the composite *is* the colour, so this is the whole of `adjustForContrast` — which
+ * calls it, rather than keeping a second copy of the search that could drift from this one (#97).
  *
  * "Far extreme" is measured, not inferred from the ground's luminance. Two ways of inferring it are
  * both wrong, and both were tried here:
  *
- * - **Thresholding luminance at 0.5**, which `adjustForContrast` does. Black and white change places
- *   at luminance **0.1791**, not 0.5, so every ground between the two — mid-greys, and any light
- *   theme that is not near-white (#81) — gets white picked when black reaches further. Not merely a
- *   worse blend: on `#767676` at 0.85, white tops out at 3.78:1 while black reaches 4.12:1, so a 4:1
- *   floor is reachable and the threshold misses it outright.
+ * - **Thresholding luminance at 0.5.** Black and white change places at luminance **0.1791** —
+ *   where `(L + 0.05)² = 1.05 × 0.05` — not at 0.5, so every ground between the two picks white
+ *   when black reaches further: mid-greys, and any light theme that is not near-white (#81). Not
+ *   merely a worse blend, but a missed floor: on `#bbbbbb` at full strength that returns white at
+ *   1.92:1 where black reaches 10.94:1, and on `#767676` at 0.85 white tops out at 3.78:1 against
+ *   black's 4.12:1, so a 4:1 floor is reachable and the threshold reports the losing extreme as the
+ *   best available answer (#95).
  * - **Asking `readableTextColor`**, which compares the two properly — but at *full* strength. The
  *   comparison does not survive `alpha`: contrast is not linear in luminance, so on a saturated
  *   ground the extreme that wins at 1.0 can lose at 0.25. Measured over 20,000 random cases, that
  *   substitution still missed a reachable floor 122 times; comparing the two *painted* misses none.
  *
  * So the target is whichever extreme reaches further **once painted at this alpha**, which is the
- * only version of the question the caller actually has. `adjustForContrast` keeps the 0.5 threshold
- * and its latent bug; it is not corrected here because its one caller measures against a ground far
- * below the crossover, where every rule above agrees. See #95.
+ * only version of the question the caller actually has. On a tie it is white — reachable only at an
+ * `alpha` so low that both composites round back to the ground, where the two are equally correct by
+ * construction.
  */
 export function adjustCompositeForContrast(
   color: string,

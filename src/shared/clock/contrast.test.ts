@@ -322,6 +322,88 @@ describe("adjustForContrast", () => {
     expect(reachable).toBeGreaterThan(1000);
     expect(missed).toEqual([]);
   });
+
+  describe("is adjustCompositeForContrast at full alpha, not a second search (#97)", () => {
+    it("delegates with an alpha of exactly 1", () => {
+      // Pinned as the literal the renderer paints, because a wrapper handed some *other* alpha
+      // still returns a colour clearing the floor — every property assertion here would pass. Only
+      // the byte-for-byte answer catches the slip, and this is the one `event-arc.test.ts` already
+      // depends on for a ⚫ arc's elapsed outline against the band.
+      expect(adjustForContrast("#1F2937", BAND)).toBe("#747b83");
+      expect(adjustForContrast("#1F2937", BAND)).toBe(
+        adjustCompositeForContrast("#1F2937", BAND, 1, AA_NORMAL_TEXT)
+      );
+    });
+
+    it("cannot reach the tie-break it inherits, over all 16,777,216 colours", () => {
+      // Unifying the two searches means `adjustForContrast` now takes the painted comparison's
+      // tie-break — white — where it used to take `readableTextColor`'s black. That is a behaviour
+      // change everywhere a ground makes the two extremes reach *exactly* the same ratio, at
+      // luminance √0.0525 − 0.05. #97 checked the 256 greys; a background is an arbitrary hex, so
+      // the whole 24-bit space is what has to be empty, and sampling cannot show that it is — the
+      // 5,000-triple sweep above lands on no tie either, which is equally consistent with millions.
+      //
+      // Fast enough to sweep exhaustively (~0.1 s) because luminance is a weighted sum of three
+      // independent channels: each channel's contribution comes from `relativeLuminance` itself,
+      // over 768 calls, and is summed in the same order the module sums it — so this is the
+      // module's own arithmetic being swept, not a re-implementation that could differ from it.
+      const byte = (value: number) => value.toString(16).padStart(2, "0");
+      const channel = (position: 0 | 1 | 2) =>
+        Array.from({ length: 256 }, (_unused, value) => {
+          const bytes = ["00", "00", "00"];
+          bytes[position] = byte(value);
+          return relativeLuminance(`#${bytes.join("")}`)!;
+        });
+      const [red, green, blue] = [channel(0), channel(1), channel(2)];
+
+      const OFFSET = 0.05;
+      const black = relativeLuminance(BLACK)!;
+      const white = relativeLuminance(WHITE)!;
+      const againstBlack = (luminance: number) => (luminance + OFFSET) / (black + OFFSET);
+      const againstWhite = (luminance: number) => (white + OFFSET) / (luminance + OFFSET);
+
+      // The local arithmetic reproduces the module's, so a sweep of it is evidence about the module.
+      for (const [, color] of [...PALETTE, ...CALENDAR_PALETTE]) {
+        const [r, g, b] = [0, 2, 4].map((i) => Number.parseInt(color.slice(1 + i, 3 + i), 16));
+        const luminance = red[r] + green[g] + blue[b];
+        expect(luminance).toBe(relativeLuminance(color));
+        expect(Math.max(againstBlack(luminance), againstWhite(luminance))).toBe(
+          Math.max(contrastRatio(BLACK, color)!, contrastRatio(WHITE, color)!)
+        );
+      }
+
+      let ties = 0;
+      let closest = Number.POSITIVE_INFINITY;
+      let nearest = "";
+      for (let r = 0; r < 256; r += 1) {
+        for (let g = 0; g < 256; g += 1) {
+          const partial = red[r] + green[g];
+          for (let b = 0; b < 256; b += 1) {
+            const luminance = partial + blue[b];
+            const apart = Math.abs(againstBlack(luminance) - againstWhite(luminance));
+            if (apart === 0) ties += 1;
+            if (apart < closest) {
+              closest = apart;
+              nearest = `#${byte(r)}${byte(g)}${byte(b)}`;
+            }
+          }
+        }
+      }
+
+      expect(ties).toBe(0);
+      expect(nearest).toBe("#cf0dcc");
+      expect(closest).toBeCloseTo(2.3997e-7, 10);
+
+      // And the nearest miss is not a disagreement: away from an exact tie both rules pick the true
+      // maximum, so the two functions agree on it at every floor either side of where they cross.
+      expect(readableTextColor(nearest)).toBe(BLACK);
+      for (const floor of [4.5, 4.5825755, 4.5825758, 4.5825761, 6]) {
+        expect(adjustForContrast("#3B82F6", nearest, floor)).toBe(
+          adjustCompositeForContrast("#3B82F6", nearest, 1, floor)
+        );
+      }
+    });
+  });
 });
 
 describe("adjustCompositeForContrast", () => {
@@ -343,13 +425,27 @@ describe("adjustCompositeForContrast", () => {
   });
 
   it("is adjustForContrast at full alpha, where there is no composite to speak of", () => {
-    // The two must not be able to drift: at alpha 1 the painted colour *is* the authored one, so
-    // any difference here would mean one of the two searches is wrong.
+    // At alpha 1 the painted colour *is* the authored one. This held while the two ran separate
+    // searches, which is what made #97's unification safe to make; it now holds by construction,
+    // and stays here as the statement of the equivalence the delegation rests on.
     for (const [, color] of PALETTE) {
       expect(adjustCompositeForContrast(color, BAND, 1, AA_NORMAL_TEXT)).toBe(
         adjustForContrast(color, BAND, AA_NORMAL_TEXT)
       );
     }
+  });
+
+  it("gives a tie to white, where readableTextColor gives it to black (#97)", () => {
+    // The one rule the two blend searches disagreed on before they were merged, pinned at the one
+    // alpha that can reach it: at 0 both extremes composite back to the ground, so both reach
+    // exactly 1:1 and the comparison is a genuine tie. On a white ground the disagreement is
+    // visible — the painted rule answers white, `readableTextColor` answers black.
+    expect(compositeOver("#ffffff", WHITE, 0)).toBe("#ffffff");
+    expect(compositeOver("#ffffff", BLACK, 0)).toBe("#ffffff");
+    expect(contrastRatio("#ffffff", "#ffffff")).toBe(1);
+
+    expect(adjustCompositeForContrast("#1F2937", "#ffffff", 0, AA_GRAPHICAL_OBJECT)).toBe(WHITE);
+    expect(readableTextColor("#ffffff")).toBe(BLACK);
   });
 
   describe("every palette colour reads as a shape once floored", () => {
