@@ -989,3 +989,104 @@ describe("analogClock at the 1-hour scale", () => {
     );
   });
 });
+
+/**
+ * The board's spare width, granted to the labels (#30 item 1, ADR 0009).
+ *
+ * The margin is stated from the viewBox, so these are the same numbers the ADR and
+ * `docs/brainstorms/2026-08-21-label-placement-fork.md` quote: 50.4 inherited, 172.1 on a 16:10
+ * board as it renders, 234.5 on a 16:9 one.
+ */
+describe("analogClock's label margin", () => {
+  const INHERITED = OUTER_RADIUS * 2 * 0.1 - 8;
+  const SIXTEEN_NINE = 234.5;
+
+  /** An event every half hour with a title too long for its arc, so cards land all round the dial. */
+  const SWEEP = Array.from({ length: 22 }, (_unused, index) =>
+    input(`s${index}`, 1 + index / 2, 1 + index / 2 + 25 / 60, { title: LONG_TITLE })
+  );
+
+  function cards(margin?: number | null): { x: number; width: number; y: number; height: number }[] {
+    const { element } = build(SWEEP, margin === undefined ? {} : { labelMargin: margin });
+    const rects = [...element.querySelectorAll('[data-testid^="floating-label-rect-"]')];
+
+    expect(rects.length, "no card was drawn").toBeGreaterThan(8);
+    return rects.map((rect) => ({
+      x: Number(rect.getAttribute("x")),
+      width: Number(rect.getAttribute("width")),
+      y: Number(rect.getAttribute("y")),
+      height: Number(rect.getAttribute("height")),
+    }));
+  }
+
+  /** How far past the viewBox the widest card reaches, on the horizontal axis alone. */
+  function widestReach(margin?: number | null): number {
+    return cards(margin).reduce(
+      (most, card) => Math.max(most, -card.x, card.x + card.width - SIZE),
+      0
+    );
+  }
+
+  it.each([
+    ["nothing passed", undefined],
+    ["an explicit null, which is what an unmeasurable page yields", null],
+    ["a margin below the inherited allowance, which the floor absorbs", 10],
+  ])("keeps the inherited allowance for %s", (_label, margin) => {
+    expect(widestReach(margin)).toBeLessThanOrEqual(INHERITED + 1e-9);
+  });
+
+  /**
+   * The property the whole change exists for, asserted on the drawn output rather than on the
+   * geometry it came from: a granted margin has to reach the *renderer*, and the renderer is the
+   * layer that converts the viewBox figure into `ClockBox.labelAllowance`.
+   */
+  it("spends a granted margin, and stays inside it", () => {
+    const granted = widestReach(SIXTEEN_NINE);
+
+    expect(granted).toBeGreaterThan(INHERITED);
+    expect(granted).toBeLessThanOrEqual(SIXTEEN_NINE + 1e-9);
+  });
+
+  /**
+   * More characters a line, measured as *fewer lines for the same titles* — which is the property a
+   * viewer sees. Not the longest single line: a card at twelve o'clock already has 65 characters a
+   * line at the inherited allowance, so the widest line on the dial is capped by the title's own
+   * length and does not move. The sides are where the margin is spent.
+   */
+  it("wraps the same titles onto fewer lines once the margin is granted", () => {
+    const lineCount = (margin?: number | null) =>
+      build(SWEEP, margin === undefined ? {} : { labelMargin: margin }).element.querySelectorAll(
+        '[data-testid^="floating-label-text-"]'
+      ).length;
+
+    expect(lineCount(SIXTEEN_NINE)).toBeLessThan(lineCount());
+  });
+
+  it("re-grants the margin without rebuilding for an unchanged one", () => {
+    const clock = build(SWEEP);
+    const before = clock.element.querySelector('[data-testid="floating-labels-layer"]')?.innerHTML;
+
+    clock.setLabelMargin(null);
+    expect(
+      clock.element.querySelector('[data-testid="floating-labels-layer"]')?.innerHTML
+    ).toBe(before);
+
+    clock.setLabelMargin(SIXTEEN_NINE);
+    expect(
+      clock.element.querySelector('[data-testid="floating-labels-layer"]')?.innerHTML
+    ).not.toBe(before);
+  });
+
+  /**
+   * Vertical reach is `#display`'s padding to pay for and #121's to argue about, and a wider card is
+   * a *shorter* one — it needs fewer lines for the same title — so this cannot regress. Asserted
+   * rather than reasoned, because the frame is the one bound with no clamp behind it.
+   */
+  it("does not reach further vertically than the inherited allowance already did", () => {
+    const tallest = (margin?: number | null) =>
+      cards(margin).reduce((most, card) => Math.max(most, -card.y, card.y + card.height - SIZE), 0);
+
+    expect(tallest(SIXTEEN_NINE)).toBeLessThanOrEqual(tallest() + 1e-9);
+  });
+
+});

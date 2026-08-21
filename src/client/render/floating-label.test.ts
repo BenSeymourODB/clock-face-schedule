@@ -393,6 +393,78 @@ describe("floatingLabel against the dial's real geometry", () => {
   });
 
   /**
+   * What the granted margin (#30 item 1) costs on the band, pinned exactly.
+   *
+   * A card is centred on the locus and grows about its own centre, so widening it moves its inner
+   * edge **inward**. That is #98, and it is the same cost ADR 0009 measured against #88's inward
+   * ellipse arriving from the other direction — widening about a fixed locus and moving the locus
+   * inward do the same thing to the inner edge.
+   *
+   * Worth recording that #30's decision comment says the opposite — that granting the margin
+   * "closes #98's side collisions … by construction". That is true of the *band-clearing* locus ADR
+   * 0009 pairs with the margin and false of the margin alone; the two were run together in one
+   * sentence. Nothing here moves the locus, because the locus belongs to the fork (#138), which
+   * cannot be judged until the margin is granted.
+   *
+   * So this is a guard on a known regression rather than a fix: the numbers are here, at the angle
+   * where the allowance binds, so the next change to the locus or to a card's width is measured
+   * against them instead of found by rendering.
+   */
+  describe("the granted margin, and what it costs the band (#98)", () => {
+    const BAND_INNER = OUTER - OUTER * 0.26;
+
+    function innerEdge(anchorAngle: number, labelAllowance?: number): number {
+      const { rect } = floatingLabelGeometry({
+        id: "e1",
+        text: LONG,
+        anchorAngle,
+        anchorRadius: OUTER,
+        labelRadius: LABEL_RADIUS_REAL,
+        color: "#22c55e",
+        cx: CX,
+        cy: CY,
+        clockBox: labelAllowance === undefined ? CLOCK_BOX : { ...CLOCK_BOX, labelAllowance },
+        faceRadius: FACE,
+        fontSize: FONT,
+      });
+      // At three and nine o'clock the card's radial extent is its half-width, so this is the
+      // quantity the allowance moves.
+      return Math.hypot(
+        Math.max(rect.x - CX, 0, CX - (rect.x + rect.width)),
+        Math.max(rect.y - CY, 0, CY - (rect.y + rect.height))
+      );
+    }
+
+    const coverage = (inner: number) => (OUTER - inner) / (OUTER - BAND_INNER);
+
+    it.each([90, 270])("covers 55.6% of the band at %i degrees, inherited", (angle) => {
+      const inner = innerEdge(angle);
+
+      expect(inner).toBeCloseTo(249.79, 2);
+      expect(coverage(inner)).toBeCloseTo(0.556, 3);
+    });
+
+    it.each([90, 270])(
+      "covers 97.1% of it at %i degrees once a 16:9 board's margin is granted",
+      (angle) => {
+        // Sized by `faceClearanceLimit` rather than by the frame at this margin — and then by the
+        // widest line the text actually needs, which is why the edge stops 13.9 units short of the
+        // face rather than on it.
+        const inner = innerEdge(angle, 234.5 + 8);
+
+        expect(inner).toBeCloseTo(218.26, 2);
+        expect(coverage(inner)).toBeCloseTo(0.971, 3);
+      }
+    );
+
+    it("still clears the clock face, which is the bound that must not move", () => {
+      for (let angle = 0; angle < 360; angle += 15) {
+        expect(innerEdge(angle, 234.5 + 8)).toBeGreaterThanOrEqual(FACE);
+      }
+    });
+  });
+
+  /**
    * #35's duration, on the surface where it earns most: a label exists because the arc was too
    * narrow for its title, and a narrow arc is exactly where `MIN_ARC_DEGREES` has already flattened
    * ten minutes and fifteen into the same 7.5°.
