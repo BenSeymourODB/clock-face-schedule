@@ -111,6 +111,34 @@ describe("the deploy workflow's safety rails", () => {
   });
 
   /**
+   * Which slot a run targets is decided by one expression repeated four times — `concurrency`, the
+   * job name, `environment.name` and `SLOT` — because Actions gives it nowhere to live once:
+   * `env` is not a context the first three can read, and the format has no anchors.
+   *
+   * A disagreement between them is the worst failure this workflow can have and the least visible:
+   * `environment.name` chooses whose reviewers gate the run *and* which `CLASP_DEPLOYMENT_ID` is in
+   * scope, so an edit to three of the four could gate on staging while redeploying production's
+   * slot, and report the wrong one in the summary. Byte-identity is the only cheap guarantee.
+   */
+  it("resolves the slot identically everywhere it is decided", () => {
+    const expressions = executable.match(/\$\{\{[^}]*inputs\.slot[^}]*\}\}/g) ?? [];
+
+    expect(new Set(expressions).size).toBe(1);
+    expect(expressions).toHaveLength(4);
+    expect(expressions[0]).toContain("github.event_name == 'release' && 'production'");
+  });
+
+  /**
+   * A published release is the production trigger, so losing it is losing the promotion path. It
+   * must be `published`: `released` never fires for a pre-release, and `prereleased` misses one
+   * published from a draft — and this repo's releases are pre-releases, so either narrower type
+   * would mean a production deploy that silently never runs.
+   */
+  it("treats a published release as the production trigger", () => {
+    expect(executable).toMatch(/release:\s*\n\s*types: \[published\]/);
+  });
+
+  /**
    * The gate is re-run here rather than inherited from ci.yml because a promotion dispatch can name
    * any ref — including a commit whose CI run predates a dependency change. Deploying is the one
    * job that must not take an earlier run's word for it.

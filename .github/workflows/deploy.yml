@@ -1,11 +1,18 @@
 name: Deploy
 
-# Two slots, one job body. Staging tracks `main`; production is a deliberate promotion, dispatched
-# by hand. Both are the same two clasp calls — `push` then `redeploy` — against a different
-# deployment ID, which is the whole of what makes a stable web app URL possible. See ADR 0010.
+# Two slots, one job body. Staging tracks `main`, production is what a published release means, and
+# the dispatch covers everything neither does — a re-deploy, or a rollback from an older ref. All
+# three are the same two clasp calls — `push` then `redeploy` — against a different deployment ID,
+# which is the whole of what makes a stable web app URL possible. See ADR 0010.
 on:
   push:
     branches: [main]
+  # `published` rather than `released` or `prereleased`, because it is the only type that fires for
+  # both a stable release and a pre-release — including a pre-release published from a draft, which
+  # `prereleased` misses. This repo's releases are pre-releases, so the narrower types would mean a
+  # production deploy that never ran. Flip to `[released]` if pre-releases should stop at staging.
+  release:
+    types: [published]
   workflow_dispatch:
     inputs:
       slot:
@@ -19,12 +26,17 @@ on:
 # version with an orphan version above it. This is the opposite of ci.yml, where a superseded run's
 # verdict is merely irrelevant — here a superseded run may be halfway through mutating the project.
 concurrency:
-  group: deploy-${{ inputs.slot || 'staging' }}
+  group: deploy-${{ github.event_name == 'release' && 'production' || inputs.slot || 'staging' }}
   cancel-in-progress: false
 
 jobs:
   deploy:
-    name: deploy (${{ inputs.slot || 'staging' }})
+    # This expression appears four times — here, in `concurrency`, in `environment.name` and in
+    # `SLOT` — because Actions offers nowhere to name it once: `env` is not a context those first
+    # three can read, and the format supports no anchors. The four must stay identical, since a
+    # disagreement between them would gate on one environment's reviewers while deploying the
+    # other's deployment ID. `scripts/deploy-workflow.test.mjs` asserts they match.
+    name: deploy (${{ github.event_name == 'release' && 'production' || inputs.slot || 'staging' }})
     runs-on: ubuntu-latest
 
     # The slot's identity lives in the GitHub environment, not in this file: `CLASP_DEPLOYMENT_ID`
@@ -34,7 +46,7 @@ jobs:
     # staging cannot disturb what production is pinned to. Defining SCRIPT_ID on an environment
     # would override the repo value, if the slots ever need to be separate projects.
     environment:
-      name: ${{ inputs.slot || 'staging' }}
+      name: ${{ github.event_name == 'release' && 'production' || inputs.slot || 'staging' }}
       url: ${{ steps.redeploy.outputs.webapp-url }}
 
     permissions:
@@ -43,7 +55,7 @@ jobs:
     timeout-minutes: 15
 
     env:
-      SLOT: ${{ inputs.slot || 'staging' }}
+      SLOT: ${{ github.event_name == 'release' && 'production' || inputs.slot || 'staging' }}
       # clasp defaults its auth file to ~/.clasprc.json and does **not** fall back to a local one,
       # whatever its own docs/config-files.md says about "local or global" — measured on 3.4.0,
       # which reports "No credentials found." with a perfectly good .clasprc.json beside
@@ -53,6 +65,11 @@ jobs:
 
     steps:
       - uses: actions/checkout@v7
+        with:
+          # Name the tag explicitly on a release rather than trusting the event's default SHA, so
+          # what gets deployed is the commit the release points at and nothing else. Empty on the
+          # other two triggers, which checkout treats as "the ref that triggered me" as usual.
+          ref: ${{ github.event.release.tag_name }}
 
       - uses: actions/setup-node@v7
         with:
@@ -128,9 +145,14 @@ jobs:
         shell: bash
         env:
           DEPLOYMENT_ID: ${{ vars.CLASP_DEPLOYMENT_ID }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
         run: |
+          # The tag on a release, the branch otherwise; and the commit actually checked out rather
+          # than the event's, which are the same thing only when the tag is the triggering ref.
+          ref="${RELEASE_TAG:-$GITHUB_REF_NAME}"
+
           npx clasp redeploy "$DEPLOYMENT_ID" \
-            -d "$SLOT ${GITHUB_REF_NAME}@${GITHUB_SHA:0:7} run ${GITHUB_RUN_NUMBER}" \
+            -d "$SLOT $ref@$(git rev-parse --short HEAD) run ${GITHUB_RUN_NUMBER}" \
             --json > "$RUNNER_TEMP/redeploy.json"
           cat "$RUNNER_TEMP/redeploy.json"
 
@@ -149,6 +171,7 @@ jobs:
           DEPLOYMENT_ID: ${{ vars.CLASP_DEPLOYMENT_ID }}
           VERSION: ${{ steps.redeploy.outputs.version }}
           WEBAPP_URL: ${{ steps.redeploy.outputs.webapp-url }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
         run: |
           npx clasp deployments --json > "$RUNNER_TEMP/deployments.json"
           node -e '
@@ -171,7 +194,8 @@ jobs:
             echo "| | |"
             echo "| --- | --- |"
             echo "| Version | $VERSION |"
-            echo "| Commit | \`${GITHUB_SHA:0:7}\` |"
+            echo "| Ref | \`${RELEASE_TAG:-$GITHUB_REF_NAME}\` |"
+            echo "| Commit | \`$(git rev-parse --short HEAD)\` |"
             echo "| Web app | $WEBAPP_URL |"
           } >> "$GITHUB_STEP_SUMMARY"
 

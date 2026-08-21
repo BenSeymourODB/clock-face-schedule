@@ -250,11 +250,27 @@ pinned to whichever version it was last promoted to, however many times `main` m
 | Trigger | Effect |
 | --- | --- |
 | Push to `main` | Builds, runs the full gate, redeploys **staging** |
+| Publish a release | Redeploys **production**, from the commit the release's tag points at |
 | Actions → Deploy → Run workflow | Redeploys the slot you choose, from the ref you choose |
 
+**Publishing a release is the promotion.** That is what a release already meant here — the tag is
+the thing worth pointing a wall display at — so production moves when one is published and at no
+other time. The tag is checked out by name rather than trusting the event's default commit, so a
+release deploys exactly what it points at; the deployed version's description records the tag, which
+makes `clasp deployments` and the Apps Script version list both readable as a release history.
+
+The trigger is `release: types: [published]`, deliberately not the narrower `released` or
+`prereleased`. `published` is the only type that fires for a stable release *and* a pre-release,
+including a pre-release published from a draft, which `prereleased` misses. Since this repo's
+releases are pre-releases, either narrower type would mean a production deploy that silently never
+ran. Change it to `[released]` if pre-releases should stop short of production.
+
+The manual dispatch stays for what neither trigger covers: redeploying a slot without a new release,
+and rolling production back by pointing it at an older ref.
+
 The gate — `build`, `check-types`, `test` — re-runs inside the deploy job rather than trusting the
-commit's earlier CI run, because a promotion can name any ref, including one whose CI predates a
-dependency change.
+commit's earlier CI run, because a release or a dispatch can name any ref, including one whose CI
+predates a dependency change.
 
 ### One-time setup
 

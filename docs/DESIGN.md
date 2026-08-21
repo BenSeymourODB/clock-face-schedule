@@ -369,13 +369,34 @@ code to a fixed URL" is one command, and the version history is a real audit tra
 side effect.
 
 **Decision.** Two slots on one script project, driven by `.github/workflows/deploy.yml`. A push to
-`main` redeploys **staging**; **production** is a `workflow_dispatch` promotion, which can name any
-ref. Deployment identity lives in a GitHub environment variable, so one job body serves both.
+`main` redeploys **staging**; publishing a **release** redeploys **production**; a
+`workflow_dispatch` covers what neither does. Deployment identity lives in a GitHub environment
+variable, so one job body serves all three.
+
+Releases already carried this meaning in the repo before any of it was automated — the one existing
+release exists to hold the deployed URL as a bookmark. So the promotion signal was already being
+produced by hand; the workflow only had to read it. Nothing new to remember, and the tag gives the
+deployed version a name, which a dispatch cannot.
 
 One script project rather than two is safe because versions are immutable: deploying staging cannot
 move what production is pinned to. It also keeps `SCRIPT_ID` and the manifest single-valued.
 
 **Consequences.**
+- **The release trigger is `published`, not `released` or `prereleased`.** `published` is the only
+  type that fires for both a stable release and a pre-release, including one published from a draft
+  — which `prereleased` does not. This repo's releases are pre-releases, so either narrower type
+  would have meant a production deploy that never ran and reported nothing. The cost is that
+  "pre-release" carries no staging/production distinction here; `[released]` buys that back if the
+  distinction is ever wanted, and would then require releases to stop being pre-releases.
+- **A release deploys its tag, not the event's commit.** The checkout names
+  `github.event.release.tag_name`, so what reaches production is what the release points at even
+  when a release is cut from an older commit — which makes republishing an older tag a rollback.
+- **One expression decides the slot, and it is repeated four times** — `concurrency`, the job name,
+  `environment.name`, `SLOT` — because Actions has nowhere to name it once: `env` is not a context
+  the first three can read, and the format has no anchors. The repetition is the risk, not the
+  duplication: `environment.name` selects both the reviewers that gate the run and the
+  `CLASP_DEPLOYMENT_ID` in scope, so three-of-four edited would gate on staging while redeploying
+  production. `scripts/deploy-workflow.test.mjs` asserts the four are byte-identical.
 - **`-d` is effectively mandatory.** clasp writes `deploymentConfig.description` on every redeploy,
   defaulting it to `''`, so a redeploy without a description does not preserve the old one — it
   blanks it. Since Apps Script has no *name* for a deployment, that description is the only label
