@@ -1,6 +1,6 @@
 # The board's spare width, handed to the labels
 
-**Status:** in progress — the ring-vs-sides fork outstanding as [#138](https://github.com/BenSeymourODB/clock-face-schedule/issues/138)
+**Status:** done — shipped in [#148](https://github.com/BenSeymourODB/clock-face-schedule/pull/148)
 **Issue:** [#30](https://github.com/BenSeymourODB/clock-face-schedule/issues/30) item 1
 **Docs:** ADR 0009 (the allocation this spends, and the figures it corrects), `docs/brainstorms/2026-08-21-label-placement-fork.md`
 (the ordering and the recomputed margins), #115 / #120 (the sizing rule this measures against), #138

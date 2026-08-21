@@ -3,6 +3,7 @@
  * Ported from next-digital-wall-calendar's `analog-clock/analog-clock.tsx`.
  */
 import {
+  type ClockBox,
   type ClockEventInput,
   type DialScaleId,
   angleForTime,
@@ -197,7 +198,7 @@ export function analogClock({
    * Rebuilt per render rather than captured, so `setLabelMargin` has one thing to change and the
    * geometry is never handed a box that disagrees with the allowance it was measured for.
    */
-  function layoutBox() {
+  function layoutBox(): ClockBox {
     return {
       top: cy - outerRadius,
       bottom: cy + outerRadius,

@@ -72,6 +72,21 @@ describe('labelMarginUnits', () => {
     expect(small).toBeCloseTo(big ?? 0, 6);
   });
 
+  /**
+   * Why the host watches the *box* and not the window. The status line takes height from the dial
+   * without the viewport changing at all, and a smaller dial means the same board is more viewBox
+   * units wide — so the margin moves when nothing about the display did. Measured on the preview:
+   * 922.3 px of dial grants 234.5 units, 807.9 px with a notice showing grants 323.0.
+   */
+  it('grants more units to a dial the page has made smaller', () => {
+    const full = boardBox(1920, 1080);
+    const notice = { width: full.width, height: full.height - 150 };
+
+    expect(labelMarginUnits(notice, 1920, SIZE)).toBeGreaterThan(
+      labelMarginUnits(full, 1920, SIZE) ?? 0
+    );
+  });
+
   it('measures the viewport rather than the box it is handed', () => {
     // A box narrower than the viewport is the shipped layout — the drawing sits in a grid column
     // inside the page's frame — so a reading taken off the box alone under-reports the board.

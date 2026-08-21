@@ -127,17 +127,25 @@ function measureLabelMargin(mount: Element): number | null {
 }
 
 /**
- * Grant the margin now and again whenever the board's edges move.
+ * Grant the margin now, and again whenever the box the drawing sits in changes size.
  *
- * Re-measured on `resize` rather than computed once: a board rotated, a window resized, or a
- * projector re-detected at a different resolution all change the allocation, and a card sized for
- * the old one is either clipped or needlessly narrow. `setLabelMargin` ignores an unchanged value,
- * so a resize that does not move the edges costs no rebuild.
+ * Watching the *box* rather than the window is the difference between a live figure and one taken at
+ * load: a board rotated or a projector re-detected at a different resolution fires `resize`, but the
+ * status line appearing does not — and it takes height from the dial, which changes how many viewBox
+ * units of the board are spare. Both routes come out as a box resize, so there is one seam.
+ *
+ * `setLabelMargin` ignores an unchanged value, so a resize that does not move the allocation costs
+ * no rebuild. Falls back to `resize` where `ResizeObserver` is missing, which loses the status-line
+ * case and keeps the rest.
  */
 function trackLabelMargin(mount: Element, clock: AnalogClockHandle): void {
   const apply = (): void => clock.setLabelMargin(measureLabelMargin(mount));
 
   apply();
+  if (typeof ResizeObserver === "function") {
+    new ResizeObserver(apply).observe(mount);
+    return;
+  }
   window.addEventListener("resize", apply);
 }
 
