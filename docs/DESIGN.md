@@ -306,6 +306,10 @@ after the panel**, and the panel is **180 units wide, on the right**.
   line at 26 units, and on a 4 ft board 26 units is 53 mm — comfortable reading at 8 m by the
   conventional distance/150 rule. That is the size at which the panel can carry the names of a
   three-deep cluster, whose arc titles render at 6.24 units, 12.7 mm, legible to about 2 m (#70).
+  (**5.98 units** for a three-deep title that *wraps*, once the clearance cap binds — #90. Millimetres
+  per the amendment below rather than this line: 7.0 mm and 1.1 m for the one-line figure as the dial
+  actually renders, 6.8 mm and 1.0 m for the wrapping one. Either way this argument rests on the panel
+  carrying the name the arc cannot.)
 - **16:10 is the binding case and the ceiling is 209 units.** Past that the margin drops below the
   knee and the panel starts taking width from the labels one-for-one. 180 leaves 29 units of
   headroom; anything wider should be re-measured rather than assumed.
@@ -321,13 +325,24 @@ proportions. Two figures in particular are budgets rather than measurements: the
 come from `CHAR_WIDTH_RATIO = 0.6`, which is deliberately crude, and the distance/150 rule is an AV
 signage convention rather than a measurement of these glyphs at this contrast.
 
-**And every millimetre above is measured against a dial that does not render.** This ADR opens by
-giving the dial the board's full height; the page gives it 600 px on any display, because `#dial`'s
-percentage width resolves against a grid track sized by the SVG's own 600-unit attribute (#115). That
-is 55.6% of a 1080-tall board, so as things stand 26 units is 29 mm rather than 53, the distance/150
-rule gives 4.4 m rather than 8, and a 180-unit panel is 203 mm rather than 366. The unit arithmetic
-and the 180-unit choice are unaffected — but they are conditional on the dial being the size this ADR
-assumes, and the sizing rule is part of the allocation (#39) rather than a detail beneath it.
+**The dial takes 85.4% of the board's height, not all of it** (#115). This ADR opens by giving the
+dial the board's full height, and the page did far worse than that until #115: 600 px on any display,
+because `#dial`'s percentage width resolved against a grid track sized by the SVG's own 600-unit
+attribute. The sizing rule now reads the display — but implementing it showed that the frame floating
+labels paint into was never accounted for. A 600 px dial centred in a 1080 px page left 240 px of
+slack above itself, and that slack was the frame; a dial sized to the board has none, and a card
+reaches up to 50.4 units past the 600-unit viewBox. Covering that takes 7.3% of the shorter viewport
+axis, which leaves the dial 85.4% of the height.
+
+So the millimetres here derate by **0.854**, not by the 1.0 this ADR assumed or the 0.556 it
+rendered at: 26 units is 45 mm rather than 53, the distance/150 rule gives 6.7 m rather than 8, and a
+180-unit panel is 313 mm rather than 366. The unit arithmetic and the 180-unit choice are unaffected.
+
+That 14.6% is a fourth claimant on the same pot, and it was not one this ADR weighed. It is paid out
+of the height rather than the width, so it does not change the panel's 180 or the label margin's
+knee — but it is the dial paying, which is the one thing this ADR says must not happen, and it is
+paying for the labels. #121 is the cheaper answer if there is one: bound a card's *edges* vertically
+the way `labelWidthLimit` already bounds them horizontally, and the frame shrinks back toward nothing.
 
 **Revisit when** the pilot board is up (#10) and the panel has been looked at from the back of the
 room, or if a target display falls outside 16:9–16:10.
