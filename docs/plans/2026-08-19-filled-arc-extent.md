@@ -1,4 +1,4 @@
-**Status:** in review
+**Status:** done — shipped in [#94](https://github.com/BenSeymourODB/clock-face-schedule/pull/94)
 **Issue:** #66
 **Docs:** #27 (the outline's contrast pass, which scoped itself to strokes), #26 (elapsed outlines),
 #74 (the ground the band actually has), #15 (visibility must not depend on a calendar-chosen
