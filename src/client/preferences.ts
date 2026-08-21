@@ -77,16 +77,15 @@ export function preferenceStore({ wire, save }: PreferenceStoreOptions): Prefere
   function send(patch: Partial<Preferences>): void {
     saving = true;
 
-    let sent: PromiseLike<unknown>;
     try {
-      sent = save(encodePreferences(patch));
+      save(encodePreferences(patch)).then(drain, drain);
     } catch {
       // A `save` that throws rather than rejecting has still finished, and the queue has to keep
-      // moving: wedging here would cost every later preference, not just this one.
+      // moving: wedging here would cost every later preference, not just this one. The `then` is
+      // inside the try for the same reason — a `save` that returns something un-thenable throws
+      // here, and it would throw out of `set` and into a click handler with the queue left shut.
       drain();
-      return;
     }
-    sent.then(drain, drain);
   }
 
   /**
