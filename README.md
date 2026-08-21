@@ -190,22 +190,36 @@ a pin anchors them to midnight — measured by rendering, not predicted:
 
 | `?now=` | What it shows |
 | --- | --- |
-| `03:00` | The unpinned picture exactly: ⚪ Breakfast Club elapsed and crossing the leading edge, the four-deep cluster elapsed, and 🟡 Tidy Up and Line Up **draining** beside it. |
+| `03:00` | The unpinned *states*, exactly: ⚪ Breakfast Club elapsed and crossing the leading edge, the four-deep cluster elapsed, and 🟡 Tidy Up and Line Up **draining** beside it. Not the unpinned *picture* — see below. |
 | `01:30` | The cluster mid-drain — 🎮 Game Time and 🔴 Deadline draining, 🟣 Study just starting, 🟠 Swimming Group B still to come. |
 | `04:15` | ⚫ Staff Debrief and 🟤 ⚽ draining, ⚫ Assembly elapsed: the two palette colours that fail contrast on the dial, in both treatments at once. |
 | `08:30` | 🟣 Free Play draining, with 📚 Reading — the ten-minute event held open by the minimum span — elapsed beside it. |
-| `11:00` | 🟢 Aftercare draining and running past the window's end, with every other event already finished. |
+| `11:00` | 🟢 Aftercare draining and crossing the dial's noon seam, with copy 1 of the fixture already filling most of the band — the arc clamped at the window's end here is that copy's 🍽️ Lunch, not Aftercare. |
 
-Note the first row: **the unpinned picture is the `03:00` one, at any time of day.** The fixture is
-anchored to the rolling window's own start, so every event's offset from "now" is a constant — which
-is why one row of this table describes the default look rather than a state you have to reach for.
+**The first row is a claim about arcs and their states, not about pixels** — the distinction matters
+and cost a review. The fixture is anchored to the rolling window's own start, so every event's offset
+from "now" is a constant: unpinned, the dial always draws the same 16 arcs, five of them elapsed and
+one draining, at the same ring thicknesses, whatever the wall clock says. `?now=03:00` is the pin
+that reproduces exactly that.
 
-That constant is also what puts a drain in the default look: 🟡 Tidy Up and Line Up spans `now`
-whatever the wall clock says, so the unpinned preview always draws one draining arc. **It is the
-thin one.** It joins the four-deep cluster through 🔴 Deadline, so it renders at that cluster's
-15.56-unit ring rather than a lone arc's 75.92 — the thinnest ring the dial opens. Reach for
-`?now=04:15` when you want a drain without the ring-thinning confound: ⚫ Staff Debrief draws it at
-35.68 units, clear of the cluster.
+**The picture is not the same, and unpinned it is not even stable.** The angle origin is the period's
+start, so the dial rotates continuously and which titles overflow to a floating label follows angular
+position — the frame is tightest at 3 and 9 o'clock. Measured across pins: five cards at `03:00`,
+four at `04:15`, three at `08:30`, and unpinned the set drifts from one minute to the next as the
+dial turns. **So judge anything about label placement or crowding on a pinned dial, and say which
+pin** — an unpinned screenshot of a card collision is not reproducible, including by you.
+
+That constant offset is what puts a drain in the default look: 🟡 Tidy Up and Line Up spans `now`
+whatever the wall clock says, so an unpinned preview draws one draining arc once it has settled.
+**It is the thin one.** It joins the four-deep cluster through 🔴 Deadline, so it renders at that
+cluster's 15.56-unit ring rather than a lone arc's 75.92 — the thinnest ring the dial opens. Reach
+for `?now=04:15` when you want a drain without the ring-thinning confound: ⚫ Staff Debrief draws it
+at 35.68 units, clear of the cluster.
+
+⚠️ **"Once it has settled" is load-bearing** (#152). For about the first second of an unpinned load
+the dial draws *two* drains, not one: 🔴 Deadline ends exactly on the fixture's anchor boundary and
+the anchor is read a few milliseconds after the clock the first frame draws with. A screenshot taken
+inside that second shows a seam that is not there afterwards. Sample after the first tick, or pin.
 
 Two consequences of that anchoring worth knowing before you pin something:
 

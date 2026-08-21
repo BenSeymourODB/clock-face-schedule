@@ -8,7 +8,8 @@ import {
   dialWindow,
   rectsOverlap,
 } from "../../shared/clock";
-import { oneHourSampleEvents } from "../sample-events";
+import readme from "../../../README.md?raw";
+import { oneHourSampleEvents, sampleEvents } from "../sample-events";
 import { type AnalogClockParams, analogClock } from "./analog-clock";
 
 const SIZE = 600;
@@ -1089,4 +1090,80 @@ describe("analogClock's label margin", () => {
     expect(tallest(SIXTEEN_NINE)).toBeLessThanOrEqual(tallest() + 1e-9);
   });
 
+});
+
+/**
+ * README's ring-thickness figures, asserted against the dial that produces them.
+ *
+ * #150 put `15.56`, `75.92` and `35.68` into README prose and guarded none of them — in the file
+ * `clock-pin.test.ts` already reads through `?raw` for exactly this reason, whose docstring says
+ * "prose is the copy nothing checks … That was the second time in two days". Move
+ * `ARC_BAND_RATIO`, `RING_GAP_RATIO` or `MIN_RING_THICKNESS_RATIO` and every other spec stays green
+ * while README goes on telling a reviewer to reach for a 35.68-unit ring that no longer exists
+ * (#153).
+ *
+ * Read off the rendered `d` attributes rather than recomputed from the ratios: a second copy of
+ * `(band − (depth − 1) × gap) / depth` here would keep agreeing with README after the renderer's
+ * own formula had moved, which is the failure one level down.
+ */
+describe("the ring thicknesses README states in prose", () => {
+  /** The 12-hour fixture at load, which is the dial README's figures describe. */
+  const FIXTURE_ANCHOR = new Date(2026, 7, 18, 4, 0, 0, 0);
+  const FIXTURE_NOW = new Date(FIXTURE_ANCHOR.getTime() + 3 * 60 * 60 * 1000);
+
+  function thicknessOf(id: string): number {
+    const { element } = analogClock({
+      events: sampleEvents(FIXTURE_ANCHOR),
+      time: FIXTURE_NOW,
+    });
+    const arc = element.querySelector(`path[data-testid="event-arc-${id}"]`);
+    if (!arc) throw new Error(`the fixture no longer draws an arc "${id}"`);
+
+    const { outer, inner } = arcRadii(arc);
+    return outer - inner;
+  }
+
+  /**
+   * Same reader as `clock-pin.test.ts`'s, and deliberately a copy of the *helper* rather than of
+   * any figure: a reworded sentence has to fail loudly here, not silently assert nothing.
+   */
+  function readmeSays(pattern: RegExp): RegExpExecArray {
+    const found = pattern.exec(readme);
+
+    if (!found) {
+      throw new Error(
+        `README no longer carries ${pattern} — the sentence moved or was reworded, so this guard ` +
+          `is asserting nothing. Fix the pattern or restore the figures.`
+      );
+    }
+    return found;
+  }
+
+  it("draws the draining arc and a lone arc at the two widths README names", () => {
+    const [, clustered, lone] = readmeSays(
+      /renders at that\s+cluster's ([\d.]+)-unit ring rather than a lone arc's ([\d.]+)/
+    );
+
+    // "n" 🟡 Tidy Up and Line Up — the drain in the default picture — and "d" 🟡 🍽️ Lunch, the
+    // isolated arc the fixture carries precisely so a whole-band width is on screen beside it.
+    expect(thicknessOf("n")).toBeCloseTo(Number(clustered), 1);
+    expect(thicknessOf("d")).toBeCloseTo(Number(lone), 1);
+  });
+
+  it("draws the unconfounded drain at the width README sends a reviewer to", () => {
+    const [, twoDeep] = readmeSays(/⚫ Staff Debrief draws it\s+at ([\d.]+) units, clear of the cluster/);
+
+    // "w" ⚫ Staff Debrief, two deep with 🟤 ⚽ — the pin README points at for drain geometry.
+    expect(thicknessOf("w")).toBeCloseTo(Number(twoDeep), 1);
+  });
+
+  /**
+   * The claim that makes the two figures above mean anything: the thin one is thin *because* it is
+   * in the cluster. Without this, both could drift to the same number and the prose would still
+   * parse.
+   */
+  it("keeps the drain thinner than the arc it sends a reviewer to instead", () => {
+    expect(thicknessOf("n")).toBeLessThan(thicknessOf("w"));
+    expect(thicknessOf("w")).toBeLessThan(thicknessOf("d"));
+  });
 });
