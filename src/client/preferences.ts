@@ -10,10 +10,11 @@
  * lesson over. The store applies the change locally regardless, so the display is never out of step
  * with the control the viewer just used.
  *
- * Known limit, filed as #84: two saves fired in quick succession can land out of order, leaving the
- * store holding the earlier value. Unfixed here deliberately — the remedy (a single-flight queue, a
- * per-key debounce, or both) needs `save` to report completion, and belongs with the first control
- * that can actually fire twice in a second (#47's duration field).
+ * Those writes are **single-flight** (#84). Two `google.script.run` calls are independent
+ * executions and Apps Script promises nothing about the order they finish in, so firing both leaves
+ * the store holding whichever landed last — and a reload then silently reverts what the viewer set.
+ * At most one save is in flight; changes made meanwhile are held, coalesced per key, and sent when
+ * it settles. Ordering is total because there is only ever one writer.
  */
 import {
   type Preferences,
@@ -35,8 +36,16 @@ export interface PreferenceStoreOptions {
    * normal case in the local preview, where no server ran at all.
    */
   wire?: string | null;
-  /** Persists a wire patch. Called and not awaited. */
-  save: (wire: string) => void;
+  /**
+   * Persists a wire patch, and reports when the write is over.
+   *
+   * The return value is what makes the queue possible, so it is required rather than optional: a
+   * `save` that reported nothing would silently restore the racing behaviour #84 describes, and a
+   * required return type is the only thing that catches that at build time. Resolve or reject as
+   * the write did — the store treats both as "over" and drains regardless, so a rejected save
+   * costs its own value and not the ones behind it.
+   */
+  save: (wire: string) => PromiseLike<unknown>;
 }
 
 /**
@@ -54,6 +63,47 @@ export function readPreferenceWire(mount: Element | null | undefined): string | 
 export function preferenceStore({ wire, save }: PreferenceStoreOptions): PreferenceStore {
   let values = decodePreferences(wire);
 
+  /** Whether a save is with the server. The queue's only state that is not the queue. */
+  let saving = false;
+
+  /**
+   * Changes made while a save was in flight, merged so a later value for a key replaces an earlier
+   * one — the superseded value is dropped rather than queued behind its own replacement. A burst of
+   * taps therefore costs two writes however long it is: the one already going, and one carrying
+   * wherever the control ended up.
+   */
+  let queued: Partial<Preferences> = {};
+
+  function send(patch: Partial<Preferences>): void {
+    saving = true;
+
+    let sent: PromiseLike<unknown>;
+    try {
+      sent = save(encodePreferences(patch));
+    } catch {
+      // A `save` that throws rather than rejecting has still finished, and the queue has to keep
+      // moving: wedging here would cost every later preference, not just this one.
+      drain();
+      return;
+    }
+    sent.then(drain, drain);
+  }
+
+  /**
+   * Send whatever accumulated while the last save was out, if anything.
+   *
+   * A failed patch is *not* folded into the next send. The server rejects a write for a reason it
+   * will reject the retry for too — quota, or a value the schema refused — and this store's
+   * documented stance is that a lost save costs the next reload's memory of a setting rather than
+   * interrupting a lesson.
+   */
+  function drain(): void {
+    saving = false;
+    const pending = queued;
+    queued = {};
+    if (Object.keys(pending).length > 0) send(pending);
+  }
+
   return {
     get: () => ({ ...values }),
 
@@ -65,7 +115,11 @@ export function preferenceStore({ wire, save }: PreferenceStoreOptions): Prefere
       if (Object.keys(accepted).length === 0) return;
 
       values = { ...values, ...accepted };
-      save(encodePreferences(accepted));
+
+      // Memory is updated either way, above: the screen shows the latest value from the moment it
+      // is set, and the queue only decides when the store is told.
+      if (saving) queued = { ...queued, ...accepted };
+      else send(accepted);
     }
   };
 }
