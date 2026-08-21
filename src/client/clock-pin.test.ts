@@ -146,6 +146,46 @@ describe("what the anchor leaves on the dial", () => {
   });
 
   /**
+   * The claim README's first pin-table row makes, and the one #150 overstated (#153): `?now=03:00`
+   * reproduces the *unpinned* dial's arcs and their states, at any time of day. Worth asserting
+   * because the row is what sends a reviewer to that pin instead of an unpinned look.
+   *
+   * Ids and the state partition, not a count — a count would pass on two dials carrying the same
+   * number of different arcs, which is most of what a re-anchoring bug does. What this deliberately
+   * does *not* claim is that the two are the same picture: the dial rotates with the wall clock, so
+   * the floating-label set differs between them and drifts unpinned. That is README's job to say and
+   * no assertion's to fix.
+   */
+  it("reproduces the unpinned arcs and their states at the 03:00 pin", () => {
+    const partition = (query: string, at: Date) => {
+      const pin = readClockPin(dial(), query, at);
+      const now = pin ? pin.origin : at;
+      const view = dialWindow(now, dialScale("12h"));
+      const drawn = filterEventsForPeriod(
+        recurringSampleEvents(TWELVE_HOUR_FIXTURE, fixtureAnchor(pin, now), view),
+        view.windowStart,
+        view.windowEnd
+      );
+
+      return {
+        ids: drawn.map((event) => event.id).sort(),
+        elapsed: drawn.filter((event) => new Date(event.endDate) <= now).length,
+        running: drawn.filter(
+          (event) => new Date(event.startDate) <= now && now < new Date(event.endDate)
+        ).length
+      };
+    };
+
+    for (const hour of [1, 9, 14, 18, 22]) {
+      const at = new Date(2026, 7, 18, hour, 37);
+
+      expect(partition("", at), `unpinned at ${hour}:37`).toEqual(
+        partition("?now=03:00&freeze=1", at)
+      );
+    }
+  });
+
+  /**
    * Derived, not literal: the property is that the filter drops *nothing*, so growing the fixture
    * must not read as a regression. The pinned counts below stay literal — those are facts about
    * the span the fixture covers, which nothing can derive honestly.

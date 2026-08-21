@@ -7,6 +7,7 @@ import {
   TWELVE_HOUR_SCALE,
   angleForTime,
   assignRings,
+  computeDrainFraction,
   dialOrigin,
   dialWindow,
   eventsToClockEvents,
@@ -183,24 +184,47 @@ describe("recurringSampleEvents", () => {
   /**
    * The guard #76 was missing, and the reason it went unnoticed for three days: the *1-hour*
    * fixture has this assertion, written citing #76, and the 12-hour fixture — the one the default
-   * preview draws — has none. So the drain being in the default picture rested on one source
-   * comment, and moving `"n"`'s end back fourteen minutes would take it out again and pass every
-   * other spec in this repo. That is the mechanism by which #71's masks drained nothing through
-   * both #28 and #27.
+   * preview draws — had none. So the drain being in the default picture rested on one source
+   * comment, and moving `"n"`'s end back fourteen minutes takes it out again. That is the mechanism
+   * by which #71's masks drained nothing through both #28 and #27.
    *
-   * `hasEventInProgress` rather than a local predicate, because `analog-clock.ts` decides whether
-   * to draw a drain with exactly that function — a copy of it here could keep agreeing with this
-   * test after the renderer's own rule had moved.
+   * **Asserted through `computeDrainFraction`, which is what actually decides a drain.** #150 used
+   * `hasEventInProgress` and justified it as "the function the renderer draws a drain with"; that
+   * was wrong (`analog-clock.ts` uses it for the rebuild *cadence*), and the two disagree on
+   * exactly the boundary this fixture keeps landing on — `hasEventInProgress` is inclusive at the
+   * start, `computeDrainFraction` is strict. An event beginning exactly at `now` satisfies the
+   * former and draws no drain, so the weaker assertion is green in the one state its own title
+   * rules out (#153). Both are checked here: the cadence must keep ticking *and* something must
+   * actually drain.
    *
-   * Measured on the fixture as it stands: 16 arcs at load, 5 elapsed, 1 in progress.
+   * Measured on the fixture as it stands, at load: 16 arcs drawn, 5 elapsed, 1 draining.
    */
-  it("has an arc in progress at load, so an unpinned look sees a drain", () => {
+  it("has an arc draining at load, so an unpinned look sees one", () => {
     const view = windowAtPhase(0);
     const now = new Date(ANCHOR.getTime() + 180 * MINUTE_MS);
     const drawn = inWindow(recurringSampleEvents(TWELVE_HOUR_FIXTURE, ANCHOR, view), view);
 
+    // Angles rather than timestamps, because that is what the renderer feeds the drain: an event
+    // clamped to the window's edge has a true angle the raw times do not show.
+    const origin = dialOrigin(view.windowStart, TWELVE_HOUR_SCALE);
+    const resolved = eventsToClockEvents(
+      drawn,
+      origin,
+      view.windowStart,
+      view.windowEnd,
+      TWELVE_HOUR_SCALE.periodMinutes
+    );
+    const nowAngle = angleForTime(now, origin, TWELVE_HOUR_SCALE.periodMinutes);
+    const draining = resolved.filter(
+      (event) =>
+        computeDrainFraction(event.trueStartAngle, event.trueEndAngle, nowAngle) !== undefined
+    );
+
+    expect(draining.map((event) => event.id)).toHaveLength(1);
+    expect(drawn).toHaveLength(16);
+    expect(drawn.filter((event) => new Date(event.endDate) <= now)).toHaveLength(5);
+    // The rebuild cadence has to agree, or the drain is drawn once and then never moves (#28).
     expect(hasEventInProgress(drawn, now)).toBe(true);
-    expect(drawn.filter((event) => new Date(event.endDate) <= now)).not.toHaveLength(0);
   });
 
   /**
@@ -212,9 +236,15 @@ describe("recurringSampleEvents", () => {
    * at 2,238 of them, something elapsed at all 2,535, never fewer than 10 arcs drawn. The longest
    * stretch with nothing in progress is **55 minutes**, and that is the fixture's own deliberate
    * empty span between `"d" 🟡 🍽️ Lunch` and `"j" 🔵 Yoga` — the case the window-track exists to
-   * tell apart from the gap. So the bound is derived from that span rather than chosen: closing the
-   * gap would be a fixture change, and widening it past an hour would take the drain out of view
-   * for longer than a lesson.
+   * tell apart from the gap.
+   *
+   * **What this bounds, honestly** (#153). Both sides of the gap assertion measure the same spans,
+   * so widening the fixture's empty stretch raises the bound in lockstep — unlike
+   * `AUTHORED_CLUSTER_DEPTH`, which compares a tiled measurement against a single-copy one. What
+   * bites here is a *seam* opening a gap the fixture itself does not have, or
+   * `filterEventsForPeriod` starting to drop an event that spans `now`. It is not a second guard on
+   * the load state: the spec above is, and this one passes with `"n"` shortened, because `"b"`
+   * already covers most of `"n"`'s span in each copy.
    */
   it("keeps an arc in progress reachable across the tiling, not just at load", () => {
     const running = (phase: number) => {

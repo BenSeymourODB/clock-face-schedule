@@ -65,12 +65,22 @@ code.** Rendering is what breaks the tie.
 **A state that depends on the time is not a state you have to wait for.** `?now=04:15&freeze=1`
 pins the dial's clock, on the preview and the deployed app alike; README has the parameters and a
 table of which times show which fixture states. The fixture is anchored to the window's own start,
-so every event's offset from `now` is a constant and the unpinned picture is the same at any time of
-day — which cuts both ways. It does carry one draining arc (🟡 Tidy Up and Line Up, added with #71's
-fix), so an unpinned look is no longer blind to the drain the way it was when a drain that never
-drained shipped through two releases. But that arc is inside the four-deep cluster, drawn on a
-15.56-unit ring against a lone arc's 75.92, so anything about a drain's *own* geometry wants
-`?now=04:15` where one is drawn clear of the cluster.
+so every event's offset from `now` is a constant: the arc set and every arc's *state* are the same at
+any time of day. It does carry one draining arc (🟡 Tidy Up and Line Up, added with #71's fix), so an
+unpinned look is no longer blind to the drain the way it was when a drain that never drained shipped
+through two releases. But that arc is inside the four-deep cluster, drawn on a 15.56-unit ring
+against a lone arc's 75.92, so anything about a drain's *own* geometry wants `?now=04:15` where one
+is drawn clear of the cluster.
+
+**The states are invariant; the picture is not, and conflating the two cost a review** (#153). The
+angle origin is the period's start, so the dial rotates continuously and title overflow follows
+angular position — the frame is tightest at 3 and 9. Measured across pins, the fixture draws five
+floating labels at `?now=03:00`, four at `04:15`, three at `08:30`, and **unpinned the set drifts
+minute to minute as the dial turns.** So an unpinned screenshot of a card collision is not
+reproducible, including by you: judge label placement and crowding on a pinned dial and name the pin.
+And for about the first second of an unpinned load the dial draws **two** drains rather than one
+(#152) — 🔴 Deadline ends exactly on the anchor boundary — so a screenshot taken inside that second
+shows a seam that is not there afterwards.
 
 **Every preview dial is one line of text smaller than the board's** (#115). The dial is sized from
 the display now, so a notice no longer changes its *width* — but it is still a grid row, and demo
@@ -99,9 +109,11 @@ targeted assertion capturing the specific property that was wrong.
 contains a four-deep cluster — as many rings as `maxRings` opens — carrying a two-line title on its
 innermost ring and one-line titles beside it, an isolated arc beside the cluster, a ten-minute event
 held open by the minimum span, an overflowing title, a two-line title carrying an emoji, an event
-crossing each end of the period, and a `⚫` event whose colour measures **1.21:1** on the dial
-background. Add to it when your change has a stress case none of those covers; do not quietly make
-it easier.
+crossing each end of the period, an event **straddling `now`** so the drain is in the *default*
+picture rather than a state a reviewer has to know to ask for (#71/#76 — this is the one whose
+absence let masks that drained nothing ship through two releases), and a `⚫` event whose colour
+measures **1.21:1** on the dial background. Add to it when your change has a stress case none of
+those covers; do not quietly make it easier.
 
 A demo mode that ships to production was a deliberate call: legibility has to be judged on the smart
 board, and waiting for someone's real day to contain a useful overlap is not a plan.
