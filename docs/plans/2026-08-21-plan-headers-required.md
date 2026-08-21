@@ -1,6 +1,6 @@
 # All three plan headers, required rather than customary
 
-**Status:** in progress — outstanding as [#126](https://github.com/BenSeymourODB/clock-face-schedule/issues/126)
+**Status:** done — shipped in [#159](https://github.com/BenSeymourODB/clock-face-schedule/pull/159)
 **Issue:** [#126](https://github.com/BenSeymourODB/clock-face-schedule/issues/126)
 **Docs:** [`2026-08-21-plan-status-guard.md`](2026-08-21-plan-status-guard.md) (the `**Status:**` half,
 and the parser this extends), #111 / #124 (why the vocabulary is checked at all), #103 / #104 (prose
