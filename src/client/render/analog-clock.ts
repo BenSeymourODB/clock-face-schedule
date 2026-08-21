@@ -5,7 +5,6 @@
 import {
   type ClockEventInput,
   type DialScaleId,
-  type Rect,
   angleForTime,
   assignRings,
   calculateTrueArcAngles,
@@ -14,14 +13,13 @@ import {
   dialOrigin,
   dialScale,
   dialWindow,
-  displaceVertically,
   elapsedEventIds,
   eventsToClockEvents,
   filterEventsForPeriod,
   formatEventDuration,
   hasEventInProgress,
   labelVerticalBand,
-  rectsOverlap,
+  planOptionalLines,
   roundCoord,
 } from "../../shared/clock";
 import { svg } from "../svg";
@@ -344,52 +342,40 @@ export function analogClock({
     // Clockwise, so labels stack down the page in the order a reader scans the dial.
     overflowing.sort((a, b) => a.startAngle - b.startAngle);
 
-    // #35's duration line makes a card 40% taller, and cards have no collision avoidance (#30):
-    // measured on the fixture, two cards 9.5 units apart became a 15-unit overlap, which hides a
+    // #35's duration line makes a card 40% taller, and two cards that land on each other hide a
     // title that is on a card *because* it did not fit its arc. So the duration is treated as what
-    // it is — optional — and dropped wherever keeping it would put one card over another.
+    // it is — optional — and the two things that decide a card's shape and its place are settled
+    // together (#136): a line is offered, the whole dial is re-displaced (#30 item 2), and the
+    // offer stands only if it left no pair of cards burying more of each other, and no card
+    // further outside the clamp band, than before it was made.
     //
-    // Each card is compared against every *other* card, not only the ones already decided. A card
-    // grows about its own centre, so it reaches into the gap above it as well as below: it was the
-    // *earlier* card growing upward that still overlapped its neighbour when only the later one
-    // yielded. Undecided neighbours are compared at their title-only size, which is what they will
-    // be at worst, so accepting a duration here can never force one on anybody else.
-    //
-    // This is not #30's fix and deliberately not a step toward one: nothing is moved, no card is
-    // dropped, and two cards that overlap without any duration line still overlap. It only declines
-    // to make the existing crowding worse.
+    // Deciding them in sequence was what #136 measured: the duration pass compared against
+    // *un-displaced* rects, so three of five cards at `?now=11:00&freeze=1` gave up their line to
+    // avoid a collision displacement then resolved anyway — the dial spending event information for
+    // nothing. `planOptionalLines` owns the loop; the two sizes it chooses between are laid out here
+    // because only this function knows the text.
     const titleOnly: FloatingLabelParams[] = overflowing.map(({ params }) => ({
       ...params,
       duration: undefined,
     }));
-    const chosen = [...titleOnly];
-    const rects: Rect[] = titleOnly.map((params) => floatingLabelGeometry(params).rect);
 
-    overflowing.forEach(({ params }, index) => {
-      if (params.duration === undefined) return;
-      const grown = floatingLabelGeometry(params).rect;
-      if (rects.some((rect, other) => other !== index && rectsOverlap(rect, grown))) return;
-
-      chosen[index] = params;
-      rects[index] = grown;
-    });
-
-    // #30 item 2: cards that still overlap after the duration decision are moved apart vertically.
-    // Measured before this landed, the fixture at `?now=11:00&freeze=1` piled three cards up with
-    // 29.47 and 9.83 units of overlap — having already declined three duration lines above trying to
-    // avoid it, so the dial was spending event information *and* getting the collision anyway.
-    //
-    // Runs on the rects the duration pass settled on, and only ever moves a card away from the
-    // dial's horizontal centre line, which is what keeps `faceClearanceLimit` — monotone in that
-    // distance — valid without re-deriving the width each card was wrapped to.
-    const nudges = displaceVertically(rects, cy, labelVerticalBand(clockBox));
+    const { accepted, nudges } = planOptionalLines(
+      overflowing.map(({ params }, index) => ({
+        base: floatingLabelGeometry(titleOnly[index]).rect,
+        grown:
+          params.duration === undefined ? null : floatingLabelGeometry(params).rect,
+      })),
+      cy,
+      labelVerticalBand(clockBox)
+    );
 
     labelsLayer.append(
-      ...chosen.map((params, index) =>
-        floatingLabel(
-          nudges[index] === 0 ? params : { ...params, verticalNudge: nudges[index] }
-        )
-      )
+      ...overflowing.map(({ params }, index) => {
+        const chosen = accepted[index] ? params : titleOnly[index];
+        return floatingLabel(
+          nudges[index] === 0 ? chosen : { ...chosen, verticalNudge: nudges[index] }
+        );
+      })
     );
 
     renderedMinute = minuteKey(currentTime);
