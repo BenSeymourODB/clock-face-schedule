@@ -249,6 +249,14 @@ function feathersToSpans(feathers: ArcFeathers): NamedSpan[] {
  * already pads past it to swallow the stroke, and a solid overrunning the boundary would blacken
  * the first fraction of a degree the ramp is supposed to own.
  *
+ * **Paint order between two ramps is not load-bearing** (#58). A mask's children composite
+ * source-over before the result is read as luminance, so black at alpha `a` over a ground of
+ * luminance `L` leaves `L × (1 − a)` — two overlapping ramps multiply their transmittances rather
+ * than the later one replacing the earlier. Measured in Chromium at 0.5/0.5, where an overwrite
+ * would read 127 and a multiply 64: it reads **64**. A feather and a drain ramp on one mask never
+ * do overlap (a spec in `event-arc.test.ts` pins the clearance, which is scale-dependent), but a
+ * later reader will ask, and this is the answer rather than the reasoning.
+ *
  * Every region is painted onto a wedge rather than the whole box, so that neither `pad` spread nor
  * a rect can reach the far side of an arc that curves back around past 180°.
  */
