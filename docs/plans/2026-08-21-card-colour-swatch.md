@@ -1,4 +1,4 @@
-**Status:** in progress — the swatch is built; the band coverage it moves is [#98](https://github.com/BenSeymourODB/clock-face-schedule/issues/98)'s
+**Status:** done — shipped in [#160](https://github.com/BenSeymourODB/clock-face-schedule/pull/160)
 **Issue:** [#118 — A light event's card carries no colour at all — ⚪ washes to its own field exactly
 (1.000:1) and its border reads 1.00 inside](https://github.com/BenSeymourODB/clock-face-schedule/issues/118)
 **Docs:** #30's decision comments (the swatch's 8-unit width and 4-unit gap, and the character cost
