@@ -1,6 +1,6 @@
 # Unsetting a preference, so the deployment's own defaults stay reachable
 
-**Status:** in progress — [#83](https://github.com/BenSeymourODB/clock-face-schedule/issues/83)
+**Status:** done — shipped in [#158](https://github.com/BenSeymourODB/clock-face-schedule/pull/158)
 **Issue:** [#83 — A preference can be set but never unset, so the script-store layer is one-way
 losable](https://github.com/BenSeymourODB/clock-face-schedule/issues/83)
 **Docs:** #31 / #82 (the store this extends), #84 (the single-flight queue a reset has to join),
@@ -91,7 +91,7 @@ operating under time pressure. `savePreferences`'s echo stays discarded — afte
 already knows the answer, because the user layer it just wrote is the one that wins.
 
 The flicker-free version needs `doGet` to template the deployment-resolved wire alongside the
-resolved one, so the client knows the lower layers. Out of scope here and filed separately.
+resolved one, so the client knows the lower layers. Out of scope here and filed as #157.
 
 Adoption is **per key and only where untouched**: for each key the reset named, take the echoed
 value unless a later `set` or `reset` is queued against it. Single-flight (#84) means only one write
@@ -120,7 +120,9 @@ sends them in cannot matter, which is why it may simply send whichever is non-em
 
 ## Not built here
 
-- **Templating the deployment-resolved wire** so a reset applies locally with no round trip.
+- **Templating the deployment-resolved wire** so a reset applies locally with no round trip —
+  [#157](https://github.com/BenSeymourODB/clock-face-schedule/issues/157), which writes out the
+  discriminating spec.
 - **A control that offers it.** #47 owns the surface; nothing in production calls `savePreferences`
   today either.
 - **`?check=1` stays read-only.** An earlier version wrote the resolved values back and pinned every
