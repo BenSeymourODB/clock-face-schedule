@@ -564,3 +564,65 @@ describe("resetting, against the write in flight", () => {
     expect(sent).toEqual(["showSeconds;timerMuted;timerDurationSeconds"]);
   });
 });
+
+/**
+ * The echo comes back over `google.script.run`, where `callServer<string>` is a cast and not a
+ * check. These are the cases where it does not keep that promise — and the cost of getting them
+ * wrong is not the echo, it is the queue: a throw inside a fulfilment handler shuts the single
+ * writer and every later preference with it.
+ */
+describe("resetting, with an echo the transport did not keep", () => {
+  const badEcho = (echo: unknown) => {
+    const sent: string[] = [];
+    const store = preferenceStore({
+      wire: "showSeconds=0",
+      save: (wire) => {
+        sent.push(wire);
+        return Promise.resolve();
+      },
+      reset: (keysWire) => {
+        sent.push(keysWire);
+        return Promise.resolve(echo as string);
+      }
+    });
+    return { sent, store };
+  };
+
+  it.each([
+    ["an object", { showSeconds: 1 }],
+    ["undefined", undefined],
+    ["a number", 1]
+  ])("keeps the queue moving when the echo is %s", async (_case, echo) => {
+    const { sent, store } = badEcho(echo);
+
+    store.reset(["showSeconds"]);
+    store.set({ timerMuted: true });
+    await flush();
+    await flush();
+
+    // Without the guard the first of these is all that is ever sent, and every preference set for
+    // the rest of the page's life is lost — a wall display is up for weeks.
+    expect(sent).toEqual(["showSeconds", "timerMuted=1"]);
+    expect(store.get().timerMuted).toBe(true);
+  });
+
+  it("adopts nothing from an echo that names nothing", async () => {
+    // Reading an empty wire as the resolved set would say "every preference is at its code default"
+    // — showSeconds back to `true` — which is precisely the guess the echo exists to avoid.
+    const { store } = badEcho("");
+
+    store.reset(["showSeconds"]);
+    await flush();
+
+    expect(store.get().showSeconds).toBe(false);
+  });
+
+  it("adopts nothing for a key the echo cannot state", async () => {
+    const { store } = badEcho("showSeconds=perhaps;timerMuted=1");
+
+    store.reset(["showSeconds", "timerMuted"]);
+    await flush();
+
+    expect(store.get()).toEqual({ ...defaultPreferences(), showSeconds: false, timerMuted: true });
+  });
+});

@@ -152,13 +152,27 @@ export function preferenceStore({ wire, save, reset }: PreferenceStoreOptions): 
    * write is ever out, so "queued" is exactly "touched since". Read before `drain` empties them.
    */
   function adopt(keys: readonly PreferenceKey[], resolved: string): void {
-    const stored = decodePreferences(resolved);
+    // `reset` is caller-supplied and its answer arrives over the bridge as a cast rather than a
+    // check, so the declared `string` is a promise the transport may not keep. A non-string throws
+    // out of `decodePreferencePatch` — and it would throw *inside a fulfilment handler*, where
+    // `sendKeys`'s own `catch` cannot see it, shutting the queue and costing every later preference
+    // rather than this echo. Which is the failure the synchronous case is already guarded against.
+    if (typeof resolved !== "string") return;
+
+    // A *patch* rather than the resolved set, so the echo only speaks for the keys it actually
+    // names. `decodePreferences` would read a wire that carries nothing — an empty answer from a
+    // bridge that did not really answer — as "every preference is at its code default", which is
+    // exactly the guess this whole path exists to avoid making.
+    const stored = decodePreferencePatch(resolved);
     const next = { ...values };
 
     for (const key of keys) {
       if (queuedValues[key] !== undefined || queuedKeys.indexOf(key) !== -1) continue;
+
+      const value = stored[key];
+      if (value === undefined) continue;
       // The registry is heterogeneous, so walking it needs one widening — confined to this line.
-      (next as { [key: string]: unknown })[key] = stored[key];
+      (next as { [key: string]: unknown })[key] = value;
     }
     values = next;
   }
