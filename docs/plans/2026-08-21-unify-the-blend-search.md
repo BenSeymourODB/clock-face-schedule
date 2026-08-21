@@ -100,8 +100,14 @@ regression guard on the wrapper.
    `event-arc.test.ts` already depends on — plus the existing palette-wide equivalence spec, which
    is now true by construction and pins that no second argument drifted.
 2. **The tie-break rule, at an `alpha` where a tie is reachable.** At `alpha` 0 both composites
-   *are* the ground, both ratios are exactly 1, and the target is `WHITE`. This is the only
-   reachable tie in the function and it is what the merged rule now says.
+   *are* the ground, both ratios are exactly 1, and the target is `WHITE` — where
+   `readableTextColor` on the same ground answers `BLACK`. Low `alpha` is the only place a tie was
+   found: over **2.26M `(ground, alpha)` pairs** — the 256 greys plus 2,000 random grounds, each at
+   1,001 alphas — every exact tie is one where both composites round back to the ground, and the
+   highest is at `alpha` **0.003**. No tie of any other kind appeared, which is why the docstring
+   says "very nearly unreachable" rather than "unreachable": a sweep this size is strong evidence
+   and not a proof, and the exact-float coincidence it would take is not one worth ruling out by
+   construction.
 3. **The tie is unreachable at `alpha` 1**, exhaustively over all 16,777,216 colours: zero ties,
    nearest `#cf0dcc`. The loop runs in ~0.1 s because each channel's luminance contribution is
    taken from `relativeLuminance` once, over 768 calls, and summed in the module's own order — so

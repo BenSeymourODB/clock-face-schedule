@@ -436,10 +436,14 @@ describe("adjustCompositeForContrast", () => {
   });
 
   it("gives a tie to white, where readableTextColor gives it to black (#97)", () => {
-    // The one rule the two blend searches disagreed on before they were merged, pinned at the one
-    // alpha that can reach it: at 0 both extremes composite back to the ground, so both reach
+    // The one rule the two blend searches disagreed on before they were merged, pinned at an alpha
+    // low enough to reach it: at 0 both extremes composite back to the ground, so both reach
     // exactly 1:1 and the comparison is a genuine tie. On a white ground the disagreement is
     // visible — the painted rule answers white, `readableTextColor` answers black.
+    //
+    // Low alpha is the only place a tie was found: over 2.26M `(ground, alpha)` pairs every exact
+    // tie is one where both composites round back to the ground, the highest at alpha 0.003. At
+    // this function's own alpha of 1 no ground reaches a tie at all, which the sweep above shows.
     expect(compositeOver("#ffffff", WHITE, 0)).toBe("#ffffff");
     expect(compositeOver("#ffffff", BLACK, 0)).toBe("#ffffff");
     expect(contrastRatio("#ffffff", "#ffffff")).toBe(1);

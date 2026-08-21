@@ -173,10 +173,10 @@ export function adjustForContrast(
  * flooring the *authored* ⚫ at 3:1 gives `#58606a`, which paints at 2.52:1 — still short.
  *
  * Callers pass the graphical-object floor (3:1) rather than the `DEFAULT_MIN_CONTRAST` text floor.
- * That is not a relaxation for its own sake: `readableTextColor`'s black/white
- * crossover for ⚫ sits at a floor of 3.34:1, so 3:1 is the largest round floor that raises every
- * palette fill without flipping any title that sits on one — which is the difference between a
- * one-attribute change and a redesign of the filled state.
+ * That is not a relaxation for its own sake: `readableTextColor`'s black/white crossover for ⚫ sits
+ * at a floor of 3.34:1, so 3:1 is the largest round floor that raises every palette fill without
+ * flipping any title that sits on one — which is the difference between a one-attribute change and
+ * a redesign of the filled state.
  *
  * Blends toward the ground's far extreme by the smallest fraction that clears the ratio. Mixing
  * toward a neutral keeps HSL hue exactly while raising lightness and shedding saturation — the
@@ -205,9 +205,10 @@ export function adjustForContrast(
  *   substitution still missed a reachable floor 122 times; comparing the two *painted* misses none.
  *
  * So the target is whichever extreme reaches further **once painted at this alpha**, which is the
- * only version of the question the caller actually has. On a tie it is white — reachable only at an
- * `alpha` so low that both composites round back to the ground, where the two are equally correct by
- * construction.
+ * only version of the question the caller actually has. On a tie it is white, and a tie is very
+ * nearly unreachable: swept over 2.26M `(ground, alpha)` pairs, every exact tie is one where `alpha`
+ * is low enough that *both* composites round back to the ground — the highest at **0.003** — and
+ * there both answers reach 1:1 and are equally correct. No tie of any other kind appeared.
  */
 export function adjustCompositeForContrast(
   color: string,
