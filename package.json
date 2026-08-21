@@ -12,6 +12,7 @@
     "build": "node scripts/build.mjs",
     "build:watch": "node scripts/build.mjs --watch",
     "check-types": "tsc -p tsconfig.server.json --noEmit && tsc -p tsconfig.client.json --noEmit",
+    "check-plans": "node scripts/check-plans.mjs",
     "test": "vitest run",
     "test:watch": "vitest",
     "push": "npm run build && clasp push --force",

@@ -1,6 +1,6 @@
 # The feather/drain overlap, measured twice and found unreachable both ways
 
-**Status:** in review
+**Status:** done — shipped in [#137](https://github.com/BenSeymourODB/clock-face-schedule/pull/137)
 **Issue:** [#58](https://github.com/BenSeymourODB/clock-face-schedule/issues/58)
 **Docs:** `src/shared/clock/feather.ts`, `src/shared/clock/drain.ts`, `src/client/render/event-arc.ts`
 

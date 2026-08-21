@@ -1,4 +1,4 @@
-**Status:** in review
+**Status:** done — shipped in [#119](https://github.com/BenSeymourODB/clock-face-schedule/pull/119)
 **Issue:** [#93 — A floating label's connector is 1.15:1 on the page for ⚫, so the line tying a card
 to its arc is not there](https://github.com/BenSeymourODB/clock-face-schedule/issues/93)
 **Docs:** #66 (the same floor on a filled arc's body, and where `adjustCompositeForContrast` comes

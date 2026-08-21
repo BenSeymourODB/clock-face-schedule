@@ -1,6 +1,6 @@
 # One writer at a time, so a preference cannot revert itself
 
-**Status:** in review
+**Status:** done — shipped in [#123](https://github.com/BenSeymourODB/clock-face-schedule/pull/123)
 **Issue:** [#84 — Two quick preference saves can land out of order, leaving the store disagreeing
 with the screen](https://github.com/BenSeymourODB/clock-face-schedule/issues/84)
 **Docs:** #31 / #82 (the preference store this builds on), #47 (the control that will fire the

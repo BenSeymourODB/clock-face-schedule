@@ -1,6 +1,6 @@
 # A seam the fixture refresh can be tested through, and the frozen-clock assertion
 
-**Status:** in progress — outstanding as [#128](https://github.com/BenSeymourODB/clock-face-schedule/pull/128)
+**Status:** done — shipped in [#128](https://github.com/BenSeymourODB/clock-face-schedule/pull/128)
 **Issue:** [#80](https://github.com/BenSeymourODB/clock-face-schedule/issues/80)
 **Docs:** [../DESIGN.md](../DESIGN.md) (ADR 0005, browser-local time), `src/shared/clock/time-source.ts`
 (#72's one seam), `src/client/sample-events.ts` (#62's recurrence)
