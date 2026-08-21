@@ -17,12 +17,24 @@ import {
   polarToCartesian,
 } from "../../shared/clock";
 import { ARC_BAND_RATIO, RING_GAP_MIN, RING_GAP_RATIO } from "./analog-clock";
-import { BAND_BACKGROUND, arcFillColor, eventArc } from "./event-arc";
+import { BAND_BACKGROUND, arcEdgeStrokeWidth, arcFillColor, eventArc } from "./event-arc";
 
 const CX = 300;
 const CY = 300;
 const INNER = 244;
 const OUTER = 292;
+
+/**
+ * How far every mask wedge — and the mask's own region — reaches past the arc's edges: the width of
+ * the widest stroke the arc draws, which is the elapsed outline and not the separator (#114).
+ *
+ * Derived, because a written-down copy of it is what let the outline escape. The full width rather
+ * than the half a straddling stroke needs: rendering at 8× showed half still leaking an antialiased
+ * step of the outline at the wedge's own edge. The pad is uniform across masks rather than per-arc,
+ * so a live arc that draws no outline is padded for one anyway — the cost is a fraction of a degree
+ * of extra ramp, and the alternative is two geometries.
+ */
+const MASK_PAD = arcEdgeStrokeWidth(OUTER - INNER, OUTER - INNER);
 
 function makeEvent(overrides: Partial<ClockEvent> = {}): ClockEvent {
   const startAngle = overrides.startAngle ?? 0;
@@ -827,16 +839,19 @@ describe("eventArc at a period boundary", () => {
     expect(angleOf(at("x2"), at("y2"))).toBeCloseTo(FEATHER_DEGREES, 4);
   });
 
-  it("covers the separator stroke, which would otherwise cap the boundary with a crisp line", () => {
+  it("covers the widest stroke, which would otherwise cap the boundary with a crisp line", () => {
     const [wedge] = fade({ startAngle: 0, endAngle: 60, continuesBefore: true }).wedges;
     const d = wedge.getAttribute("d") ?? "";
     // `matchAll` would be tidier, but the target is ES2019.
     const radii = d.split("A ").slice(1).map(parseFloat);
 
     // The stroke straddles the path by half its width in every direction — radially…
-    expect(radii).toEqual([OUTER + SEPARATOR, INNER - SEPARATOR]);
-    // …and angularly, past the boundary, where a bare wedge would leave a hairline behind.
-    const padDegrees = (SEPARATOR / OUTER) * (180 / Math.PI);
+    expect(radii).toEqual([OUTER + MASK_PAD, INNER - MASK_PAD]);
+    // …and angularly, past the boundary, where a bare wedge would leave a hairline behind. The
+    // separator this once asserted is the narrower of the two strokes, so a pad sized to it left
+    // the elapsed outline outside every wedge (#114).
+    expect(MASK_PAD).toBeGreaterThan(SEPARATOR);
+    const padDegrees = (MASK_PAD / OUTER) * (180 / Math.PI);
     expect(wedgeSpan(d)).toBeCloseTo(FEATHER_DEGREES + padDegrees, 3);
   });
 
@@ -1322,9 +1337,10 @@ describe("eventArc while the event is draining", () => {
    * left 65–83% of the spent side at full fill; these pin the occluding region that fixes it.
    */
   describe("what the masks actually hide", () => {
-    // (OUTER − INNER) × ARC_SEPARATOR_RATIO, as an angle at the outer radius: how far every wedge
-    // reaches past its far edge to swallow the stroke straddling the path there.
-    const PAD_DEGREES = (1.44 / OUTER) * (180 / Math.PI);
+    // `MASK_PAD` as an angle at the outer radius: how far every wedge reaches past its far edge to
+    // swallow the stroke straddling the path there. This was the separator's 1.44 against an
+    // outline of 3.36 that overshot it by 0.24, and nine assertions here called that correct.
+    const PAD_DEGREES = (MASK_PAD / OUTER) * (180 / Math.PI);
 
     /** Angle of a point, in the dial's 0°-at-twelve convention. */
     function angleOf(x: number, y: number): number {
@@ -1356,7 +1372,7 @@ describe("eventArc while the event is draining", () => {
     }
 
     /** The padded radii every wedge is drawn at, so a mis-sized occlusion cannot pass. */
-    const WEDGE_RADII = [OUTER + 1.44, INNER - 1.44];
+    const WEDGE_RADII = [OUTER + MASK_PAD, INNER - MASK_PAD];
 
     function occlusion(group: SVGGElement, maskId: string): Element | null {
       return group.querySelector(`mask#${maskId} [data-mask-part="occlusion"]`);
@@ -1449,6 +1465,66 @@ describe("eventArc while the event is draining", () => {
 
       expect(wedgeEdges(occlusion(group, "arc-drain-e1")).largeArc).toBe(1);
       expect(wedgeEdges(occlusion(group, "arc-fade-e1")).largeArc).toBe(0);
+    });
+
+    // Ring 48 against a band of 48 / 96 / 192 — a lone arc, then two- and four-deep stacking, which
+    // is where the two quantities diverge: the separator is sized from the ring and the outline from
+    // the band, so the deeper the stack the further the outline reaches past a ring-sized pad. On
+    // the fixture's four-deep cluster the escaped hairline measured 1.66 units, wider than the
+    // whole separator beside it.
+    it.each([48, 96, 192])(
+      "swallows the widest stroke the arc draws, on a band of %i",
+      (bandThickness) => {
+        const group = eventArc({
+          event: makeEvent({ startAngle: 0, endAngle: 60 }),
+          cx: CX,
+          cy: CY,
+          innerRadius: INNER,
+          outerRadius: OUTER,
+          bandThickness,
+          nowAngle: 15,
+        });
+
+        // Read off the rendered attributes, so the pad cannot drift from the stroke it has to
+        // swallow — recomputing the width here is how the old assertion agreed with the old bug.
+        const outline = Number(
+          group.querySelector('[data-arc-part="outline"]')?.getAttribute("stroke-width")
+        );
+        const separator = Number(
+          group.querySelector('[data-arc-part="separator"]')?.getAttribute("stroke-width")
+        );
+        const { radii } = wedgeEdges(occlusion(group, "arc-drain-e1"));
+
+        // The premise the spec's own MASK_PAD rests on: the outline is the wider of the two, always.
+        expect(outline).toBeGreaterThan(separator);
+        expect(radii[0]).toBeGreaterThanOrEqual(OUTER + outline / 2);
+        expect(radii[1]).toBeLessThanOrEqual(INNER - outline / 2);
+      }
+    );
+
+    it("keeps the mask's own region wide enough for the outline it must not clip", () => {
+      // The half of #114 a wedge-radius assertion cannot see. Outside its region a mask has no
+      // value at all, so a region that stopped at the arc's own edge would clip the *legitimate*
+      // elapsed outline wherever the wedge now reaches past it — trading one hairline for a gap.
+      const group = eventArc({
+        event: makeEvent({ startAngle: 0, endAngle: 60 }),
+        cx: CX,
+        cy: CY,
+        innerRadius: INNER,
+        outerRadius: OUTER,
+        bandThickness: 192,
+        nowAngle: 15,
+      });
+      const outline = Number(
+        group.querySelector('[data-arc-part="outline"]')?.getAttribute("stroke-width")
+      );
+      const mask = group.querySelector("mask#arc-drain-e1");
+      const left = Number(mask?.getAttribute("x"));
+      const size = Number(mask?.getAttribute("width"));
+
+      // The region is a square, so its inscribed circle is what has to reach the outline's rim.
+      expect(CX - left).toBeGreaterThanOrEqual(OUTER + outline / 2);
+      expect(left + size - CX).toBeGreaterThanOrEqual(OUTER + outline / 2);
     });
 
     it("keeps the window feather on the spent mask too, when the arc is clamped as well", () => {

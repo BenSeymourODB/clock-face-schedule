@@ -205,7 +205,18 @@ interface FadeMaskGeometry {
   cy: number;
   innerRadius: number;
   outerRadius: number;
-  separatorWidth: number;
+  /**
+   * How far every wedge, and the mask's own region, reach past the arc's own edges — the width of
+   * the *widest* stroke drawn on it (#114). A stroke straddles its path by half its width, and the
+   * other half is measured slack: at exactly half, the mask's own antialiased edge still let a
+   * 0.08-unit step of the outline through.
+   *
+   * This was `separatorWidth`, which conflated the pad with one particular stroke. The separator is
+   * ring-sized and the elapsed outline band-sized (#67), so the outline escaped the wedge by up to
+   * 1.66 units on a four-deep ring — wider than the separator itself — and was painted at full
+   * strength on the side the occlusion exists to hide.
+   */
+  pad: number;
 }
 
 interface NamedSpan {
@@ -252,18 +263,21 @@ function feathersToSpans(feathers: ArcFeathers): NamedSpan[] {
 function buildFadeMask(
   maskId: string,
   spans: NamedSpan[],
-  { cx, cy, innerRadius, outerRadius, separatorWidth }: FadeMaskGeometry,
+  { cx, cy, innerRadius, outerRadius, pad }: FadeMaskGeometry,
   occlusions: OccludedSpan[] = []
 ): SVGMaskElement | undefined {
   if (spans.length === 0 && occlusions.length === 0) return undefined;
 
-  // The wedge has to swallow the stroke, which straddles the path by half its width in every
+  // The wedge has to swallow the widest stroke, which straddles the path by half its width in every
   // direction — including angularly, past the boundary.
-  const padDegrees = (separatorWidth / outerRadius) * (180 / Math.PI);
+  const padDegrees = (pad / outerRadius) * (180 / Math.PI);
+  // Grows with the wedges, and must: outside this region a mask has no value, so a region that
+  // stopped at the arc's own edge would clip the *legitimate* elapsed outline wherever a wedge now
+  // reaches past it.
   const box = {
-    x: roundCoord(cx - outerRadius - separatorWidth),
-    y: roundCoord(cy - outerRadius - separatorWidth),
-    size: roundCoord((outerRadius + separatorWidth) * 2),
+    x: roundCoord(cx - outerRadius - pad),
+    y: roundCoord(cy - outerRadius - pad),
+    size: roundCoord((outerRadius + pad) * 2),
   };
   // A linear gradient runs along a straight axis, and over ten degrees the chord it follows is
   // indistinguishable from the arc: a radial offset is perpendicular to that axis, so it projects
@@ -295,8 +309,8 @@ function buildFadeMask(
     describeArc(
       cx,
       cy,
-      outerRadius + separatorWidth,
-      Math.max(0, innerRadius - separatorWidth),
+      outerRadius + pad,
+      Math.max(0, innerRadius - pad),
       Math.min(fromAngle, toAngle),
       Math.max(fromAngle, toAngle)
     );
@@ -429,7 +443,18 @@ export function eventArc({
   const separatorWidth = roundCoord(
     Math.max(ARC_SEPARATOR_MIN, arcHeight * ARC_SEPARATOR_RATIO)
   );
-  const geometry: FadeMaskGeometry = { cx, cy, innerRadius, outerRadius, separatorWidth };
+  const band = bandThickness ?? arcHeight;
+  const edgeStrokeWidth = arcEdgeStrokeWidth(arcHeight, band);
+  // The widest stroke on the arc, whichever that is (#114). The outline is band-sized and the
+  // separator ring-sized, so on a stacked ring the outline is the wider by a factor of the depth —
+  // and it is the one that has to be swallowed, since it carries the elapsed colour.
+  //
+  // The whole width and not the half a straddling stroke geometrically needs, which is the slack the
+  // separator was padded by before this. Measured at 8× on 🟢 Aftercare's live side: half the width
+  // takes the escaped band from 0.28 units of full-strength colour down to a 0.08-unit antialiased
+  // step at the wedge's own edge, and the whole width leaves the ground clean.
+  const maskPad = roundCoord(Math.max(separatorWidth, edgeStrokeWidth));
+  const geometry: FadeMaskGeometry = { cx, cy, innerRadius, outerRadius, pad: maskPad };
   const featherSpans = feathersToSpans(computeArcFeathers(event));
 
   // A still-running event drains continuously (#28) rather than flipping straight from live to
@@ -482,8 +507,6 @@ export function eventArc({
   // the fill goes and the outline stays. Sharing one path, as this did, forces the two to move
   // together.
   const d = describeArc(cx, cy, outerRadius, innerRadius, startAngle, endAngle);
-  const band = bandThickness ?? arcHeight;
-  const edgeStrokeWidth = arcEdgeStrokeWidth(arcHeight, band);
 
   group.append(
     svg("path", {

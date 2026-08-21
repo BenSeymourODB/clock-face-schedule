@@ -199,11 +199,14 @@ Two consequences of that anchoring worth knowing before you pin something:
 
 - **`?freeze=1` on its own does not move the fixture.** It holds the real clock still, so the dial
   keeps the picture it already had. Only `?now=` re-anchors.
-- **A pinned time is useful in the morning, and empty by the evening.** The fixture spans 23:10 the
-  previous day to 13:15, against a window of `[now − 3h, now + 8h]`, so arcs drop away through the
-  afternoon: **16** arcs at 03:00, 11 at 06:00, 6 at 09:00, 3 at 12:00, and **none from 17:00**.
-  That is what the fixture covers, not a fault in the pin — `?now=19:00` correctly shows an empty
-  dial, because the fixture has nothing at seven in the evening.
+- **A displaced pin lands on a full dial at any hour, because the fixture recurs** (#62). The app
+  tiles copies of the fixture end to end, against a window of `[now − 3h, now + 8h]`, so a pin never
+  walks off it: the dial carries a full count at every hour: **16** arcs at 03:00, 12 at 06:00, 12
+  at 09:00, 13 at 12:00, 15 at 15:00, 16 at 17:00, 15 at 19:00, and 12 at 21:00. The counts are not
+  monotonic and never reach zero. The fixture spans 23:10 the previous day to 13:15, so a single
+  copy *would* drain away by evening — falling from 16 arcs at 03:00 to none from 17:00 — but the
+  next copy has already arrived, so `?now=19:00` shows fifteen arcs rather than the empty dial one
+  copy would leave.
 
 ### The manifest is the source of truth
 
