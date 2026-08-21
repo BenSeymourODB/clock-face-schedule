@@ -54,6 +54,29 @@
    * the dial, and the dial's width stops depending on how long the sentence is.
    */
   #display {
+    /*
+     * The frame the floating labels paint into, and the reason the dial is not the whole of the
+     * board's height. Cards sit outside the SVG box by design and reach at most 50.4 units past the
+     * 600-unit viewBox: horizontally that is `labelWidthLimit` holding a card's *edges* within
+     * `OVERFLOW_RATIO` (0.1) of the dial's 584-unit box, whose own edge is inset 8 units, so
+     * 58.4 − 8; vertically it is a four-line card on the label locus, 297.84 + 52.06 − 300 = 49.9,
+     * which no clamp enforces — the vertical clamp bounds a card's centre and never binds against
+     * that locus, so `dial-frame.test.ts` is what holds it.
+     *
+     * A frame of `A` per cent of the shorter viewport axis leaves `600A / (100 − 2A)` units beside
+     * a dial sized from what is left, so covering 50.4 takes 7.19%. 7.3 provides 51.3.
+     *
+     * The `2vmin` this replaces was never the constraint — a 600 px dial centred in a 1080 px page
+     * had 240 px of slack above it, and the slack is what the labels were using. Sizing the dial to
+     * the board takes the slack away, so the frame has to be stated.
+     *
+     * It is not free: at 1920×1080 this is a 922.3 px dial that never clips a card, against a
+     * 1036.8 px one that clips at twelve and six. A clipped card is the only copy of a title that
+     * did not fit its arc, so it wins. #121 is the cheaper way to get that height back, and #39 is
+     * where the number gets retuned if the allocation changes.
+     */
+    --label-frame: 7.3vmin;
+
     height: 100vh;
     display: grid;
     grid-template-columns: minmax(0, 1fr);
@@ -66,48 +89,24 @@
     grid-template-rows: minmax(0, 1fr) auto;
     align-items: center;
     justify-items: center;
-    /*
-     * The frame the floating labels paint into, and the reason the dial's height is not the whole
-     * of the board's. Cards sit outside the SVG box by design and `clampLabelPosition` bounds how
-     * far: a card's *edges* are held within `OVERFLOW_RATIO` (0.1) of the dial's 584-unit box,
-     * which past the 600-unit viewBox is 50.4 units on either axis, and a four-line card at twelve
-     * o'clock reaches 49.9 — so 50.4 covers every card the renderer can produce, on both axes.
-     * Solving `A = 50.4·V / (600 + 2 × 50.4)` for the frame that leaves exactly that beside a dial
-     * sized from what is left gives 7.19% of the shorter viewport axis. 7.3 provides 51.3 units —
-     * 0.9 of cushion, at a cost of 2.2 px of dial on a 1080-tall board.
-     *
-     * The `2vmin` this replaces was never the constraint — a 600 px dial centred in a 1080 px page
-     * had 240 px of slack above it, and the slack is what the labels were using. Sizing the dial to
-     * the board takes the slack away, so the frame has to be stated.
-     *
-     * It is not free: at 1920×1080 this is a 924.5 px dial that never clips a card against a
-     * 1036.8 px one that clips at twelve and six. A clipped card is the only copy of a title that
-     * did not fit its arc, so it wins — and this is the one number to retune if #39 allocates
-     * differently.
-     */
-    padding: 7.3vmin;
+    padding: var(--label-frame);
   }
 
   /*
    * ADR 0009: the dial keeps the board's full height, and is centred in the width that remains
-   * after the panel. This box is that remainder; the drawing inside it fits the shorter axis, so
-   * height binds on anything wider than it is tall — every 16:9 and 16:10 board — and width binds
-   * on a portrait or near-square one instead of the dial painting off the frame.
+   * after the panel. This box is that remainder — the whole column, since there is no panel yet —
+   * and the drawing inside it fits the shorter axis, so height binds on anything wider than it is
+   * tall (every 16:9 and 16:10 board) and width binds on a portrait or near-square one instead of
+   * the dial painting off the frame.
    *
-   * --panel-share is ADR 0009's 180-unit agenda panel (#36), which does not exist yet, expressed as
-   * a share *of the dial* rather than of the board: 180 units against the dial's 600 is 0.3, and
-   * `100% / 1.3` is then the width at which the two together exactly fill the board. A pixel length
-   * could not say that, because the panel's pixels are a function of the dial's size. Zero today,
-   * and #39 is the issue that gives it a number — reserving it now would change nothing at 16:9 or
-   * 16:10, where height binds either way, and would shrink the dial on a near-square display for a
-   * panel that is not there.
+   * ADR 0009's 180-unit panel (#36) is deliberately *not* reserved here by a width expression. The
+   * panel's pixels are a share of the dial (180 against 600) while the dial is sized from the
+   * height, so any reserve taken out of this box either mis-centres the drawing inside it or has to
+   * know a number CSS cannot see. #39 adds the panel as a second grid column instead: this column
+   * becomes the remainder, and being centred in it is then the same sentence as the ADR's.
    */
   #dial {
-    --panel-share: 0;
-    /* The remainder is one-sided, because the panel is: `start`, not a centred box with half the
-     * reserve either side. With the share at zero the two are the same thing. */
-    justify-self: start;
-    width: calc(100% / (1 + var(--panel-share)));
+    width: 100%;
     height: 100%;
   }
 
@@ -129,12 +128,12 @@
 
   #status {
     /*
-     * The dial's separation from the notice is this margin and not the grid's `gap`, so that
-     * `display: none` takes it away with the notice. A gap is charged between tracks whether or not
-     * the second one has anything in it, and 24 px of it is the difference between a healthy board
-     * showing the dial at 1036.8 px — ADR 0009's full height, to the pixel — and at 1012.8.
+     * The same frame the page leaves at its edges, for the same reason: the dial is flush against
+     * this row, and a card at six o'clock reaches as far past the viewBox as one at twelve. The
+     * grid's `gap` cannot do this job — it is charged between tracks whether or not the second holds
+     * anything, so a hidden notice would still cost the dial 51.3 units it does not need to give.
      */
-    margin: 1.5rem 0 0;
+    margin: var(--label-frame) 0 0;
     text-align: center;
     /* Read from a distance, but never competing with the dial. */
     font-size: clamp(1rem, 2.2vmin, 1.5rem);

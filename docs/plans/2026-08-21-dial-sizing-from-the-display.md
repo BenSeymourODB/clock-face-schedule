@@ -78,24 +78,21 @@ Five edits, all in `static/Styles.html`:
    tall as the column is wide, so the track grew to 1877 px on a 1080-tall board and the page
    scrolled. Measured, not reasoned about — the first attempt did exactly that.
 3. **The grid `gap` moves onto `#status` as a margin**, so `display: none` takes it away with the
-   notice. A gap is charged between tracks whether or not the second holds anything, and those 24 px
-   were the difference between a healthy board at ADR 0009's full height and 24 px short of it.
+   notice, and the margin is the label frame rather than 1.5rem — the dial is flush against that row
+   and a card at six o'clock reaches as far past the viewBox as one at twelve. A gap could not do
+   either job: it is charged between tracks whether or not the second holds anything.
 4. **`#dial` is sized from that row, and the drawing fits the box.** `#dial svg` takes both axes at
    100% and `preserveAspectRatio` (default `xMidYMid meet`) scales the square drawing to the shorter
    one and centres it on the other. That is "keep the board's height, centre in the remaining width"
    on any landscape board, and it clamps to the width on a portrait one, with no distortion either
    way and no dependence on the SVG's own attributes.
-5. **The panel's share is one custom property**, `--panel-share`, at `0` today:
-
-   ```css
-   #dial { width: calc(100% / (1 + var(--panel-share))); }
-   ```
-
-   ADR 0009's 180 units are a share of the *dial* (180/600 = 0.3), not a pixel width of the board —
-   the panel's pixels are a function of the dial's size — so `100% / 1.3` is the width at which dial
-   and panel exactly fill the board. #39 sets one number rather than re-deriving a rule. Zero today:
-   reserving it now would change nothing at 16:9 or 16:10, where height binds either way, and would
-   shrink the dial on a near-square display for a panel that does not exist.
+5. **ADR 0009's panel is left to #39 as a grid column**, and deliberately not reserved here by a
+   width expression. A `--panel-share` seam was built and then removed: the panel's pixels are a
+   share of the dial (180 against 600) while the dial is sized from the *height*, so a reserve taken
+   out of the dial's box either mis-centres the drawing inside it — measured 65 px out at share 0.3
+   on 1920×1080, with 130 px of dead space — or has to know a number CSS cannot see. A second grid
+   column has neither problem: this column becomes the remainder, and "centred in the width that
+   remains after the panel" is then the same sentence as the ADR's, with nothing to keep in step.
 
 ## The frame the labels need, which the change makes binding
 
@@ -143,11 +140,11 @@ the drawing rather than its box:
 
 | viewport | before | after (notice hidden) | after (notice up) |
 | --- | --- | --- | --- |
-| 1920×1080 | 600 (1.000 px/unit) | **922.3** (1.5372) | 862.7 (1.4378) |
-| 1280×800 | 600 | **683.2** (1.1387) | 632.8 |
-| 3840×2160 | 600 | **1844.7** (3.0744) | 1784.7 |
-| 1024×768 | 600 | **655.9** (1.0931) | 606.6 |
-| 1080×1920 | 600 | **922.3**, width-bound | 922.3 |
+| 1920×1080 | 600 (1.000 px/unit) | **922.3** (1.5372) | 807.9 (1.3465) |
+| 1280×800 | 600 | **683.2** (1.1387) | 598.4 |
+| 3840×2160 | 600 | **1844.7** (3.0744) | 1615.9 |
+| 1024×768 | 600 | **655.9** (1.0931) | 574.5 |
+| 1080×1920 | 600 | **922.3**, width-bound | 922.3, width-bound |
 
 Two properties that were the point, and hold in the table: the dial scales with the board, and the
 two "after" columns differ by the notice's *height* only — a short notice and a 1021.7 px one give
@@ -158,7 +155,8 @@ No card leaves the viewport in any of the five viewports × seven pinned states 
 ## What is deferred, and why
 
 - **The panel's 180 units** stay zero until #39 allocates them. The property is the seam.
-- **The dial still loses 6.5% of its height when a notice is up** (922.3 → 862.7 at 1920×1080).
+- **The dial still loses 12% of its height when a notice is up** (922.3 → 807.9 at 1920×1080): the
+  notice's own line, plus the label frame above it, plus the page's frame below it.
   Width is fully decoupled; height is not, because the notice is a grid sibling and a long one
   wraps. Reserving a fixed row for a notice that may be one line or two is a guess, and the
   alternative — taking the notice out of flow — puts it over the 6 o'clock arcs on a height-bound

@@ -44,9 +44,9 @@ function block(selector: string): string {
  * 600 units, and the frame beside it is `600p / (100 − 2p)` units wide.
  */
 function frameUnits(): number {
-  const percent = Number(/padding:\s*([\d.]+)vmin/.exec(block("#display"))?.[1] ?? NaN);
+  const percent = Number(/--label-frame:\s*([\d.]+)vmin/.exec(block("#display"))?.[1] ?? NaN);
 
-  expect(percent, "#display declares its padding as a share of the shorter axis").toBeGreaterThan(0);
+  expect(percent, "#display declares its frame as a share of the shorter axis").toBeGreaterThan(0);
   return (600 * percent) / (100 - 2 * percent);
 }
 
@@ -67,30 +67,53 @@ function event(id: string, startHour: number, durationHours: number): ClockEvent
   };
 }
 
-/** How far past the 600-unit viewBox a card reaches, on whichever axis is worse. */
-function overhang(rect: Element): number {
+interface Reach {
+  id: string;
+  /** How far past the viewBox the card reaches where it actually landed. */
+  drawn: number;
+  /**
+   * How far past the viewBox this card's *height* would reach at twelve o'clock.
+   *
+   * The two differ, and only this one binds vertically. Card width is angle-dependent — a card is
+   * only wide where the frame leaves room for width — so the drawn figure is a horizontal
+   * measurement almost everywhere, and a card whose height outgrew the frame would pass it unless
+   * the sweep happened to drop that card at the top of the dial. Height is not angle-dependent in
+   * the same direction: a tall card is tall *because* it was narrow, and moving it to twelve gives
+   * it more width and so no more lines, so this over-estimates rather than under-estimates. It is
+   * the one number `clampLabelPosition` does not bound — the vertical clamp holds a card's centre,
+   * and against a locus at `outerRadius × 1.02` it never binds.
+   */
+  atTwelve: number;
+}
+
+function reach(rect: Element): Reach {
   const number = (name: string) => Number(rect.getAttribute(name));
   const x = number("x");
   const y = number("y");
+  const width = number("width");
+  const height = number("height");
+  const centre = { x: x + width / 2, y: y + height / 2 };
+  const locus = Math.hypot(centre.x - SIZE / 2, centre.y - SIZE / 2);
 
-  return Math.max(-x, -y, x + number("width") - SIZE, y + number("height") - SIZE, 0);
+  return {
+    id: rect.getAttribute("data-testid") ?? "",
+    drawn: Math.max(-x, -y, x + width - SIZE, y + height - SIZE, 0),
+    atTwelve: locus + height / 2 - SIZE / 2,
+  };
 }
 
-function worstCard(events: ClockEventInput[], scale: DialScaleId): { id: string; out: number } {
+function cardsOf(events: ClockEventInput[], scale: DialScaleId): Reach[] {
   const { element } = analogClock({ events, size: SIZE, time: TIME, scale });
   const rects = Array.from(element.querySelectorAll('[data-testid^="floating-label-rect-"]'));
 
   // A scenario that promotes no titles to cards would pass every assertion below while testing
   // nothing, which is how this could rot without saying so.
   expect(rects.length, `${scale}: no card was drawn`).toBeGreaterThan(8);
+  return rects.map(reach);
+}
 
-  return rects.reduce(
-    (most, rect) => {
-      const out = overhang(rect);
-      return out > most.out ? { id: rect.getAttribute("data-testid") ?? "", out } : most;
-    },
-    { id: "", out: 0 }
-  );
+function worst(cards: Reach[], axis: "drawn" | "atTwelve"): Reach {
+  return cards.reduce((most, card) => (card[axis] > most[axis] ? card : most));
 }
 
 /**
@@ -106,13 +129,23 @@ const SWEEPS: [DialScaleId, ClockEventInput[]][] = [
 ];
 
 describe("the frame the page leaves for floating labels", () => {
-  it.each(SWEEPS)("is wide enough for every card the %s dial draws", (scale, events) => {
-    const worst = worstCard(events, scale);
+  it.each(SWEEPS)("holds every card the %s dial draws, where it draws it", (scale, events) => {
+    const card = worst(cardsOf(events, scale), "drawn");
     const frame = frameUnits();
 
     expect(
-      worst.out,
-      `${worst.id} reaches ${worst.out.toFixed(2)} units past the viewBox, frame is ${frame.toFixed(2)}`
+      card.drawn,
+      `${card.id} reaches ${card.drawn.toFixed(2)} units past the viewBox, frame is ${frame.toFixed(2)}`
+    ).toBeLessThanOrEqual(frame);
+  });
+
+  it.each(SWEEPS)("holds the tallest card the %s dial draws, at twelve o'clock", (scale, events) => {
+    const card = worst(cardsOf(events, scale), "atTwelve");
+    const frame = frameUnits();
+
+    expect(
+      card.atTwelve,
+      `${card.id} would reach ${card.atTwelve.toFixed(2)} units out at twelve, frame is ${frame.toFixed(2)}`
     ).toBeLessThanOrEqual(frame);
   });
 });
@@ -131,13 +164,14 @@ describe("the display's sizing rule", () => {
     expect(display).toMatch(/grid-template-rows:\s*minmax\(\s*0/);
   });
 
-  it("charges the notice's separation to the notice, not to the gap between tracks", () => {
+  it("charges the notice's separation to the notice, at the frame a card at six needs", () => {
     expect(block("#display")).not.toMatch(/(^|[;\s])gap:/);
-    expect(block("#status")).toMatch(/margin:\s*1\.5rem/);
+    expect(block("#status")).toMatch(/margin:\s*var\(--label-frame\)/);
   });
 
   it("sizes the dial from the display and lets the drawing fit the box", () => {
     expect(block("#dial")).toMatch(/height:\s*100%/);
+    expect(block("#dial")).toMatch(/width:\s*100%/);
     expect(block("#dial svg")).toMatch(/width:\s*100%/);
     expect(block("#dial svg")).toMatch(/height:\s*100%/);
   });

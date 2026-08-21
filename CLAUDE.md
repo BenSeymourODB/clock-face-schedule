@@ -68,11 +68,16 @@ table of which times show which fixture states. Unpinned, the fixture has *nothi
 any time of day, so a draining arc only appears if you ask for one — which is how a drain that
 never drained shipped through two releases.
 
-**A pinned dial is 58% larger than the board's, until #115 is fixed.** The pin's own on-screen notice
-is what does it: `#dial`'s width resolves against a grid track sized by whatever text is beside it, so
-a healthy board renders the dial at 600 px and a pinned preview at 950. Geometry and contrast are in
-viewBox units and unaffected — judge them on a pinned screenshot as before — but check anything about
-*size* at the scale the wall gets: unpinned, or with `#status` hidden.
+**A pinned dial is one line of text smaller than the board's** (#115). The dial is sized from the
+display now, so the pin no longer changes its *width* — but a notice is a grid row, so a pinned
+preview draws the dial at 807.9 px against a healthy board's 922.3 at 1920×1080, about 12% down.
+Geometry and contrast are in viewBox units and unaffected — judge them on a pinned screenshot as
+before — but check anything about *size* with `#status` hidden, which is what a working board shows.
+
+**Physical figures come from the dial's rendered size, which is 85.4% of the board's height** — the
+rest is the frame floating labels paint into, sized in `Styles.html` from how far a card can reach
+(#121 is the cheaper way to get it back). At 1920×1080 that is 1.5372 px per viewBox unit. Anything
+quoted in millimetres has to be derated by that, not by the 600 px the dial used to render at.
 
 So: for any change to rendered output, `npm run build`, serve `build/preview.html`, screenshot it,
 and look. Query the DOM for the attributes you changed as a cross-check — but measurement confirms
