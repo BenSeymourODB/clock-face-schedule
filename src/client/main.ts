@@ -86,20 +86,27 @@ function chosenScale(mount: Element): DialScaleId {
 }
 
 /**
- * Preferences as `doGet` left them, with saves going back over the bridge unawaited.
+ * Preferences as `doGet` left them, with nothing on screen waiting for a save.
  *
  * A failed save is a log line rather than a status-line failure: the status line is the schedule's,
  * and a display that cannot remember a setting is still showing the right time with the right
  * events on it.
+ *
+ * The bridge call is *returned* rather than fired, which is what lets the store keep one write in
+ * flight at a time (#84) — two `google.script.run` calls have no ordering between them, so the
+ * store needs to know when one is over. The log line rethrows rather than swallowing: the store
+ * drains on a rejection just as it does on a success, so this changes no behaviour today, but a
+ * promise that only ever resolves would report a refused write as a stored one — and #84's other
+ * remedy, reconciling against the wire `savePreferences` echoes back, needs the truth.
  */
 function displayPreferences(mount: Element): PreferenceStore {
   return preferenceStore({
     wire: readPreferenceWire(mount),
-    save: (wire) => {
-      void callServer<string>("savePreferences", wire).catch((error: Error) => {
+    save: (wire) =>
+      callServer<string>("savePreferences", wire).catch((error: Error) => {
         console.warn(`preference not saved — ${error.message}`);
-      });
-    }
+        throw error;
+      })
   });
 }
 
