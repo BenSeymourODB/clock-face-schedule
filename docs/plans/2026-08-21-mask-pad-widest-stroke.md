@@ -1,6 +1,6 @@
 # Pad every mask wedge by the widest stroke the arc draws
 
-**Status:** in review
+**Status:** done — shipped in [#131](https://github.com/BenSeymourODB/clock-face-schedule/pull/131)
 **Issue:** [#114](https://github.com/BenSeymourODB/clock-face-schedule/issues/114)
 **Docs:** [../DESIGN.md](../DESIGN.md) (ADR 0007), `src/client/render/event-arc.ts`
 
