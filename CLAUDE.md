@@ -68,11 +68,13 @@ table of which times show which fixture states. Unpinned, the fixture has *nothi
 any time of day, so a draining arc only appears if you ask for one — which is how a drain that
 never drained shipped through two releases.
 
-**A pinned dial is one line of text smaller than the board's** (#115). The dial is sized from the
-display now, so the pin no longer changes its *width* — but a notice is a grid row, so a pinned
-preview draws the dial at 807.9 px against a healthy board's 922.3 at 1920×1080, about 12% down.
-Geometry and contrast are in viewBox units and unaffected — judge them on a pinned screenshot as
-before — but check anything about *size* with `#status` hidden, which is what a working board shows.
+**Every preview dial is one line of text smaller than the board's** (#115). The dial is sized from
+the display now, so a notice no longer changes its *width* — but it is still a grid row, and demo
+mode posts one of its own ("Sample events — not a real calendar") whether or not you pin. So the
+preview draws 807.9 px against a healthy board's 922.3 at 1920×1080, about 12% down, in *every*
+state: pinning costs nothing further. Geometry and contrast are in viewBox units and unaffected —
+judge them on a pinned screenshot as before — but check anything about *size* with `#status` hidden,
+which is what a working board shows.
 
 **Physical figures come from the dial's rendered size, which is 85.4% of the board's height** — the
 rest is the frame floating labels paint into, sized in `Styles.html` from how far a card can reach

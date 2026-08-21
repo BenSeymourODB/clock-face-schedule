@@ -173,11 +173,12 @@ and on the deployed app alike:
 `build/preview.html?now=04:15&freeze=1` needs no server. A pinned clock says so on screen, and an
 unreadable time falls back to the real clock rather than inventing one.
 
-**A pin costs the dial a row of height** (#115). The dial is sized from the display, so a notice no
+**A notice costs the dial a row of height** (#115). The dial is sized from the display, so a notice no
 longer changes its width — a 439.8 px notice and a 1021.7 px one give the same dial where they used to
-give 600 px and 950. It is still a grid row, though, so a pinned page draws the dial at 807.9 px
-against a healthy board's 922.3 at 1920×1080. Pinned screenshots are to the right proportions and
-about 12% down on scale; hide `#status` to see what the wall gets.
+give 600 px and 950. It is still a grid row, though, so a page carrying one draws the dial at 807.9 px
+against a healthy board's 922.3 at 1920×1080. On the preview that is every state, pinned or not, since
+demo mode posts a notice of its own: screenshots are to the right proportions and about 12% down on
+scale; hide `#status` to see what the wall gets.
 
 **The times below exercise the demo fixture's states**, and are what the fixture's offsets mean once
 a pin anchors them to midnight — measured by rendering, not predicted:

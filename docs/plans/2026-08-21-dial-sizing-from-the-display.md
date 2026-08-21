@@ -1,9 +1,9 @@
 # The dial's size comes from the display, not from its own attribute
 
-**Status:** in review
+**Status:** done — shipped in [#120](https://github.com/BenSeymourODB/clock-face-schedule/pull/120)
 **Issue:** [#115](https://github.com/BenSeymourODB/clock-face-schedule/issues/115)
 **Docs:** ADR 0009 (the board's spare width, allocated once), ADR 0007 (the five CSS custom-property
-names), `CLAUDE.md` — "a pinned dial is 58% larger than the board's, until #115 is fixed"
+names), `CLAUDE.md` — the preview-versus-board sizing note, which this change rewrites
 
 ## The defect, reproduced
 

@@ -164,6 +164,18 @@ describe("the display's sizing rule", () => {
     expect(display).toMatch(/grid-template-rows:\s*minmax\(\s*0/);
   });
 
+  /**
+   * The tracks above can only be definite if the grid's own height is, and this is the declaration
+   * that makes it so. It is asserted separately because it is the one the rest depends on: reverting
+   * it to `min-height: 100vh` leaves the height indefinite, `minmax(0, 1fr)` resolves against
+   * content again, and the dial renders **1762.3 px on a 1080 px board** — measured, and every other
+   * assertion in this file passes while it does.
+   */
+  it("takes its own height from the viewport, so those tracks have something to divide", () => {
+    // The boundary is what distinguishes it from `min-height`, which is the regression.
+    expect(block("#display")).toMatch(/(^|[;\s])height:\s*100vh/);
+  });
+
   it("charges the notice's separation to the notice, at the frame a card at six needs", () => {
     expect(block("#display")).not.toMatch(/(^|[;\s])gap:/);
     expect(block("#status")).toMatch(/margin:\s*var\(--label-frame\)/);
