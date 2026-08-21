@@ -113,6 +113,14 @@ export interface FloatingLabelParams {
    * ten minutes and fifteen into the same 7.5°.
    */
   duration?: string;
+  /**
+   * How far to move the card vertically after clamping, so it clears another card (#30).
+   *
+   * Applied *after* `clampLabelPosition` because the displacement pass measures the clamped rects:
+   * nudging first would hand the clamp a position it might move again, and the pass's arithmetic
+   * would be about numbers the renderer never draws. The pass owns staying inside the clamp band.
+   */
+  verticalNudge?: number;
 }
 
 /** Everything about where a card lands, without building any of it. */
@@ -137,6 +145,7 @@ export function floatingLabelGeometry({
   faceRadius,
   fontSize = DEFAULT_FONT_SIZE,
   duration,
+  verticalNudge = 0,
 }: FloatingLabelParams): FloatingLabelGeometry {
   // A duration line is one more line the card may grow by, and the clearance below is sized from
   // the tallest the card may become — so it has to be counted there, not just where it is drawn.
@@ -169,7 +178,12 @@ export function floatingLabelGeometry({
   const centre = clampLabelPosition(natural, clockBox, width / 2);
 
   return {
-    rect: { x: centre.x - width / 2, y: centre.y - height / 2, width, height },
+    rect: {
+      x: centre.x - width / 2,
+      y: centre.y + verticalNudge - height / 2,
+      width,
+      height,
+    },
     lines,
   };
 }

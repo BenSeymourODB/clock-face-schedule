@@ -14,11 +14,13 @@ import {
   dialOrigin,
   dialScale,
   dialWindow,
+  displaceVertically,
   elapsedEventIds,
   eventsToClockEvents,
   filterEventsForPeriod,
   formatEventDuration,
   hasEventInProgress,
+  labelVerticalBand,
   rectsOverlap,
   roundCoord,
 } from "../../shared/clock";
@@ -372,7 +374,23 @@ export function analogClock({
       rects[index] = grown;
     });
 
-    labelsLayer.append(...chosen.map((params) => floatingLabel(params)));
+    // #30 item 2: cards that still overlap after the duration decision are moved apart vertically.
+    // Measured before this landed, the fixture at `?now=11:00&freeze=1` piled three cards up with
+    // 29.47 and 9.83 units of overlap — having already declined three duration lines above trying to
+    // avoid it, so the dial was spending event information *and* getting the collision anyway.
+    //
+    // Runs on the rects the duration pass settled on, and only ever moves a card away from the
+    // dial's horizontal centre line, which is what keeps `faceClearanceLimit` — monotone in that
+    // distance — valid without re-deriving the width each card was wrapped to.
+    const nudges = displaceVertically(rects, cy, labelVerticalBand(clockBox));
+
+    labelsLayer.append(
+      ...chosen.map((params, index) =>
+        floatingLabel(
+          nudges[index] === 0 ? params : { ...params, verticalNudge: nudges[index] }
+        )
+      )
+    );
 
     renderedMinute = minuteKey(currentTime);
   }

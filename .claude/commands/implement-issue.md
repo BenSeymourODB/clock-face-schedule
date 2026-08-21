@@ -112,9 +112,16 @@ whether those decisions were since recorded — several in this repo were settle
 in issue comments rather than in the original body. This pass is fast; always run
 it before triage.
 
-While here, retire shipped plans: `docs/plans/` holds dated files
-(`YYYY-MM-DD-<slug>.md`) each with a `**Status:**` header. For any plan whose
-issue/PR has merged, update its status to `done`.
+You no longer have to retire shipped plans by hand. `docs/plans/` holds dated
+files (`YYYY-MM-DD-<slug>.md`) each carrying a status header, and the two states
+a plan may claim are both still true after its own PR merges, so nothing is left
+for a later run to correct — `npm test` checks it, and `npm run check-plans`
+reports it on its own. Asking each run to do it was tried and missed twice, for
+a structural reason rather than a careless one: a PR cannot record its own merge
+(#111).
+
+What that asks of *you*, in step 7, is to set your plan's status before the merge
+rather than after — see step 4.
 
 ## 2. Pick the next ticket
 
@@ -166,6 +173,18 @@ exists and the work is non-trivial, produce one grounded in the issue's
 acceptance criteria, the brainstorm, and `docs/DESIGN.md`, and save it as
 `docs/plans/<YYYY-MM-DD>-<slug>.md` with `**Status:**`, `**Issue:**` and
 `**Docs:**` headers before implementing.
+
+**The status header has a checked vocabulary**, and only two states, because both
+have to stay true through the merge that lands them:
+
+- `in progress — … #NN`, citing the issue or PR that says what is outstanding.
+  This is what a plan carries while you are writing it, before its PR exists.
+- `done — shipped in #NN`. Write this **in the shipping PR itself**, as soon as
+  the draft PR exists and you know its number — not after it merges, which is the
+  one moment nobody can edit it.
+
+`in review` is retired. `npm test` fails on it, naming the file and quoting the
+line to write instead.
 
 ## 5. Phases
 

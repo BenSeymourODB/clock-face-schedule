@@ -31,6 +31,19 @@ function clamp(value: number, lower: number, upper: number): number {
 }
 
 /**
+ * The band `clampLabelPosition` holds a card's centre inside, for a caller that has to place several
+ * cards at once (#30's displacement pass).
+ *
+ * Derived here rather than by the caller so `OVERFLOW_RATIO` keeps one definition: two independent
+ * derivations of the same allowance is how a pass ends up moving a card to a position the clamp then
+ * moves again.
+ */
+export function labelVerticalBand(clockBox: ClockBox): { top: number; bottom: number } {
+  const allowance = clockBox.height * OVERFLOW_RATIO;
+  return { top: clockBox.top - allowance, bottom: clockBox.bottom + allowance };
+}
+
+/**
  * Clamp a label's centre into the dial's box plus a 10% allowance on each axis.
  *
  * `halfWidth` is the card's half-width. The vertical clamp positions the centre and lets a short
