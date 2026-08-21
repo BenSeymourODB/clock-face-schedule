@@ -1,6 +1,6 @@
 # Tie README's fixture figures to the fixture
 
-**Status:** in review
+**Status:** done — shipped in [#105](https://github.com/BenSeymourODB/clock-face-schedule/pull/105)
 **Issue:** [#103](https://github.com/BenSeymourODB/clock-face-schedule/issues/103)
 **Docs:** #77 (where this surfaced — one edit needed twice, found separately), #73 (the earlier
 instance), `4caec7d` (the derived unpinned assertion this extends the reasoning of),

@@ -1,6 +1,6 @@
 # A 1-hour scale mode
 
-**Status:** in review — PR #86
+**Status:** done — shipped in [#86](https://github.com/BenSeymourODB/clock-face-schedule/pull/86)
 **Issue:** #34 (sub-issue of epic #32)
 **Docs:** `docs/brainstorms/2026-08-17-two-time-scales.md`, ADR 0005, ADR 0007, ADR 0008
 
