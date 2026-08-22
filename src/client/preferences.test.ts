@@ -1,13 +1,17 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { PREFERENCE_KEYS, defaultPreferences, encodePreferences } from "../shared/preferences";
-import { preferenceStore, readPreferenceWire } from "./preferences";
+import {
+  preferenceStore,
+  readDeploymentPreferenceWire,
+  readPreferenceWire
+} from "./preferences";
 
-function mountWith(wire: string | null): HTMLElement {
+function mountWith(wire: string | null, attribute = "data-preferences"): HTMLElement {
   const mount = document.createElement("div");
   // The real attribute name, not the dataset spelling: `dataset.preferences` would pass just as
   // happily against `data-Preferences`, and Index.html writes the hyphenated form.
-  if (wire !== null) mount.setAttribute("data-preferences", wire);
+  if (wire !== null) mount.setAttribute(attribute, wire);
   return mount;
 }
 
@@ -33,6 +37,34 @@ describe("reading the templated wire", () => {
     const svg = document.createElementNS("http://www.w3.org/2000/svg", "g");
 
     expect(readPreferenceWire(svg)).toBeNull();
+  });
+});
+
+describe("reading the templated deployment wire", () => {
+  const DEPLOYMENT = "data-deployment-preferences";
+
+  it("takes the value off data-deployment-preferences", () => {
+    expect(readDeploymentPreferenceWire(mountWith("showSeconds=0", DEPLOYMENT))).toBe(
+      "showSeconds=0"
+    );
+  });
+
+  it("reads an empty attribute as empty rather than absent", () => {
+    expect(readDeploymentPreferenceWire(mountWith("", DEPLOYMENT))).toBe("");
+  });
+
+  it("gives null where the attribute is not there at all", () => {
+    expect(readDeploymentPreferenceWire(mountWith(null))).toBeNull();
+  });
+
+  it("does not read the resolved wire, which carries the viewer's own values", () => {
+    // The failure this guards is silent and total: read the resolved attribute here and every reset
+    // lands on the value it was undoing, which looks exactly like a reset that did nothing.
+    expect(readDeploymentPreferenceWire(mountWith("showSeconds=0"))).toBeNull();
+  });
+
+  it("gives null for no mount", () => {
+    expect(readDeploymentPreferenceWire(null)).toBeNull();
   });
 });
 
@@ -507,7 +539,13 @@ describe("the store, with a write that never settles", () => {
     const { save, reset, settle } = controllableSave();
     const clock = controllableClock();
     const store = preferenceStore({
-      wire: "showSeconds=1",
+      wire: "showSeconds=0",
+      // The deployment says `showSeconds=1`, so the reset lands on `true` locally and the echo below
+      // says `false` — which is what makes the assertion about the *echo* rather than about where the
+      // reset landed. Borrowed from the "echo the transport did not keep" block's own reasoning, and
+      // needed here for the same reason: since #157 a reset applies the layer beneath at once, so a
+      // store with no `deploymentWire` would land on the code default and pass either way.
+      deploymentWire: "showSeconds=1",
       save,
       reset,
       schedule: clock.schedule
@@ -516,11 +554,32 @@ describe("the store, with a write that never settles", () => {
     store.reset(["showSeconds"]);
     await clock.elapse();
 
-    // An abandoned reset is a failed reset, and a failed reset adopts nothing. The echo below is a
-    // reading of the layer beneath from before the store gave up its turn, so applying it now would
-    // move a value the store has already stopped waiting on.
+    // An abandoned reset is a failed reset, and a failed reset adopts nothing. The echo is a reading
+    // of the layer beneath from before the store gave up its turn, so applying it now would move a
+    // value the store has already stopped waiting on.
     await settle(DEPLOYMENT_WIRE);
     expect(store.get().showSeconds).toBe(true);
+  });
+
+  it("leaves an abandoned reset showing the layer beneath, not the value it undid", async () => {
+    const { save, reset } = controllableSave();
+    const clock = controllableClock();
+    const store = preferenceStore({
+      wire: "timerDurationSeconds=900",
+      deploymentWire: encodePreferences({ ...defaultPreferences(), timerDurationSeconds: 600 }),
+      save,
+      reset,
+      schedule: clock.schedule
+    });
+
+    store.reset(["timerDurationSeconds"]);
+    await clock.elapse();
+
+    // Where this change and #157 meet, and neither one's specs covered it alone. #157 made a *failed*
+    // reset leave the display on a real layer rather than on an unmoored value; an abandoned reset is
+    // a failed reset, so it has to keep that property — the deadline must cost the store's memory of
+    // the setting, never the screen's honesty about which layer it is showing.
+    expect(store.get().timerDurationSeconds).toBe(600);
   });
 
   it("arms a fresh deadline for the write that follows an abandoned one", async () => {
@@ -644,12 +703,14 @@ describe("the store, with a write that never settles", () => {
 });
 
 /**
- * #83. A reset is the one operation whose outcome the client cannot compute: `doGet` templates the
- * *resolved* wire, so nothing in the browser knows which layer a value came from, and dropping the
- * viewer's own may land on the deployment's answer or on the code's.
+ * #83, as #157 leaves it. A reset used to be the one operation whose outcome the client could not
+ * compute — `doGet` templated the *resolved* wire and nothing else, so nothing in the browser knew
+ * which layer a value came from, and dropping the viewer's own might land on the deployment's answer
+ * or on the code's. `deploymentWire` is that missing layer, templated beside the resolved set.
  *
- * Every assertion here is therefore about where the value comes from — the server's echo — and about
- * a reset taking its turn in the same single writer #84 established.
+ * So the assertions here are about a reset landing on the layer beneath **at once**, about the echo
+ * still being adopted as a correction to it, and about a reset taking its turn in the same single
+ * writer #84 established.
  */
 describe("resetting a preference", () => {
   /** The deployment's answer for `showSeconds`, which differs from the code default of `true`. */
@@ -682,30 +743,70 @@ describe("resetting a preference", () => {
     expect(spy).not.toHaveBeenCalled();
   });
 
-  it("takes the deployment's value from the echo rather than guessing the code default", async () => {
-    // The discriminating case, and the reason the echo is required at all: `showSeconds` defaults to
-    // `true` in code, the viewer's store held `true`, and the deployment says `false`. A store that
-    // applied the code default locally would land on `true` — indistinguishable from doing nothing.
+  it("lands on the deployment's value before any promise settles", async () => {
+    // #157's discriminating case, and the reversal of the spec that used to stand here. `showSeconds`
+    // defaults to `true` in code, the viewer's store held `true`, and the deployment says `false`, so
+    // a store guessing the code default would land on `true` — indistinguishable from doing nothing.
+    // The templated deployment layer is how it lands on `false` with the write still in the air.
     const { save, reset, settle } = controllableSave();
-    const store = preferenceStore({ wire: "showSeconds=1", save, reset });
+    const store = preferenceStore({
+      wire: "showSeconds=1",
+      deploymentWire: DEPLOYMENT_WIRE,
+      save,
+      reset
+    });
 
     store.reset(["showSeconds"]);
-    await settle(DEPLOYMENT_WIRE);
+    expect(store.get().showSeconds).toBe(false);
 
+    await settle(DEPLOYMENT_WIRE);
     expect(store.get().showSeconds).toBe(false);
   });
 
-  it("shows the value it had until the echo arrives", async () => {
-    // The one place this store departs from "the display agrees with the control at once". Briefly
-    // stale, deliberately, rather than briefly wrong.
-    const { save, reset, settle } = controllableSave();
-    const store = preferenceStore({ wire: "showSeconds=1", save, reset });
+  it("lands on the code default where the deployment has no answer of its own", () => {
+    // The other half of the same property: the layer beneath is the deployment's *resolved* set, so
+    // a key the deployment never set is the code default there and lands there too.
+    const { save, reset } = controllableSave();
+    const store = preferenceStore({
+      wire: "timerDurationSeconds=900",
+      deploymentWire: encodePreferences(defaultPreferences()),
+      save,
+      reset
+    });
+
+    store.reset(["timerDurationSeconds"]);
+
+    expect(store.get().timerDurationSeconds).toBe(300);
+  });
+
+  it("falls back to the code defaults where no deployment wire was templated at all", () => {
+    // The local preview, which has no server and therefore no deployment layer. Also a page served
+    // before the attribute existed — where the code default is what the old reset would have guessed.
+    const { save, reset } = controllableSave();
+    const store = preferenceStore({ wire: "showSeconds=0", save, reset });
 
     store.reset(["showSeconds"]);
-    expect(store.get().showSeconds).toBe(true);
 
-    await settle(DEPLOYMENT_WIRE);
-    expect(store.get().showSeconds).toBe(false);
+    expect(store.get().showSeconds).toBe(true);
+  });
+
+  it("still adopts the echo, which is fresher than the layer the page loaded with", async () => {
+    // The reason the echo is kept rather than dropped as redundant: `deploymentWire` is a snapshot
+    // from page load, and a wall display's page is loaded for as long as the board has been up. A
+    // second tab or an administrator can move the script store underneath it.
+    const { save, reset, settle } = controllableSave();
+    const store = preferenceStore({
+      wire: "timerDurationSeconds=900",
+      deploymentWire: encodePreferences({ ...defaultPreferences(), timerDurationSeconds: 300 }),
+      save,
+      reset
+    });
+
+    store.reset(["timerDurationSeconds"]);
+    expect(store.get().timerDurationSeconds).toBe(300);
+
+    await settle(encodePreferences({ ...defaultPreferences(), timerDurationSeconds: 600 }));
+    expect(store.get().timerDurationSeconds).toBe(600);
   });
 
   it("adopts only the keys it named, though the echo carries every one", async () => {
@@ -722,9 +823,17 @@ describe("resetting a preference", () => {
     expect(store.get()).toEqual({ ...defaultPreferences(), showSeconds: false });
   });
 
-  it("leaves the value alone when the reset fails", async () => {
+  it("leaves the display on the layer beneath when the reset fails", async () => {
+    // The second reversal (#157). A failed write costs the store's memory of a setting, as it always
+    // has — but it no longer costs the screen's honesty: what is shown is a real layer, not the
+    // value the reset was undoing. The viewer's own value is the one that did not go away.
     const { save, reset, fail } = controllableSave();
-    const store = preferenceStore({ wire: "showSeconds=0", save, reset });
+    const store = preferenceStore({
+      wire: "showSeconds=1",
+      deploymentWire: DEPLOYMENT_WIRE,
+      save,
+      reset
+    });
 
     store.reset(["showSeconds"]);
     await fail();
@@ -752,6 +861,27 @@ describe("resetting, against the write in flight", () => {
 
     await settle();
     expect(sent).toEqual(["timerMuted=1", "showSeconds"]);
+  });
+
+  it("applies a held reset locally at once, before it is even sent", async () => {
+    // Queueing the write must not queue the change — the same property `set` has, and the branch it
+    // would be easiest to leave out, since the sending branch is the one every other spec exercises.
+    const { sent, save, reset, settle } = controllableSave();
+    const store = preferenceStore({
+      wire: "showSeconds=1",
+      deploymentWire: DEPLOYMENT_WIRE,
+      save,
+      reset
+    });
+
+    store.set({ timerMuted: true });
+    store.reset(["showSeconds"]);
+
+    expect(sent).toEqual(["timerMuted=1"]);
+    expect(store.get().showSeconds).toBe(false);
+
+    await settle();
+    expect(store.get().showSeconds).toBe(false);
   });
 
   it("holds a save until the reset before it is over", async () => {
@@ -806,6 +936,30 @@ describe("resetting, against the write in flight", () => {
     await settle(DEPLOYMENT_WIRE);
 
     expect(sent).toEqual(["timerMuted=1", "showSeconds"]);
+  });
+
+  it("leaves no unmoored value when a reset supersedes a queued set and is then refused", async () => {
+    // #158's gap, closed by #157 rather than handled by it. The 900 below is dropped from the queue
+    // by the reset that supersedes it, so it reaches neither the store nor any layer — and before
+    // the deployment wire was templated it stayed on screen, the one value in the whole system with
+    // nowhere behind it. Now the reset lands on 600 at once, and a refused write costs the store's
+    // memory rather than the screen's honesty.
+    const { sent, save, reset, settle, fail } = controllableSave();
+    const store = preferenceStore({
+      wire: "",
+      deploymentWire: encodePreferences({ ...defaultPreferences(), timerDurationSeconds: 600 }),
+      save,
+      reset
+    });
+
+    store.set({ timerMuted: true });
+    store.set({ timerDurationSeconds: 900 });
+    store.reset(["timerDurationSeconds"]);
+    await settle();
+    await fail();
+
+    expect(sent).toEqual(["timerMuted=1", "timerDurationSeconds"]);
+    expect(store.get().timerDurationSeconds).toBe(600);
   });
 
   it("adopts the echo of a reset that succeeded even with another reset queued behind it", async () => {
@@ -908,6 +1062,11 @@ describe("resetting, with an echo the transport did not keep", () => {
     const sent: string[] = [];
     const store = preferenceStore({
       wire: "showSeconds=0",
+      // The deployment says `showSeconds=0` too, so a reset lands where the value already was and the
+      // assertions below isolate the echo: anything that moves `showSeconds` came from the echo, not
+      // from the local application (#157). Without this the reset would land on the code default and
+      // a bad echo adopting `true` would be indistinguishable from adopting nothing.
+      deploymentWire: "showSeconds=0",
       save: (wire) => {
         sent.push(wire);
         return Promise.resolve();

@@ -86,6 +86,25 @@ function resolveFrom(stores: PreferenceStores): Preferences {
 }
 
 /**
+ * Never lets a `PropertiesService` failure reach `doGet`.
+ *
+ * Shared by the two read paths rather than repeated, because the guarantee is the same one and it is
+ * the whole reason both take a factory: acquiring the stores can itself fail, and a default
+ * *parameter* would be evaluated outside this `try`.
+ */
+function resolvedOrDefaults(
+  acquire: PreferenceStoreSource,
+  resolve: (stores: PreferenceStores) => Preferences
+): Preferences {
+  try {
+    return resolve(acquire());
+  } catch (error) {
+    console.error(`preferences unreadable, using defaults — ${(error as Error).message}`);
+    return defaultPreferences();
+  }
+}
+
+/**
  * Every preference, the user's own store taking precedence over the deployment's.
  *
  * **Never throws, including from acquiring the stores.** `doGet` calls this on every page load, so
@@ -96,17 +115,35 @@ function resolveFrom(stores: PreferenceStores): Preferences {
 export function readStoredPreferences(
   acquire: PreferenceStoreSource = propertiesServiceStores
 ): Preferences {
-  try {
-    return resolveFrom(acquire());
-  } catch (error) {
-    console.error(`preferences unreadable, using defaults — ${(error as Error).message}`);
-    return defaultPreferences();
-  }
+  return resolvedOrDefaults(acquire, resolveFrom);
+}
+
+/**
+ * Every preference **as it would be without the viewer's own store** — the deployment's answer where
+ * it has one, the code default where it does not. So: the layer a reset lands on.
+ *
+ * The client cannot compute this. `preferencesWire` carries the resolved set and nothing about where
+ * any value came from, so dropping a user value may land on either layer and only the server knows
+ * which (#83). Templating both wires is what lets `preferenceStore.reset` show its own result at
+ * once instead of waiting out ADR 0006's 0.5–2 s round trip for an echo (#157).
+ *
+ * **Never throws**, for the reason `readStoredPreferences` gives — `doGet` calls both on every page
+ * load, and settings nobody set must not cost the display.
+ */
+export function readDeploymentPreferences(
+  acquire: PreferenceStoreSource = propertiesServiceStores
+): Preferences {
+  return resolvedOrDefaults(acquire, (stores) => resolvePreferences(sourceOf(stores.script)));
 }
 
 /** The resolved preferences in wire form, for `doGet` to template into the page. */
 export function preferencesWire(acquire?: PreferenceStoreSource): string {
   return encodePreferences(readStoredPreferences(acquire));
+}
+
+/** The deployment's own resolved preferences in wire form, templated beside `preferencesWire`. */
+export function deploymentPreferencesWire(acquire?: PreferenceStoreSource): string {
+  return encodePreferences(readDeploymentPreferences(acquire));
 }
 
 /**

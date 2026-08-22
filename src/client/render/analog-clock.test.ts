@@ -37,8 +37,9 @@ const AFTERNOON = new Date(2026, 7, 15, 13, 0, 0);
 
 const LONG_TITLE = "Parent Teacher Conference Planning Committee Meeting Notes";
 /**
- * Long enough to overflow its arc, short enough that the card stays two lines — which is what puts
- * a pile of them inside the clamp band, where the displacement pass can actually separate them.
+ * Long enough to overflow its arc, short enough that the card stays two or three lines — which is
+ * what puts a pile of them inside the clamp band, where the displacement pass can actually separate
+ * them. It was two before #118's swatch took a character off every line.
  */
 const PILE_TITLE = "Staff Debrief and Planning";
 
@@ -551,17 +552,24 @@ describe("analogClock", () => {
       });
 
       it("still drops a duration displacement cannot make room for", () => {
-        // The negative half, and the one that matters: `pile`'s third card is displaced hard
-        // against the bottom of the clamp band — 649.5 against 650.4 — so a line there would push
-        // it out of the frame the page is sized for (#121). Clockwise order decides which of the
-        // three yields, matching the order a reader scans the dial.
+        // The negative half, and the one that matters: `pile`'s later cards are displaced hard
+        // against the bottom of the clamp band, so a line there would push one out of the frame the
+        // page is sized for (#121). Clockwise order decides which of the three yields, matching the
+        // order a reader scans the dial.
+        //
+        // #118's swatch costs one character a line, and this is where that is visible rather than
+        // arithmetical: `PILE_TITLE` now needs three lines at the earliest card's angle instead of
+        // two, so the card that keeps its duration is 104.11 units tall rather than 79.58 and **two**
+        // of the three yield where one used to. The yielding cards keep their whole title, which is
+        // the property the pass exists to protect.
         const { element } = build(pile);
         const rects = cardRects(element);
 
         expect(labelLines(element, "early").slice(-1)).toEqual(["24 min"]);
-        expect(labelLines(element, "middle").slice(-1)).toEqual(["24 min"]);
+        expect(labelLines(element, "middle").slice(-1)).not.toEqual(["24 min"]);
         expect(labelLines(element, "late").slice(-1)).not.toEqual(["24 min"]);
-        expect(labelLines(element, "late").length).toBeGreaterThan(0);
+        expect(labelLines(element, "middle").join(" ")).toBe(PILE_TITLE);
+        expect(labelLines(element, "late").join(" ")).toBe(PILE_TITLE);
         for (const rect of rects) {
           expect(rects.filter((other) => other !== rect && rectsOverlap(rect, other))).toEqual([]);
         }
