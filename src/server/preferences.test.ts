@@ -5,7 +5,9 @@ import {
   type PreferenceStoreSource,
   type PreferenceStores,
   type PropertyBag,
+  deploymentPreferencesWire,
   preferencesWire,
+  readDeploymentPreferences,
   readStoredPreferences,
   resetPreferences,
   savePreferences
@@ -128,6 +130,104 @@ describe("the wire form doGet templates", () => {
     expect(preferencesWire(from(stores()))).toBe(
       "showSeconds=1;timerMuted=0;timerDurationSeconds=300"
     );
+  });
+});
+
+/**
+ * The layer a reset lands on, templated beside the resolved set so the client stops having to ask
+ * (#157). Every assertion here is about the user store being absent from it — which is the whole of
+ * what distinguishes it from `preferencesWire`, and what a copy-paste would silently undo.
+ */
+describe("the deployment's own wire form", () => {
+  it("is the encoded defaults when nothing is stored anywhere", () => {
+    expect(deploymentPreferencesWire(from(stores()))).toBe(
+      "showSeconds=1;timerMuted=0;timerDurationSeconds=300"
+    );
+  });
+
+  it("takes the deployment's value from the script store", () => {
+    expect(deploymentPreferencesWire(from(stores({}, { "pref.showSeconds": "0" })))).toBe(
+      "showSeconds=0;timerMuted=0;timerDurationSeconds=300"
+    );
+  });
+
+  it("omits the viewer's own value even where it differs from the deployment's", () => {
+    // The discriminating case, and the reason this function exists at all: `preferencesWire` says
+    // 600 here and this one has to say 300, or a reset lands back on the value it was undoing.
+    const live = from(
+      stores({ "pref.timerDurationSeconds": "600" }, { "pref.timerDurationSeconds": "300" })
+    );
+
+    expect(preferencesWire(live)).toContain("timerDurationSeconds=600");
+    expect(deploymentPreferencesWire(live)).toContain("timerDurationSeconds=300");
+  });
+
+  it("falls to the code default where the viewer's store is the only one holding a key", () => {
+    const live = from(stores({ "pref.showSeconds": "0" }));
+
+    expect(readDeploymentPreferences(live).showSeconds).toBe(true);
+  });
+
+  it("ignores a script property that is not under the preference prefix", () => {
+    expect(readDeploymentPreferences(from(stores({}, { showSeconds: "0" }))).showSeconds).toBe(true);
+  });
+
+  it("falls through a corrupt deployment value to the code default", () => {
+    // Same stance as the resolved path: a value this version no longer understands is rejected
+    // rather than repaired, and a wall display renders with the wrong preference over not at all.
+    expect(
+      readDeploymentPreferences(from(stores({}, { "pref.timerDurationSeconds": "0" })))
+        .timerDurationSeconds
+    ).toBe(300);
+  });
+
+  it("returns the defaults, and says so, when reading the script store fails", () => {
+    // `doGet` now reads twice on every page load, so this path has to be as forgiving as the other:
+    // a throwing PropertiesService must cost a preference, not the whole display.
+    const logged = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const broken: PropertyBag = {
+      getProperties: () => {
+        throw new Error("read quota exceeded");
+      },
+      setProperties: () => undefined,
+      deleteProperty: () => undefined
+    };
+
+    const resolved = readDeploymentPreferences(from({ user: broken, script: broken }));
+
+    expect(resolved).toEqual(defaultPreferences());
+    expect(logged).toHaveBeenCalledWith(expect.stringContaining("read quota exceeded"));
+    logged.mockRestore();
+  });
+
+  it("returns the defaults when obtaining the stores fails at all", () => {
+    const logged = vi.spyOn(console, "error").mockImplementation(() => undefined);
+
+    const resolved = readDeploymentPreferences(() => {
+      throw new Error("no effective user");
+    });
+
+    expect(resolved).toEqual(defaultPreferences());
+    expect(logged).toHaveBeenCalledWith(expect.stringContaining("no effective user"));
+    logged.mockRestore();
+  });
+
+  it("never reads the user store at all, so it cannot depend on one being there", () => {
+    // Stronger than the value assertions above and the reason they can be trusted: a user bag that
+    // throws on any access proves the deployment layer is computed without touching it.
+    const exploding: PropertyBag = {
+      getProperties: () => {
+        throw new Error("the user store must not be read here");
+      },
+      setProperties: () => undefined,
+      deleteProperty: () => undefined
+    };
+
+    const resolved = readDeploymentPreferences(
+      from({ user: exploding, script: bag({ "pref.showSeconds": "0" }) })
+    );
+
+    expect(resolved.showSeconds).toBe(false);
   });
 });
 

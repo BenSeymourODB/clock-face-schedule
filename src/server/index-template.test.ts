@@ -58,6 +58,44 @@ describe("the page template", () => {
     expect(TEMPLATE).not.toContain("<?!= preferences");
   });
 
+  it("templates the deployment's own preferences onto the mount element", () => {
+    // The layer a reset lands on (#157). Client-side, `readDeploymentPreferenceWire` reads this
+    // attribute and nothing else, and the hyphenated name is what has to match across the boundary.
+    expect(TEMPLATE).toContain('data-deployment-preferences="<?= deploymentPreferences ?>"');
+  });
+
+  it("emits the deployment preferences attribute whatever the conditions evaluate to", () => {
+    expect(withoutGuardedRegions(TEMPLATE)).toContain("data-deployment-preferences=");
+  });
+
+  it("leaves the deployment preferences empty once scriptlets are stripped, as the preview does", () => {
+    // The preview has no server, so it has no deployment layer: the client has to read this as
+    // "nothing templated" and fall back to the code defaults, which is what a reset then lands on.
+    expect(TEMPLATE.replace(SCRIPTLET, "")).toContain('data-deployment-preferences=""');
+  });
+
+  it("escapes the deployment preferences value rather than printing it raw", () => {
+    expect(TEMPLATE).not.toContain("<?!= deploymentPreferences");
+  });
+
+  it("gives the two preference attributes different templated values", () => {
+    // The copy-paste this exists for: templating the *resolved* wire into both makes every reset a
+    // no-op — it lands the value it was undoing — and nothing else on the page or in a spec differs.
+    // Asserted on the scriptlet expressions rather than on the attribute names, because it is which
+    // server value each one carries that decides the behaviour.
+    const pattern = /data-(?:deployment-)?preferences="<\?=\s*(\w+)\s*\?>"/g;
+    const values: string[] = [];
+    let match = pattern.exec(TEMPLATE);
+
+    while (match !== null) {
+      values.push(match[1] ?? "");
+      match = pattern.exec(TEMPLATE);
+    }
+
+    expect(values).toHaveLength(2);
+    expect(new Set(values).size).toBe(2);
+  });
+
   it("keeps scriptlet delimiters out of its comments", () => {
     // HtmlService compiles `<? … ?>` wherever it appears: it does not parse HTML, so a comment is
     // not a comment to it. A delimiter written inside one as illustration is compiled as code —
