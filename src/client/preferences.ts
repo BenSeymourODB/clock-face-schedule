@@ -15,6 +15,13 @@
  * the store holding whichever landed last — and a reload then silently reverts what the viewer set.
  * At most one save is in flight; changes made meanwhile are held, coalesced per key, and sent when
  * it settles. Ordering is total because there is only ever one writer.
+ *
+ * A write therefore gets a **deadline** (#122). One writer means one stuck write is every write: a
+ * promise that neither resolves nor rejects would leave the queue shut for the life of the page,
+ * which on a wall display is however long the board has been up — and with no symptom, since the
+ * screen keeps showing what the viewer set and only a reload reveals the store fell behind. That is
+ * the one axis on which a single writer is worse than the fire-and-forget it replaced, which could
+ * lose a write and could order two wrongly but could not stop writing.
  */
 import {
   type PreferenceKey,
@@ -83,6 +90,15 @@ export interface PreferenceStoreOptions {
    * all: it is the only thing that catches the omission at build time.
    */
   reset: (keysWire: string) => PromiseLike<string>;
+  /**
+   * Runs `run` after `delayMs`, and returns a function that cancels it. `window.setTimeout` unless a
+   * caller passes something else, which only a spec has reason to.
+   *
+   * A parameter rather than a direct `setTimeout` because the store is otherwise pure apart from the
+   * `save` it is handed: injecting the timer is what lets a spec hold a write past its deadline
+   * without fake timers, in a suite that needs none.
+   */
+  schedule?: (run: () => void, delayMs: number) => () => void;
 }
 
 /** One templated attribute, read as absent rather than as an error where it is not there. */
@@ -113,11 +129,29 @@ export function readDeploymentPreferenceWire(mount: Element | null | undefined):
   return readWireAttribute(mount, "deploymentPreferences");
 }
 
+/**
+ * How long a write may be with the server before the queue gives up its turn (#122).
+ *
+ * Five times the slow end of ADR 0006's 0.5–2 s round trip. The number is a trade rather than a
+ * measurement: past it, a slow-but-alive write races the one behind it, which is the defect the
+ * single writer exists to remove — so the deadline has to be long enough that the race is rarer than
+ * the stall it prevents. 2 s would race a merely-loaded board routinely; 60 s would leave a minute of
+ * dead queue per occurrence, giving most of the value back.
+ */
+const WRITE_DEADLINE_MS = 10_000;
+
+/** The real timer, for every caller that is not a spec. */
+const browserSchedule = (run: () => void, delayMs: number): (() => void) => {
+  const id = window.setTimeout(run, delayMs);
+  return () => window.clearTimeout(id);
+};
+
 export function preferenceStore({
   wire,
   deploymentWire,
   save,
-  reset
+  reset,
+  schedule = browserSchedule
 }: PreferenceStoreOptions): PreferenceStore {
   let values = decodePreferences(wire);
 
@@ -155,30 +189,87 @@ export function preferenceStore({
   const normalise = (keys: readonly PreferenceKey[]): PreferenceKey[] =>
     decodePreferenceKeys(encodePreferenceKeys(keys));
 
+  /**
+   * One write's turn at the queue, arming its deadline and ending **exactly once** — whichever of the
+   * server's answer and the deadline arrives first (#122).
+   *
+   * `over` is what makes it once, and it is the half that carries the correctness:
+   *
+   * - **The deadline closes the turn**, so an answer arriving afterwards does nothing. Draining twice
+   *   for one write would send the queue's next entry while the previous one was still out, which is
+   *   the race a single writer exists to remove.
+   * - **`over` is per turn**, so a stale timer cannot reach a *later* write either: it finds its own
+   *   turn already over and returns. That is why cancelling is housekeeping rather than a guard —
+   *   `setTimeout` is one-shot, so live timers are bounded by the writes of the last ten seconds
+   *   however long the board has been up, and the cost of a stray one is a wasted callback.
+   *
+   * The one thing cancelling *did* protect is the log, which is why the warning is inside the turn:
+   * `end` runs it only if the deadline is what ended the turn, so an abandoned-write line cannot
+   * describe a write that succeeded. True by construction rather than by `clearTimeout` winning.
+   */
+  function writeTurn(): (finish: () => void) => void {
+    let over = false;
+    // Assigned below, and a no-op until then. A `schedule` that ran its callback synchronously would
+    // otherwise reach `cancel` in its dead zone and throw *out of `set`* with `writing` left true and
+    // no timer to recover it — permanent silence, which is the failure this deadline exists to
+    // remove. Only a spec supplies a `schedule`, and none does that; one line is cheaper than
+    // trusting that.
+    let cancel: () => void = () => undefined;
+
+    function end(finish: () => void): void {
+      if (over) return;
+      over = true;
+      cancel();
+      finish();
+    }
+
+    cancel = schedule(() => {
+      end(() => {
+        // The only record an abandoned write leaves. `main.ts` logs the sibling failures from inside
+        // the functions handed in here, which is upstream of this deadline, so without a line the
+        // failure would be invisible on a display nobody is watching.
+        console.warn(`preference write abandoned after ${WRITE_DEADLINE_MS} ms — no answer`);
+        drain();
+      });
+    }, WRITE_DEADLINE_MS);
+
+    return end;
+  }
+
   function sendValues(patch: Partial<Preferences>): void {
     writing = true;
+    const end = writeTurn();
 
     try {
-      save(encodePreferences(patch)).then(drain, drain);
+      save(encodePreferences(patch)).then(
+        () => end(drain),
+        () => end(drain)
+      );
     } catch {
       // A `save` that throws rather than rejecting has still finished, and the queue has to keep
       // moving: wedging here would cost every later preference, not just this one. The `then` is
       // inside the try for the same reason — a `save` that returns something un-thenable throws
       // here, and it would throw out of `set` and into a click handler with the queue left shut.
-      drain();
+      // `end` rather than `drain` so the throw also disarms the deadline it just armed.
+      end(drain);
     }
   }
 
   function sendKeys(keys: PreferenceKey[]): void {
     writing = true;
+    const end = writeTurn();
 
     try {
-      reset(encodePreferenceKeys(keys)).then((resolved) => {
-        adopt(keys, resolved);
-        drain();
-      }, drain);
+      reset(encodePreferenceKeys(keys)).then(
+        (resolved) =>
+          end(() => {
+            adopt(keys, resolved);
+            drain();
+          }),
+        () => end(drain)
+      );
     } catch {
-      drain();
+      end(drain);
     }
   }
 
@@ -191,6 +282,11 @@ export function preferenceStore({
    * was in flight, so the echo predates it and adopting it would revert the control the viewer just
    * used. Single-flight means only one write is ever out, so `queuedValues` is exactly "set since".
    * Read before `drain` empties it.
+   *
+   * That invariant now rests on `writeTurn`'s `over` rather than on single-flight alone (#122): an
+   * echo arriving after its deadline never reaches here, and it is the one echo `queuedValues` could
+   * not speak for — the store has drained and moved on, so a value set since is already sent rather
+   * than queued.
    *
    * A queued *reset* for the same key is deliberately not a reason to skip. It asks for what the
    * echo already reports — the property is gone, and deleting an absent one changes nothing — so
