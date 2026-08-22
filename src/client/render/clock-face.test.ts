@@ -163,6 +163,26 @@ function find(root: Element, testId: string): Element | null {
   return root.querySelector(`[data-testid="${testId}"]`);
 }
 
+/**
+ * Paint order over the whole subtree, not just `element.children`.
+ *
+ * The numerals sit in a group of their own so they can mount between the halos and the hands
+ * (#112), so a direct-children index reports −1 for them — which compares as "earliest" and would
+ * have made the guards below pass on the very arrangement they exist to reject.
+ */
+function paintIndex(root: Element): (testId: string) => number {
+  const order = Array.from(root.querySelectorAll("*"));
+  return (testId) => order.indexOf(find(root, testId) as Element);
+}
+
+/** Every numeral the given scale draws, by test id. */
+function numeralIds(scale: DialScaleId): string[] {
+  return [
+    ...HOUR_POSITIONS.map((hour) => `hour-number-${hour}`),
+    ...(scale === "1h" ? HOUR_POSITIONS.map((hour) => `hour-number-inner-${hour}`) : []),
+  ];
+}
+
 describe("clockFace", () => {
   describe("structure", () => {
     const { element } = build(at(10, 10));
@@ -322,6 +342,76 @@ describe("clockFace", () => {
         );
       }
     });
+  });
+
+  /**
+   * #112, and the same defect #107 fixed on the AM/PM indicator. A halo is `var(--card)` painted
+   * over whatever is beneath it, and the numerals were appended with their markers — so a hand
+   * crossing a numeral did not overlap it, it cut a 4.09-unit stripe of face straight through it
+   * and left the fragments detached. Measured on the built preview across the twelve pins where the
+   * minute hand points at a numeral: **16.4% of a numeral's ink erased**, 31.3% of the "6" at
+   * 18:30, which rendered as three disconnected shapes.
+   *
+   * The fix is paint order rather than a second glyph: the numerals mount above the halos, so
+   * nothing can erase them, and below the hands, so a hand still crosses over and stays unbroken.
+   * Both halves are asserted here — mounting them last as well would put `--card-foreground` on
+   * `--card-foreground` at 1:1 and lose the hand instead, which is #112's decision 4.
+   */
+  describe("numerals a hand crosses", () => {
+    it.each<DialScaleId>(["12h", "1h"])(
+      "mounts every numeral above every halo and below every hand, at the %s scale",
+      (scale) => {
+        const { element } = build(at(6, 30), true, scale);
+        const indexOf = paintIndex(element);
+
+        const halos = ["hour-hand-halo", "minute-hand-halo", "second-hand-halo"].map(indexOf);
+        const hands = ["hour-hand", "minute-hand", "second-hand"].map(indexOf);
+        const numerals = numeralIds(scale).map(indexOf);
+
+        expect(Math.min(...numerals)).toBeGreaterThan(0);
+        expect(Math.max(...halos)).toBeLessThan(Math.min(...numerals));
+        expect(Math.max(...numerals)).toBeLessThan(Math.min(...hands));
+      }
+    );
+
+    /**
+     * The property over the whole day rather than one sampled time, for the reason #107's own sweep
+     * gives: the erasure is time-dependent, so a single pin passes on almost any hour chosen. The
+     * crossing floor guards the assertion against passing because nothing ever crossed — measured
+     * at 1,528 halo-over-numeral crossings on the 12-hour dial and 3,228 on the 1-hour dial, so 500
+     * is well clear of both while leaving room for the glyph model to shift.
+     */
+    it.each<DialScaleId>(["12h", "1h"])(
+      "is painted later than every halo that crosses its glyphs, at every minute of the %s day",
+      (scale) => {
+        const { element, setTime } = build(at(0, 0), true, scale);
+        const indexOf = paintIndex(element);
+        const halos = ["hour-hand-halo", "minute-hand-halo", "second-hand-halo"].map(
+          (id) => [indexOf(id), find(element, id)!] as const
+        );
+        // Hoisted out of the sweep: `setTime` re-points the hands and nothing else, so a numeral's
+        // box is the one thing here that does not move.
+        const numerals = numeralIds(scale).map(
+          (id) => [indexOf(id), glyphBox(find(element, id)!)] as const
+        );
+
+        let crossings = 0;
+
+        for (let minute = 0; minute < 24 * 60; minute += 1) {
+          setTime(at(Math.floor(minute / 60), minute % 60, minute % 60));
+
+          for (const [numeralIndex, box] of numerals) {
+            for (const [haloIndex, halo] of halos) {
+              if (!haloCoversBox(halo, box)) continue;
+              crossings += 1;
+              expect(haloIndex).toBeLessThan(numeralIndex);
+            }
+          }
+        }
+
+        expect(crossings).toBeGreaterThan(500);
+      }
+    );
   });
 
   describe("period indicator", () => {
