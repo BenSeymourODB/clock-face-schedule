@@ -25,7 +25,18 @@ decisions** — treat that line as authoritative when triaging.
 **`/implement-issue` is driven unattended as well as by hand**, by something
 outside this repo: nothing in `.github/workflows/` runs it, and an Actions-based
 version would still need an `ANTHROPIC_API_KEY` secret and an opt-in repo
-variable. Either way it only ever opens draft PRs for a human to merge.
+variable. Either way it only ever opens draft PRs for a human to merge — **and
+under the driver's current prompt an agent may not merge one at all**, because
+the maintainer is the only merge gate by choice.
+
+The driver is a Claude Code Routine, and **its prompt is mirrored in
+[`.claude/routine-prompt.md`](../routine-prompt.md)** with the reasoning for each
+clause. That prompt decides what this command does *between* the lines it
+documents: how a session picks its work, and — the part that is not obvious from
+reading the command — what it does when it can pick none. Read it before
+concluding that an unattended run has misbehaved; it is likelier to be following
+a policy the command file does not carry. The mirror can drift from the live
+Routine and nothing offline can check it, which that file says plainly.
 
 One consequence is worth knowing before reading either command: **a driven run
 does not choose its own branch.** It is handed one — `claude/funny-curie-…`,
