@@ -19,7 +19,12 @@ import {
 import { decodePreferences, encodePreferences } from "../shared/preferences";
 import { readClockPin } from "./clock-pin";
 import { fixtureRefresher } from "./fixture-refresh";
-import { type PreferenceStore, preferenceStore, readPreferenceWire } from "./preferences";
+import {
+  type PreferenceStore,
+  preferenceStore,
+  readDeploymentPreferenceWire,
+  readPreferenceWire
+} from "./preferences";
 import { type AnalogClockHandle, DIAL_VIEWBOX_SIZE, analogClock } from "./render/analog-clock";
 import { type ScheduleStatus, describeStatus, nextStatus } from "./schedule-status";
 
@@ -103,6 +108,8 @@ function chosenScale(mount: Element): DialScaleId {
 function displayPreferences(mount: Element): PreferenceStore {
   return preferenceStore({
     wire: readPreferenceWire(mount),
+    // The layer beneath the viewer's own, so a reset shows its result without a round trip (#157).
+    deploymentWire: readDeploymentPreferenceWire(mount),
     save: (wire) =>
       callServer<string>("savePreferences", wire).catch((error: Error) => {
         console.warn(`preference not saved — ${error.message}`);
@@ -300,7 +307,8 @@ function browserTimeZone(): string {
  * other property of these two functions a spec settles; that one it cannot.
  */
 async function checkPreferences(list: Element): Promise<void> {
-  const wire = readPreferenceWire(document.querySelector("#dial"));
+  const dial = document.querySelector("#dial");
+  const wire = readPreferenceWire(dial);
 
   if (wire === null) {
     // The attribute is emitted whatever the conditions are, so its absence means templating broke.
@@ -308,6 +316,25 @@ async function checkPreferences(list: Element): Promise<void> {
     return;
   }
   addRow(list, "preferences", wire === "" ? "none stored — using defaults" : wire, "ok");
+
+  /**
+   * The layer a reset lands on, checked for the same reason and with the same failure: the attribute
+   * is emitted whatever the conditions are, so its absence means templating broke — and a reset would
+   * then silently land on the code default where the deployment has an answer of its own, which is
+   * the exact behaviour #157 removed and has no other symptom on screen.
+   */
+  const deployment = readDeploymentPreferenceWire(dial);
+
+  if (deployment === null) {
+    addRow(list, "deployment preferences", "no data-deployment-preferences on the mount", "fail");
+  } else {
+    addRow(
+      list,
+      "deployment preferences",
+      deployment === "" ? "not templated — a reset lands on the code defaults" : deployment,
+      "ok"
+    );
+  }
 
   const templated = encodePreferences(decodePreferences(wire));
   try {
