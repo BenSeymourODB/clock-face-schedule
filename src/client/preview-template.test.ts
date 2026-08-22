@@ -34,6 +34,14 @@ describe("the stripped Index template", () => {
     expect(readClockPin(previewDial(), "", new Date())).toBeNull();
   });
 
+  it("templates no deployment layer, so a reset in the preview lands on the code defaults", () => {
+    // The preview has no server and therefore no script store. The attribute has to survive the
+    // strip as an empty string rather than vanish: `readDeploymentPreferenceWire` reads an absent
+    // attribute as null, and null and "" both decode to the code defaults — but only the empty
+    // string proves the attribute was emitted at all, which is what the deployed app depends on.
+    expect(previewDial().dataset["deploymentPreferences"]).toBe("");
+  });
+
   it("leaves the preview free to be pinned from its own query string", () => {
     const pin = readClockPin(previewDial(), "?now=04:15&freeze=1", new Date());
 
