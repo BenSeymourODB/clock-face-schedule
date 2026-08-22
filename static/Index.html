@@ -8,8 +8,8 @@
   <body>
     <main id="display">
       <!--
-        The pin's two attributes, the scale and the preference wire are emitted unconditionally with
-        a templated *value*, not behind a conditional scriptlet the way data-demo is. The preview
+        The pin's two attributes, the scale and the two preference wires are emitted unconditionally
+        with a templated *value*, not behind a conditional scriptlet the way data-demo is. The preview
         builder strips scriptlets while keeping what they guard — which is how demo mode is always on
         in the preview — so a guarded `data-freeze="1"` would freeze every preview permanently, a
         guarded `data-scale="1h"` would put every preview on the 1-hour dial, and a guarded
@@ -18,9 +18,15 @@
         back to its own query string. Verified both ways rather than reasoned about; the preview line
         is byte-identical either way.
 
-        Escaped output, not raw, because the preference value comes out of a store. It needs no
+        The two preference attributes carry different layers of the same store, and that is the whole
+        point of there being two: data-preferences is the resolved set the display draws with, and
+        data-deployment-preferences is the same set without the viewer's own values — the layer a
+        reset lands on, which the browser cannot work out for itself (#157). Templating the resolved
+        wire into both would make every reset a silent no-op.
+
+        Escaped output, not raw, because the preference values come out of a store. They need no
         escaping — every encoded preference is [A-Za-z0-9;=], which shared/preferences.test.ts
-        asserts — but escaping it anyway keeps that a property of the format rather than a hope.
+        asserts — but escaping them anyway keeps that a property of the format rather than a hope.
 
         Nothing in this comment may use scriptlet delimiters: HtmlService compiles them wherever
         they appear, HTML comments included, so a fragment written as illustration would be
@@ -32,6 +38,7 @@
         data-freeze="<?= freezeClock ?>"
         data-scale="<?= scaleParam ?>"
         data-preferences="<?= preferences ?>"
+        data-deployment-preferences="<?= deploymentPreferences ?>"
       ></div>
       <p id="status" role="status" hidden></p>
     </main>
