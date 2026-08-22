@@ -108,7 +108,13 @@ function drawnLines(layout: LabelLayout): number {
  * with two lines of its own clearance unspent, which is the defect #183 exists to remove. Three is
  * admissible and only a linear scan finds it.
  *
- * So no monotonicity is assumed anywhere here. What holds regardless:
+ * So no monotonicity of *line count in width* is assumed anywhere here — that is the direction
+ * `pack-lines` breaks, and the whole safety argument below is independent of it. The separate claim
+ * that the smallest admissible height is also the widest card does rest on `widthForLines` being
+ * non-increasing in its argument, which is a property of the caller's limit rather than of this
+ * scan: a taller card must be narrower to clear the face. Only the choice among admissible
+ * candidates leans on it, never admissibility itself, so a caller that broke it would get a
+ * needlessly narrow card and never an unsafe one. What holds regardless:
  *
  * - **It terminates**: the scan is `maxLines` steps of a counted loop, whatever `widthForLines` does.
  * - **The result is admissible.** Only an admissible candidate is ever adopted, and the starting

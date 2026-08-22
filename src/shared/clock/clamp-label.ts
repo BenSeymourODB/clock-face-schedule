@@ -141,8 +141,9 @@ export function labelWidthLimit(x: number, clockBox: ClockBox): number {
  * this function was written for: it sidesteps the circular dependency, since height comes from the
  * line count and the line count comes from the width. It also charges a card for lines it never
  * draws, which was 356 of 496 cards over a 192-state sweep (#183). `fitLabelToClearedWidth` is what
- * resolves the circularity instead — it walks that upper bound down to the height the card occupies
- * and carries the termination and safety argument. This function is unchanged either way: it
+ * resolves the circularity instead — it scans that upper bound down to the smallest height the card
+ * does not outgrow, and carries the termination and safety argument. This function is unchanged
+ * either way: it
  * answers for the height it is handed.
  *
  * Returns `Infinity` where there is no horizontal constraint to apply: directly above or below the

@@ -195,8 +195,9 @@ export function floatingLabelGeometry({
   // a height the card will not exceed. Taking it against the tallest the card *may* become is the
   // cheap way to do that and is what shipped — but a card that merely offers a duration line was
   // then charged for a fourth line whether or not it ever drew one, and wrapped its title into the
-  // narrower budget that bought (#183). `fitLabelToClearedWidth` walks that starting height down to
-  // the one the card actually occupies; its docstring carries the termination and safety argument.
+  // narrower budget that bought (#183). `fitLabelToClearedWidth` scans that starting height down to
+  // the smallest the card does not outgrow — not to the count it draws, which is the walk that
+  // docstring rejects; it carries the termination and safety argument.
   const { lines, width, height, clearedLines } = fitLabelToClearedWidth(
     text,
     fontSize,
