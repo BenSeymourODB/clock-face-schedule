@@ -75,7 +75,10 @@ write-and-echo check on them. Off by default, because the display itself carries
 between sessions, so cookies and `localStorage` outlive nothing here; a user-scoped property store
 does. `doGet` templates the resolved values into the page, so reading them costs no round trip, and
 only a change writes one. A user property wins over a script property, which wins over the code's
-default — so a forked school instance sets deployment-wide defaults in the script store.
+default — so a forked school instance sets deployment-wide defaults in the script store. **Deleting a
+user property puts that display back on the deployment's answer** (#83), which is what keeps the
+script store useful: without it, a display that had once stored a key would ignore every later change
+an admin made to it.
 
 Nothing on the display sets a preference yet — that arrives with the timer's control surface (#47) —
 so today they move only from the Apps Script property editor, which needs both the `pref.` prefix and
