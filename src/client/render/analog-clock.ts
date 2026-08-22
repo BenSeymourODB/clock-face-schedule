@@ -19,6 +19,7 @@ import {
   filterEventsForPeriod,
   formatEventDuration,
   hasEventInProgress,
+  keepsItsName,
   labelVerticalBand,
   planOptionalLines,
   roundCoord,
@@ -416,11 +417,21 @@ export function analogClock({
     }));
 
     const { accepted, nudges } = planOptionalLines(
-      overflowing.map(({ params }, index) => ({
-        base: floatingLabelGeometry(titleOnly[index]).rect,
-        grown:
-          params.duration === undefined ? null : floatingLabelGeometry(params).rect,
-      })),
+      overflowing.map(({ params }, index) => {
+        const plain = floatingLabelGeometry(titleOnly[index]);
+        if (params.duration === undefined) return { base: plain.rect, grown: null };
+
+        // The line is paid for out of the title, not out of empty space (#141): the grown card is
+        // cleared against one more line, so it is narrower, and the title wraps into that. Where
+        // the tighter wrap costs characters the card is not offered the line at all — a duration is
+        // recoverable from the arc's own extent, and a truncated name is recoverable from nothing.
+        // A re-wrap of the same words is free by that measure and is allowed through.
+        const grown = floatingLabelGeometry(params);
+        return {
+          base: plain.rect,
+          grown: keepsItsName(plain.lines, grown.lines, params.duration) ? grown.rect : null,
+        };
+      }),
       cy,
       labelVerticalBand(clockBox)
     );

@@ -568,6 +568,40 @@ describe("analogClock", () => {
       });
     });
 
+    /**
+     * #141. Asking for a duration narrows the card before a character is placed — the grown box is
+     * cleared against one more line — so the title wraps into a tighter budget and can ellipsize.
+     * A duration is recoverable from the arc's own extent; a truncated name is recoverable from
+     * nothing, and the card exists because the arc could not carry that name.
+     *
+     * The two cases are separated deliberately: the same words across different lines cost a reader
+     * nothing and are allowed, so a rule that declined every change to the rendered lines would
+     * give up 28 of the fixture's 49 title-touching gains for no gain in return.
+     */
+    describe("rather than a character of the title", () => {
+      /** Mid-angle 45°, where the frame binds and this title fits three lines only without one. */
+      const truncated = input("a", 1.25, 1.75, {
+        title: "Swimming Group B Kit Check and Coach Handover",
+      });
+
+      it("declines a line the title would pay for with an ellipsis", () => {
+        const lines = labelLines(build([truncated]).element, "a");
+
+        expect(lines).toEqual(["Swimming Group B", "Kit Check and", "Coach Handover"]);
+      });
+
+      it("takes a line the title pays for by re-wrapping the same words", () => {
+        // Mid-angle 45° again, on a title short enough that the tighter budget only moves a break.
+        const lines = labelLines(
+          build([input("a", 1.25, 1.75, { title: "Breakfast Club Morning" })]).element,
+          "a"
+        );
+
+        expect(lines.slice(-1)).toEqual(["30 min"]);
+        expect(lines.slice(0, -1).join(" ").replace(/\s+/g, " ")).toBe("Breakfast Club Morning");
+      });
+    });
+
     // The arc runs 10:00 to noon and stops at the period's edge; the event runs to 13:00. Deriving
     // the text from the drawn angles would make it agree with the drawing and say "2 hr", which is
     // the one thing this channel exists not to do.
