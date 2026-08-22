@@ -18,6 +18,7 @@ import {
   PANEL_CARD_FONT_SIZE,
   PANEL_CARD_PADDING,
   PANEL_RESERVE_UNITS,
+  panelFitsBoard,
 } from "../../shared/clock";
 import {
   PANEL_VIEWBOX_HEIGHT,
@@ -105,6 +106,63 @@ describe("the panel's column, against the width reserved for it", () => {
   /** Absent, not collapsed — #39 item 4 is still open, and `hidden` needs a rule to obey. */
   it("has a rule that actually hides it when the board cannot afford it", () => {
     expect(block("#panel\\[hidden\\]")).toMatch(/display:\s*none/);
+  });
+
+  /**
+   * **The assertion that was missing when a card crossed into the column.**
+   *
+   * `dial-frame.test.ts` binds `--label-frame` to the worst card the renderer draws. This binds the
+   * same declaration to the panel's threshold, which is the other thing that frame now has to cover:
+   * on the panel side the frame *is* the panel, so the room between the dial's viewBox and the column
+   * has to hold a card on its own.
+   *
+   * Derived from the stylesheet rather than restated, so raising the frame for a taller card raises
+   * the aspect ratio at which the panel is allowed to appear, in the same commit and without anyone
+   * remembering to.
+   */
+  it("will not show the panel on a board whose room beside the dial cannot hold a card", () => {
+    const percent = Number(/--label-frame:\s*([\d.]+)vmin/.exec(block("#display"))?.[1] ?? NaN);
+    expect(percent, "#display declares its frame as a share of the shorter axis").toBeGreaterThan(0);
+
+    // The frame a card paints into, in the dial's units — `dial-frame.test.ts`'s own derivation.
+    const reach = (DIAL_VIEWBOX_SIZE * percent) / (100 - 2 * percent);
+
+    /** The rendered content box of `#board` on a `width × height` viewport. */
+    const boardBox = (width: number, height: number) => {
+      const padding = (Math.min(width, height) * percent) / 100;
+      return { width: width - 2 * padding, height: height - 2 * padding };
+    };
+    const fits = (width: number, height: number) =>
+      panelFitsBoard(boardBox(width, height), DIAL_VIEWBOX_SIZE, PANEL_RESERVE_UNITS, reach);
+
+    // The deployment ADR 0009 targets: both clear it with room to spare.
+    expect(fits(1920, 1080)).toBe(true);
+    expect(fits(1920, 1200)).toBe(true);
+
+    // The board a card was measured intruding on, and a 4:3 projector, which is the same shape.
+    expect(fits(1330, 1000)).toBe(false);
+    expect(fits(1024, 768)).toBe(false);
+
+    // And the property itself: wherever the panel shows, the room per side covers a card's reach.
+    for (const [width, height] of [
+      [1920, 1080],
+      [1920, 1200],
+      [2560, 1440],
+      [1600, 900],
+      [1440, 1080],
+      [1400, 1000],
+      [1330, 1000],
+      [1024, 768],
+      [1000, 1000]
+    ]) {
+      const box = boardBox(width as number, height as number);
+      if (!panelFitsBoard(box, DIAL_VIEWBOX_SIZE, PANEL_RESERVE_UNITS, reach)) continue;
+
+      const boardUnits = (box.width * DIAL_VIEWBOX_SIZE) / box.height;
+      const roomPerSide = (boardUnits - DIAL_VIEWBOX_SIZE - PANEL_RESERVE_UNITS) / 2;
+
+      expect(roomPerSide, `${width}×${height} shows the panel with ${roomPerSide.toFixed(1)} units beside the dial`).toBeGreaterThanOrEqual(reach);
+    }
   });
 });
 

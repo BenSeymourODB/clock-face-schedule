@@ -77,6 +77,33 @@ describe('panelFitsBoard', () => {
     expect(panelFitsBoard({ width: 1300, height: 1000 }, DIAL_SIZE, 360)).toBe(false);
     expect(panelFitsBoard({ width: 1600, height: 1000 }, DIAL_SIZE, 360)).toBe(true);
   });
+
+  /**
+   * **The case rendering caught and 1,608 tests did not.** The dial keeping its height is not enough:
+   * a card paints outside the viewBox and the page reserves `--label-frame` for it, but on the panel
+   * side that frame is the panel. At 1330×1000 the board clears the 1.3 threshold — the dial is still
+   * full height — and `⚫ Assembly`'s card crossed into the column by 5.9 px, because only 25.9 units
+   * of room were left against a 51.29-unit reach.
+   *
+   * The figures below are the rendered content boxes, so they are the numbers the client measures.
+   */
+  it.each([
+    ['16:9', 1762.3, 922.3, true],
+    ['16:10', 1744.8, 1024.8, true],
+    ['the 1330×1000 board a card intruded on', 1184, 854, false],
+    ['4:3, the same shape', 912, 656, false]
+  ])('refuses a board whose room beside the dial cannot hold a card: %s', (_name, width, height, expected) => {
+    expect(panelFitsBoard({ width, height }, DIAL_SIZE, PANEL_RESERVE_UNITS, 51.29)).toBe(expected);
+  });
+
+  /** A reach of zero is the dial-size condition alone, which is what an unmeasurable frame gives. */
+  it('falls back to the dial-size condition when the reach cannot be measured', () => {
+    expect(panelFitsBoard({ width: 1300, height: 1000 }, DIAL_SIZE, PANEL_RESERVE_UNITS, 0)).toBe(true);
+  });
+
+  it('treats a negative reach as none rather than as credit', () => {
+    expect(panelFitsBoard({ width: 1300, height: 1000 }, DIAL_SIZE, PANEL_RESERVE_UNITS, -500)).toBe(true);
+  });
 });
 
 describe('the card geometry against ADR 0009', () => {

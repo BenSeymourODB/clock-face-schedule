@@ -73,9 +73,45 @@ being height-bound: it starts paying for the panel, which is the one thing ADR 0
 ADR 0009 names two answers — *"the panel has to collapse or stack"* — and picking between them is
 item 4. This plan picks **neither**, and instead builds the guard that both answers need anyway:
 
-> **The panel is drawn only where the board can afford it with the dial at full height**, i.e. when
-> `board.width ≥ board.height × (600 + 180) / 600`. Below that the panel is absent and the dial keeps
-> the whole remainder — exactly today's layout, so a narrow board regresses in nothing.
+> **The panel is drawn only where the board can afford it**, and *afford* has two terms: the dial
+> keeps its full height, **and** the room left beside the dial covers a floating label's reach.
+
+### The second term was found by rendering, and the first alone is not enough
+
+The dial-size condition on its own is `board.width ≥ board.height × (600 + 180) / 600` — an aspect
+ratio of **1.3**. Built and looked at, that is wrong, and the whole suite was green through it:
+
+| board | content aspect | room beside the dial | measured |
+| --- | --- | --- | --- |
+| 16:9 | 1.911 | 183.2 | clean |
+| 16:10 | 1.703 | 120.8 | clean |
+| 1400×1000 | 1.468 | 50.5 | clean |
+| **1330×1000** | **1.386** | **25.9** | **`⚫ Assembly`'s card crossed into the column by 5.9 px** |
+| **4:3 (1024×768)** | **1.390** | **27.1** | same shape — a plausible classroom projector |
+
+A card paints outside the dial's viewBox by design and the page reserves `--label-frame` — **51.29
+units** — for it to paint into. On the panel side that frame *is the panel*, so the room between the
+dial's viewBox and the column has to hold a card on its own. Requiring it raises the threshold to
+**1.4710**, which both aspects ADR 0009 targets clear with 2–3× headroom, so nothing about the
+deployment changes.
+
+The reach is read off `#display`'s own rendered padding rather than restated, so raising the frame for
+a taller card raises the aspect at which the panel may appear, in the same commit.
+
+### One residual, priced rather than fixed
+
+`labelMarginUnits` grants the labels `(board − dial − panel) / 2` measured on the **viewport**, and
+the room actually beside the dial is that minus the frame, because the frame is padding *outside*
+`#board`. So the grant over-states the panel side by exactly one frame width on every board. On 16:9
+that is invisible — the widest card the fixture draws reaches 65.5 units against 183.2 of room — but
+just above the threshold it is not: at 1410×1000, `?now=19:45` puts a card 16.4 px into the column.
+Measured band: content aspect ~1.471 to ~1.50, clean at 1.585 and above.
+
+Closing it structurally needs one of two things, and both are decisions rather than implementations:
+a `gap` of **twice** the frame on `#board` (which makes room ≥ grant by construction, and breaks ADR
+0009's "both label margins are equal" consequence), or narrowing the grant itself (which changes a
+shipped ADR figure and every card on every board). Filed with item 4, which is the issue that owns
+what happens as the board approaches square.
 
 That is a pure function of two measured lengths (`panelFitsBoard`, in `src/shared/`, node-testable,
 ADR 0003-safe) and the client sets one attribute from it in the `ResizeObserver` it already runs for

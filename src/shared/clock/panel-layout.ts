@@ -74,14 +74,24 @@ export interface PanelBoard {
 }
 
 /**
- * Whether the board can carry the panel **without the dial paying for it** — the one constraint
- * ADR 0009 states as absolute.
+ * Whether the board can carry the panel **without the dial paying for it and without a floating
+ * label landing on it**.
  *
- * The dial is bound by the board's height on any board wide enough that the remainder after the
- * panel is still at least as wide as it is tall. Written in units of the dial's own viewBox extent:
- * panel needs `panelUnits / size` of the height in width, and the dial needs the height itself,
- * so the board must be `(size + panelUnits) / size` times its own height. At ADR 0009's numbers
- * that is **1.3** — comfortably inside 16:9 (1.78) and 16:10 (1.60), and outside a square one.
+ * The first is ADR 0009's one absolute. The dial is bound by the board's height on any board wide
+ * enough that the remainder after the panel is still at least as wide as it is tall, so the board
+ * must be `(size + panelUnits) / size` times its own height — **1.3** at ADR 0009's numbers.
+ *
+ * **1.3 is not enough, and rendering is what said so.** A card paints outside the dial's viewBox by
+ * design, and the page reserves `--label-frame` — 51.29 units — for it to paint into. On the panel
+ * side that frame is now occupied, so the room between the dial's viewBox and the panel has to cover
+ * a card's reach on its own. At 1330×1000 it does not: 25.9 units of room, and `⚫ Assembly`'s card
+ * crossed into the column by 5.9 px. A 4:3 board is the same shape — 27.1 units. Passing
+ * `labelReachUnits` raises the threshold to **1.4710**, which 16:9 (1.911 of content) and 16:10
+ * (1.703) clear by a wide margin, so nothing about the deployment ADR 0009 targets changes.
+ *
+ * The reach is a *parameter* rather than a constant here because the page's own reserve is the
+ * figure that matters and it lives in `Styles.html`. The client reads it off the rendered padding,
+ * so the two cannot disagree; `agenda-panel.test.ts` derives it from the stylesheet independently.
  *
  * Measure this on the **container** the dial and panel share, never on the dial's own box. The
  * container's size does not depend on whether the panel is in it; the dial's does, so testing the
@@ -94,10 +104,13 @@ export interface PanelBoard {
 export function panelFitsBoard(
   board: PanelBoard,
   size: number,
-  panelUnits: number = PANEL_WIDTH_UNITS
+  panelUnits: number = PANEL_WIDTH_UNITS,
+  labelReachUnits = 0
 ): boolean {
   if (!(board.width > 0) || !(board.height > 0) || !(size > 0)) return false;
-  return board.width >= (board.height * (size + panelUnits)) / size;
+
+  const needed = size + panelUnits + 2 * Math.max(0, labelReachUnits);
+  return board.width >= (board.height * needed) / size;
 }
 
 /** An event resolved to the text and colour a card draws, before it is wrapped or placed. */

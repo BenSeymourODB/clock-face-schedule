@@ -12,6 +12,7 @@ import {
   describeClockPin,
   describePinnedInstant,
   getFetchWindow,
+  PANEL_RESERVE_UNITS,
   getPeriodBounds,
   labelMarginUnits,
   panelFitsBoard,
@@ -136,7 +137,31 @@ function measureLabelMargin(mount: Element): number | null {
 }
 
 /**
- * Whether the board can carry the panel without the dial paying for it (#39, ADR 0009).
+ * How far a floating label may reach past the dial's viewBox, in the dial's units — read off the
+ * frame the page actually reserves for it rather than restated here.
+ *
+ * `#display`'s padding *is* that reserve (`--label-frame`, sized in `Styles.html` from the worst card
+ * the renderer can draw), so one read keeps the panel's threshold and the page's frame the same
+ * number. Converted through `size / board.height`, the scale the dial resolves at while it is bound
+ * by the board's height — which is the hypothesis `panelFitsBoard` is testing.
+ *
+ * Zero where there is nothing to measure, which leaves the threshold at the dial-size condition
+ * alone rather than refusing the panel outright.
+ */
+function labelReachUnits(board: Element): number {
+  const display = document.querySelector("#display");
+  const height = board.getBoundingClientRect().height;
+  if (!display || !(height > 0)) return 0;
+
+  const padding = Number.parseFloat(window.getComputedStyle(display).paddingRight);
+  if (!Number.isFinite(padding)) return 0;
+
+  return (padding * DIAL_VIEWBOX_SIZE) / height;
+}
+
+/**
+ * Whether the board can carry the panel without the dial paying for it and without a floating label
+ * landing on it (#39, ADR 0009).
  *
  * Measured on `#board` — the row the dial and the panel share — and never on the dial's own box. The
  * dial's width depends on whether the panel is in it, so testing the dial would flap: hiding the
@@ -147,7 +172,12 @@ function measureLabelMargin(mount: Element): number | null {
  * sized from a zero would be a sliver of cards nobody can read.
  */
 function showPanel(board: Element): boolean {
-  return panelFitsBoard(board.getBoundingClientRect(), DIAL_VIEWBOX_SIZE);
+  return panelFitsBoard(
+    board.getBoundingClientRect(),
+    DIAL_VIEWBOX_SIZE,
+    PANEL_RESERVE_UNITS,
+    labelReachUnits(board)
+  );
 }
 
 /**

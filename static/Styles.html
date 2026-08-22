@@ -138,11 +138,17 @@
    * percentage of a definite box rather than only from stretching. That is what `aspect-ratio` needs
    * in order to give a definite width.
    *
-   * Hidden by the client, not by a media query, when the board cannot afford the panel with the dial
-   * at full height — `panelFitsBoard`, measured on `#board`, whose size does not depend on whether
-   * the panel is in it. The dial then keeps the whole remainder, which is the layout as it was
-   * before this column existed. What a narrow board *should* show instead is #39 item 4 and is still
-   * open; absent is not collapsed.
+   * Hidden by the client, not by a media query, when the board cannot afford the panel — measured on
+   * `#board`, whose size does not depend on whether the panel is in it. Two conditions, and the
+   * second was found by rendering: the dial must keep its full height (ADR 0009's absolute), *and*
+   * the room left beside the dial must cover a floating label's reach. On the panel side the frame
+   * above is the panel, so that room has to hold a card on its own — at 1330×1000 it did not, and a
+   * card crossed into the column by 5.9 px. The client reads the reach off this element's own
+   * padding, so the two cannot disagree.
+   *
+   * The dial then keeps the whole remainder, which is the layout as it was before this column
+   * existed. What a narrow board *should* show instead is #39 item 4 and is still open; absent is not
+   * collapsed.
    */
   #panel {
     flex: 0 0 auto;
