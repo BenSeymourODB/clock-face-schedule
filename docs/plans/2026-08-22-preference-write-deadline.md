@@ -25,8 +25,13 @@ mechanism they imply rather than to re-open any of them:
   queue per occurrence and gives most of the value back.
 - **An injectable clock**, because the store is pure today apart from the `save` it is handed, and
   reaching for `setTimeout` inside it would need fake timers in a suite that currently uses none.
-- **The deadline rejects**, so `drain` runs on the existing `sent.then(drain, drain)` path and there
-  is no second code path to keep correct.
+- **A timed-out write is treated as failed**, so it reaches `drain` and the queue moves.
+
+The fourth is the one this plan departs from in *mechanism* while keeping in *outcome*, and it is
+recorded in "The road not taken" below rather than left for a reader to notice. #122 asks for the
+deadline to **reject**, so that `drain` runs on the existing `sent.then(drain, drain)` path. It does
+not reject; the timer ends the turn directly. The reason is a property the rejecting version quietly
+loses.
 
 ## The defect, as a sequence
 
@@ -54,29 +59,64 @@ out.
 
 ## The mechanism
 
-One wrapper, applied at both send sites:
+`writeTurn()` — one write's **turn** at the queue. It arms the injected timer and returns an
+`end(finish)` that runs at most once, so the turn is closed by whichever of the server's answer and
+the deadline arrives first. Both send sites call it, and the answer handlers become `end(drain)`:
 
 ```ts
-function withDeadline<T>(sent: PromiseLike<T>): Promise<T>
+const end = writeTurn();
+save(encodePreferences(patch)).then(
+  () => end(drain),
+  () => end(drain)
+);
 ```
 
-It arms the injected timer, races it against `sent`, and cancels it on either outcome. Both existing
-send paths keep their shapes — `save(…)` and `reset(…)` are simply wrapped — so `drain` and `adopt`
-are unchanged.
+`over`, a boolean per turn, is what makes it once, and it carries the correctness:
 
-Three properties fall out of the promise's own settle-once semantics rather than out of new code, and
-each is worth an assertion because each is a way the fix could be worse than the stall:
-
-- **A late answer cannot drain twice.** Once the deadline has rejected, the outer promise is settled;
-  the real answer arriving afterwards resolves nothing. Without that, a slow-but-alive write would
-  send the queue's next entry at the deadline *and again* on its own completion — the second send
-  racing whatever the first one started, which is exactly #84's defect.
+- **A late answer cannot drain twice.** The deadline has already closed the turn, so the real answer
+  arriving afterwards does nothing. Without that, a slow-but-alive write would send the queue's next
+  entry at the deadline *and again* on its own completion — the second send racing whatever the first
+  started, which is exactly #84's defect arriving as the cure for the stall.
 - **A late reset echo is not adopted.** A timed-out reset is a failed reset, and a failed reset does
-  not adopt. Adopting an echo that arrived after the store had moved on would apply a reading of the
-  layer beneath that a later write has already superseded.
-- **A settled write disarms its deadline.** Otherwise every write on a board left up for weeks leaves
-  a live timer behind it, and a stray one firing while a *different* write is in flight would abandon
-  that healthy write's turn.
+  not adopt. This is more load-bearing than it first looks: after the deadline drains, a value set
+  since is *sent* rather than queued, so `adopt`'s "only where nothing is queued for this key" guard
+  cannot speak for it, and the echo would clobber a newer user value with nothing to stop it.
+- **`over` is per turn, so a stale timer cannot reach a later write either.** It finds its own turn
+  over and returns.
+
+### What cancelling is actually for
+
+Worth stating precisely, because the obvious answer is wrong and was written down here first.
+Cancelling the timer on an answer is **not** what stops a stale deadline draining a later write —
+`over` does that, per the point above, and it is unreachable by construction rather than merely
+guarded. Nor does an uncancelled timer accumulate: `setTimeout` is one-shot, so live timers are
+bounded by the writes of the last ten seconds however long the board has been up.
+
+What cancelling protects is the **log**. An uncancelled timer firing after its write succeeded would
+print an abandoned-write line for a write that landed. So the warning goes *inside* the turn, where
+`end` runs it only if the deadline is what ended the turn — true by construction rather than by
+`clearTimeout` winning a race. Cancelling is then housekeeping: a wasted callback, not a defect.
+
+### The road not taken
+
+The rejecting version #122 asks for is a wrapper — `withDeadline(sent)`, a `Promise.race` between the
+answer and a timer — and it is genuinely tidier in two ways: settle-once comes from the promise rather
+than from an `over` flag, and neither send site changes.
+
+It is not built because it silently converts a documented synchronous throw into an asynchronous
+rejection. `sendValues` puts its `.then` *inside* the `try` deliberately, and the comment says why: a
+`save` returning something un-thenable throws there, and that throw has to reach the `catch` rather
+than escaping into a click handler with the queue shut. Wrap the call in a `Promise` executor and the
+throw becomes a rejection instead — the queue still drains, a microtask later, but the existing
+comment stops being true and the property stops being synchronous. Keeping the turn explicit costs a
+boolean and keeps that path exactly as it was.
+
+One hazard the wrapper would not have, and which the explicit version therefore has to close by hand:
+`end` closes over the canceller, so a `schedule` firing its callback synchronously would reach it in
+the temporal dead zone and throw out of `set` — permanent silence, the failure this whole change
+exists to remove. `let cancel: () => void = () => undefined` before `end`, assigned after, is the
+whole of the fix. Only a spec supplies a `schedule` and none does that, but the option is public on an
+exported interface and one line is cheaper than trusting it.
 
 ## The 10 seconds, and the race it does and does not reintroduce
 
@@ -95,13 +135,10 @@ the reason 10 s rather than 2 s is the number: the race has to be rarer than the
 
 ## Tests
 
-`src/client/preferences.test.ts`, a new `the store, with a write that never settles` block. Every
-assertion is on the sequence of writes, as the #84 block's own header requires — the deadline is the
-mechanism and the property is that the queue keeps moving.
-
-The one that matters is the **negative** one: a write that never settles must not stop the next write
-from being sent. Asserting only that the timer fires would pass without testing the property this
-issue exists to protect.
+`src/client/preferences.test.ts`, a new `the store, with a write that never settles` block — thirteen
+assertions. The one that matters is the **negative** one: a write that never settles must not stop the
+next write from being sent. Asserting only that the timer fires would pass without testing the
+property this issue exists to protect.
 
 - a queued write is sent once the abandoned one's deadline passes (**fails on `main`** — never sent)
 - the abandoned write's own value is not resent, matching the failed-write policy
@@ -110,14 +147,31 @@ issue exists to protect.
 - a settled write's deadline is cancelled, so no stray timer is left armed
 - a late answer after the deadline does not send the next write a second time
 - a late reset echo after the deadline is not adopted
+- the write *after* an abandoned one gets a deadline of its own — a bridge that has stopped answering
+  stops answering every write, so arming once would shut the queue one write later
+- a synchronous throw from either `save` or `reset` still drains at once, and disarms
 - the deadline the store asks for is 10 s
-- a timed-out write is reported to the console, so the failure leaves a trace on a board nobody is
-  watching
+- a store built with no injected clock arms a real `window.setTimeout`
+- a timed-out write is reported to the console
 
-That last one is the one addition beyond the decision's list, and it is a line rather than a
+**Most are on the sequence of writes, as the #84 block's header requires; three are not, and the
+exception is deliberate.** `clock.delays`, `clock.armed()` and the `setTimeout` spy pin the timer
+itself. The 10 s is a decision from #122 rather than plumbing, and the spy is the only thing standing
+between the deadline and never reaching a board — every other spec injects a clock, so a default that
+armed nothing would leave all of them green.
+
+The console line is the one addition beyond the decision's list, and it is a line rather than a
 mechanism. `main.ts` already logs `preference not saved` / `preference not reset` for the sibling
-failure, and those logs sit *upstream* of this wrapper — so without a line here a timed-out write
-would be the only failure in this store with no record anywhere.
+failure, and those logs sit *upstream* of this deadline — so without a line here a timed-out write
+would be the only failure in this store with no record anywhere. The visible-surface half of it is
+#167.
+
+### One property that is structural rather than tested
+
+The log's truthfulness — that an abandoned-write line never describes a write that succeeded. Moving
+the warning back outside the turn fails **no** spec, because `cancel` makes the stray-fire state
+unreachable, so there is no state a test can put the store in to observe it. It is held by where the
+line sits, not by an assertion, which is why the reasoning is in the source beside it.
 
 ## Not in scope
 

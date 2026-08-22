@@ -158,18 +158,28 @@ export function preferenceStore({
    * One write's turn at the queue, arming its deadline and ending **exactly once** — whichever of the
    * server's answer and the deadline arrives first (#122).
    *
-   * Both halves of "exactly once" are load-bearing, and each is a way the deadline could be worse
-   * than the stall it prevents:
+   * `over` is what makes it once, and it is the half that carries the correctness:
    *
-   * - **The answer cancels the deadline**, so a settled write leaves no timer behind it. One outliving
-   *   its own write would fire while a *later* write was in flight and abandon that healthy write's
-   *   turn — a leak that gets worse the longer the display runs.
    * - **The deadline closes the turn**, so an answer arriving afterwards does nothing. Draining twice
    *   for one write would send the queue's next entry while the previous one was still out, which is
    *   the race a single writer exists to remove.
+   * - **`over` is per turn**, so a stale timer cannot reach a *later* write either: it finds its own
+   *   turn already over and returns. That is why cancelling is housekeeping rather than a guard —
+   *   `setTimeout` is one-shot, so live timers are bounded by the writes of the last ten seconds
+   *   however long the board has been up, and the cost of a stray one is a wasted callback.
+   *
+   * The one thing cancelling *did* protect is the log, which is why the warning is inside the turn:
+   * `end` runs it only if the deadline is what ended the turn, so an abandoned-write line cannot
+   * describe a write that succeeded. True by construction rather than by `clearTimeout` winning.
    */
   function writeTurn(): (finish: () => void) => void {
     let over = false;
+    // Assigned below, and a no-op until then. A `schedule` that ran its callback synchronously would
+    // otherwise reach `cancel` in its dead zone and throw *out of `set`* with `writing` left true and
+    // no timer to recover it — permanent silence, which is the failure this deadline exists to
+    // remove. Only a spec supplies a `schedule`, and none does that; one line is cheaper than
+    // trusting that.
+    let cancel: () => void = () => undefined;
 
     function end(finish: () => void): void {
       if (over) return;
@@ -178,12 +188,14 @@ export function preferenceStore({
       finish();
     }
 
-    const cancel = schedule(() => {
-      // The only record an abandoned write leaves. `main.ts` logs the sibling failures from inside
-      // the functions handed in here, which is upstream of this deadline, so without a line the
-      // failure would be invisible on a display nobody is watching.
-      console.warn(`preference write abandoned after ${WRITE_DEADLINE_MS} ms — no answer`);
-      end(drain);
+    cancel = schedule(() => {
+      end(() => {
+        // The only record an abandoned write leaves. `main.ts` logs the sibling failures from inside
+        // the functions handed in here, which is upstream of this deadline, so without a line the
+        // failure would be invisible on a display nobody is watching.
+        console.warn(`preference write abandoned after ${WRITE_DEADLINE_MS} ms — no answer`);
+        drain();
+      });
     }, WRITE_DEADLINE_MS);
 
     return end;
@@ -234,6 +246,11 @@ export function preferenceStore({
    * was in flight, so the echo predates it and adopting it would revert the control the viewer just
    * used. Single-flight means only one write is ever out, so `queuedValues` is exactly "set since".
    * Read before `drain` empties it.
+   *
+   * That invariant now rests on `writeTurn`'s `over` rather than on single-flight alone (#122): an
+   * echo arriving after its deadline never reaches here, and it is the one echo `queuedValues` could
+   * not speak for — the store has drained and moved on, so a value set since is already sent rather
+   * than queued.
    *
    * A queued *reset* for the same key is deliberately not a reason to skip. It asks for what the
    * echo already reports — the property is gone, and deleting an absent one changes nothing — so

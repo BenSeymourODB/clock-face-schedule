@@ -119,10 +119,12 @@ function controllableClock(): {
     /** Fires the oldest deadline still armed, the way real time would reach it first. */
     elapse: () => {
       const timer = timers.find((candidate) => candidate.live);
-      if (timer !== undefined) {
-        timer.live = false;
-        timer.run();
-      }
+      // Loudly, rather than as a no-op. A silent one would let a spec that asserts only what the
+      // store looks like *after* the deadline pass against a store that armed no deadline at all —
+      // a test exercising something the renderer does not produce, in this file's own currency.
+      if (timer === undefined) throw new Error("no deadline is armed — nothing to elapse");
+      timer.live = false;
+      timer.run();
       return flush();
     }
   };
@@ -390,10 +392,16 @@ describe("the store, with a write still in flight", () => {
  * This is the one axis on which #84's queue can be worse than the fire-and-forget it replaced, which
  * could lose a write and could order two wrongly but could not stop writing.
  *
- * The deadline is 10 s, and the assertions are on the sequence of writes rather than on timing, for
- * the reason the block above gives. The one that matters is the **negative** one: a write that never
- * settles must not stop the next write from being sent. Asserting only that the timer fires would
- * pass without testing the property this issue exists to protect.
+ * The one that matters is the **negative** one: a write that never settles must not stop the next
+ * write from being sent. Asserting only that the timer fires would pass without testing the property
+ * this issue exists to protect.
+ *
+ * Most of these are on the sequence of writes, for the reason the block above gives — but three
+ * deliberately are not, and the exception is worth naming rather than glossed. `clock.delays`,
+ * `clock.armed()` and the `window.setTimeout` spy pin the timer itself. The 10 s is a **decision**
+ * recorded on #122 rather than plumbing, and the spy is the only thing standing between the deadline
+ * and never reaching a board: every other spec here injects a clock, so a default that armed nothing
+ * would leave all of them green.
  */
 describe("the store, with a write that never settles", () => {
   /** The deployment's answer for `showSeconds`, which differs from the code default of `true`. */
@@ -515,11 +523,59 @@ describe("the store, with a write that never settles", () => {
     expect(store.get().showSeconds).toBe(true);
   });
 
+  it("arms a fresh deadline for the write that follows an abandoned one", async () => {
+    const { sent, save, reset } = controllableSave();
+    const clock = controllableClock();
+    const store = preferenceStore({ wire: "", save, reset, schedule: clock.schedule });
+
+    store.set({ showSeconds: false });
+    store.set({ timerMuted: true });
+    await clock.elapse();
+    store.set({ timerDurationSeconds: 600 });
+
+    // A bridge that has stopped answering stops answering *every* write, so the deadline has to be
+    // per write rather than per page: arming once would recover the first stall and then shut the
+    // queue on the second, which is the same defect one write later.
+    await clock.elapse();
+    expect(sent).toEqual(["showSeconds=0", "timerMuted=1", "timerDurationSeconds=600"]);
+  });
+
+  it("keeps writing after a reset that throws instead of rejecting", async () => {
+    const clock = controllableClock();
+    const sent: string[] = [];
+    const store = preferenceStore({
+      wire: "",
+      save: (wire) => {
+        sent.push(wire);
+        return Promise.resolve();
+      },
+      // The `sendKeys` half of the synchronous-throw path, which nothing covered before: it has its
+      // own `try` and its own `end`, and a throw wedging there costs every later preference.
+      reset: (keysWire) => {
+        sent.push(keysWire);
+        throw new Error("bridge missing");
+      },
+      schedule: clock.schedule
+    });
+
+    store.reset(["showSeconds"]);
+    store.set({ timerMuted: true });
+    await flush();
+
+    expect(sent).toEqual(["showSeconds", "timerMuted=1"]);
+    expect(clock.armed()).toBe(0);
+  });
+
   it("arms a real timer when no clock is injected, so a board gets a deadline at all", () => {
     // The one property every other spec in this block cannot see, because they all inject. A default
     // that armed nothing would leave production with no deadline and leave all of them green — the
     // same shape of hole as a test that exercises a geometry the renderer does not produce.
-    const armed = vi.spyOn(window, "setTimeout");
+    //
+    // Stubbed rather than merely observed: the write below never settles, so a real timer would still
+    // be armed when the test ends and would fire `console.warn` and `drain` out of a finished spec.
+    const armed = vi
+      .spyOn(window, "setTimeout")
+      .mockImplementation(() => 0 as unknown as ReturnType<typeof window.setTimeout>);
     const { save, reset } = controllableSave();
     const store = preferenceStore({ wire: "", save, reset });
 
