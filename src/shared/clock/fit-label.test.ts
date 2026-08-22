@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { fitLabelToWidth, labelCardHeight, labelLineOffsets } from './fit-label';
+import {
+  fitLabelToClearedWidth,
+  fitLabelToWidth,
+  labelCardHeight,
+  labelLineOffsets
+} from './fit-label';
 
 const FONT = 17.52;
 const PADDING = { x: 6, y: 3 };
@@ -115,6 +120,99 @@ describe('fitLabelToWidth', () => {
       expect(result.lines).toHaveLength(4);
       expect(result.lines[3]).toBe('1 hr');
     });
+  });
+});
+
+describe('fitLabelToClearedWidth', () => {
+  /**
+   * A width limit shaped like the one a floating label faces: the taller the card, the less room it
+   * has. Linear rather than the real circle's arithmetic — the property under test is that the loop
+   * settles where height and width agree, and a monotone limit is all that takes.
+   */
+  function shrinking(perLine: number, atOneLine: number) {
+    const calls: number[] = [];
+    return {
+      calls,
+      widthFor(lineCount: number): number {
+        calls.push(lineCount);
+        return atOneLine - (lineCount - 1) * perLine;
+      }
+    };
+  }
+
+  function cleared(
+    text: string,
+    widthFor: (lineCount: number) => number,
+    trailingLine?: string,
+    maxLines = 3
+  ) {
+    return fitLabelToClearedWidth(text, FONT, maxLines, PADDING, widthFor, trailingLine);
+  }
+
+  it('settles where the card is cleared against the height it draws', () => {
+    const limit = shrinking(25, 205);
+    const result = cleared('Spelling Test', limit.widthFor, '1 hr');
+
+    expect(result.clearedLines).toBe(result.lines.length);
+  });
+
+  // The defect, at the function: sized against the tallest it may become, this card wraps into a
+  // budget it never spends. Four lines leaves 130 units, eleven characters; two leaves 180, which
+  // holds the title whole.
+  it('does not wrap a title into room a fourth line was holding but never used', () => {
+    const limit = shrinking(25, 205);
+
+    expect(cleared('Spelling Test', limit.widthFor, '1 hr').lines).toEqual(['Spelling Test', '1 hr']);
+    expect(fitLabelToWidth('Spelling Test', 130, FONT, 3, PADDING, '1 hr').lines).toEqual([
+      'Spelling',
+      'Test',
+      '1 hr'
+    ]);
+  });
+
+  it('leaves a card that genuinely fills its lines cleared against all of them', () => {
+    const result = cleared(LONG, shrinking(25, 205).widthFor, '1 hr');
+
+    expect(result.lines).toHaveLength(4);
+    expect(result.clearedLines).toBe(4);
+  });
+
+  it('starts at the line budget when no trailing line is on offer', () => {
+    const limit = shrinking(25, 205);
+    cleared(LONG, limit.widthFor);
+
+    expect(limit.calls[0]).toBe(3);
+  });
+
+  // Termination is what pays for the circularity `faceClearanceLimit` avoided by construction, so it
+  // is asserted rather than argued: `cleared` strictly decreases, so the walk is bounded by the line
+  // budget however the limit behaves.
+  it('terminates in at most one step per line of budget', () => {
+    const limit = shrinking(25, 205);
+    cleared('Lunch', limit.widthFor, '1 hr');
+
+    expect(limit.calls.length).toBeLessThanOrEqual(5);
+    expect(limit.calls).toEqual([...limit.calls].sort((a, b) => b - a));
+  });
+
+  // The safety invariant, made to fail on purpose: a limit that hands a *shorter* card *less* room
+  // could grow the card past the height it was cleared against. The step is refused instead, so
+  // what comes back is never sized against a height it exceeds.
+  it('refuses a step that would leave the card taller than the height it was cleared against', () => {
+    const perverse = (lineCount: number): number => (lineCount >= 4 ? 400 : 130);
+    const result = cleared('Parent Teacher Conference', perverse, '1 hr');
+
+    expect(result.clearedLines).toBe(4);
+    expect(result.lines).toEqual(['Parent Teacher Conference', '1 hr']);
+    expect(result.clearedLines).toBeGreaterThanOrEqual(result.lines.length);
+  });
+
+  it('floors an empty card at one line, the way labelCardHeight does', () => {
+    const result = cleared('', shrinking(25, 205).widthFor);
+
+    expect(result.lines).toEqual([]);
+    expect(result.clearedLines).toBe(1);
+    expect(result.height).toBeCloseTo(labelCardHeight(1, FONT, PADDING.y), 10);
   });
 });
 

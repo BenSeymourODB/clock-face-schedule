@@ -75,9 +75,11 @@ export {
 } from './feather';
 export {
   LINE_HEIGHT_RATIO,
+  fitLabelToClearedWidth,
   fitLabelToWidth,
   labelCardHeight,
   labelLineOffsets,
+  type ClearedLabelLayout,
   type LabelLayout
 } from './fit-label';
 export { arcCharBudget, fitTitleToArc, type FitTitleResult } from './fit-title';

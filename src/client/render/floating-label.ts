@@ -16,7 +16,7 @@ import {
   adjustCompositeForContrast,
   clampLabelPosition,
   faceClearanceLimit,
-  fitLabelToWidth,
+  fitLabelToClearedWidth,
   labelCardHeight,
   labelWidthLimit,
   polarToCartesian,
@@ -130,6 +130,24 @@ export interface FloatingLabelGeometry {
   rect: Rect;
   /** Wrapped text plus any trailing duration line, outermost first. */
   lines: string[];
+  /**
+   * What bounded the card's width, so a spec can ask *why* a title was cut (#183).
+   *
+   * An ellipsis is honest only when the card has spent the limits it owns. `clearedLines` is the
+   * one this issue buys and the only one that is the card's own: at the fixed point it equals
+   * `lines.length`, and a card cleared against more lines than it draws was charged for room it
+   * never used. `frame` and `face` are recorded beside it so the remaining cuts can be attributed
+   * rather than merely counted — the frame allowance is the board's grant and lever 2's to spend
+   * (#177 / #138), not this card's.
+   */
+  limits: {
+    /** Lines the width was cleared against. */
+    clearedLines: number;
+    /** The frame allowance at this position, which no line count moves. */
+    frame: number;
+    /** The face clearance at the height the card actually draws. */
+    face: number;
+  };
 }
 
 /**
@@ -148,25 +166,21 @@ export function floatingLabelGeometry({
   duration,
   verticalNudge = 0,
 }: FloatingLabelParams): FloatingLabelGeometry {
-  // A duration line is one more line the card may grow by, and the clearance below is sized from
-  // the tallest the card may become — so it has to be counted there, not just where it is drawn.
-  const maxCardLines = duration === undefined ? MAX_LINES : MAX_LINES + 1;
-
   // Where the label wants to be, before any clamping — and therefore how much width is available
   // there. Sizing the card to that room is what keeps the clamp from having to pull a too-wide
   // card inward across the numerals (#21); the clamp below is left in place as a backstop and,
   // for any card this function produces, does nothing horizontally.
   const natural = polarToCartesian(cx, cy, labelRadius, anchorAngle);
-  const maxWidth = Math.min(
-    labelWidthLimit(natural.x, clockBox),
+  const frameLimit = labelWidthLimit(natural.x, clockBox);
+  const faceLimitFor = (lineCount: number): number =>
     faceClearanceLimit(
       natural,
       cx,
       cy,
       faceRadius,
-      labelCardHeight(maxCardLines, fontSize, RECT_PADDING_Y)
-    )
-  );
+      labelCardHeight(lineCount, fontSize, RECT_PADDING_Y)
+    );
+
   // The swatch's room comes out of the text budget and goes back into the card's width, so the
   // card's *total* width is bounded by the same number as before (#118) for every card that carries
   // text. Widening the card instead would move the bound every guard here is written against — the
@@ -176,12 +190,19 @@ export function floatingLabelGeometry({
   // The exception is the empty chip `clamp-label.ts` already documents: where the budget floors to
   // zero characters the card is its padding alone, which the reserve makes 24 units rather than 12,
   // both past a `maxWidth` of 12 or less. Only reachable at dial sizes and allowances no board has.
-  const { lines, width, height } = fitLabelToWidth(
+  //
+  // A taller card passes closer to the face from the side, so the clearance has to be taken against
+  // a height the card will not exceed. Taking it against the tallest the card *may* become is the
+  // cheap way to do that and is what shipped — but a card that merely offers a duration line was
+  // then charged for a fourth line whether or not it ever drew one, and wrapped its title into the
+  // narrower budget that bought (#183). `fitLabelToClearedWidth` walks that starting height down to
+  // the one the card actually occupies; its docstring carries the termination and safety argument.
+  const { lines, width, height, clearedLines } = fitLabelToClearedWidth(
     text,
-    Math.max(0, maxWidth - SWATCH_RESERVE),
     fontSize,
     MAX_LINES,
     { x: RECT_PADDING_X, y: RECT_PADDING_Y },
+    (lineCount) => Math.max(0, Math.min(frameLimit, faceLimitFor(lineCount)) - SWATCH_RESERVE),
     duration
   );
   const cardWidth = width + SWATCH_RESERVE;
@@ -196,6 +217,7 @@ export function floatingLabelGeometry({
       height,
     },
     lines,
+    limits: { clearedLines, frame: frameLimit, face: faceLimitFor(clearedLines) },
   };
 }
 

@@ -572,5 +572,72 @@ describe("floatingLabel against the dial's real geometry", () => {
 
       expect(withDuration.height).toBeCloseTo(plain.height + FONT * 1.4, 4);
     });
+
+    /**
+     * #183 — a card that merely *offers* a duration was cleared against a fourth line whether or
+     * not it ever drew one, and wrapped its title into the narrower budget that bought.
+     *
+     * The guard #183 asks for is "no card renders an ellipsis while any of its own limits is
+     * unspent". Stated against the clearance it is the equality below, and it is asserted
+     * unconditionally rather than only for ellipsized cards — measured over 192 pinned states on
+     * the built preview, all 70 cuts are four-line cards, so an ellipsis-only guard was green
+     * before the fix and would not have caught this. What the fix moves is the other 356 cards, of
+     * which 313 were cleared against two lines they never drew.
+     */
+    describe("the height the card is cleared against (#183)", () => {
+      function geometry(anchorAngle: number, text: string, duration?: string) {
+        return floatingLabelGeometry({
+          id: "e1",
+          text,
+          anchorAngle,
+          anchorRadius: OUTER,
+          labelRadius: LABEL_RADIUS_REAL,
+          color: "#22c55e",
+          cx: CX,
+          cy: CY,
+          clockBox: CLOCK_BOX,
+          faceRadius: FACE,
+          fontSize: FONT,
+          duration,
+        });
+      }
+
+      it.each(EVERY_15_DEGREES)(
+        "is the height it draws, with a duration on offer, at %i°",
+        (anchorAngle) => {
+          const { lines, limits } = geometry(anchorAngle, LONG, "1 hr 10");
+
+          expect(limits.clearedLines).toBe(lines.length);
+        }
+      );
+
+      it.each(EVERY_15_DEGREES)("is the height it draws, with none on offer, at %i°", (anchorAngle) => {
+        const { lines, limits } = geometry(anchorAngle, LONG);
+
+        expect(limits.clearedLines).toBe(lines.length);
+      });
+
+      // Two o'clock, where the face binds rather than the frame. Cleared against four lines it has
+      // 155.9 units and eleven characters, so a thirteen-character title split; the card only ever
+      // drew two lines, and at that height it has 187.0 units and fifteen characters.
+      it("does not split a title into room a fourth line was holding but never used", () => {
+        const { lines, limits } = geometry(60, "Spelling Test", "1 hr 10");
+
+        expect(lines).toEqual(["Spelling Test", "1 hr 10"]);
+        expect(limits.clearedLines).toBe(2);
+        expect(limits.face).toBeCloseTo(187.0, 1);
+      });
+
+      // The control, on the same dial at the same angle: a title that genuinely fills its three
+      // lines is cleared against all four and gains nothing. Without it the test above could pass
+      // by never clearing against the duration at all.
+      it("still clears against every line a card that fills them does draw", () => {
+        const { lines, limits } = geometry(60, "Assembly Notes and Reminders", "1 hr 10");
+
+        expect(lines).toEqual(["Assembly", "Notes and", "Reminders", "1 hr 10"]);
+        expect(limits.clearedLines).toBe(4);
+        expect(limits.face).toBeCloseTo(155.9, 1);
+      });
+    });
   });
 });

@@ -61,6 +61,83 @@ export function fitLabelToWidth(
   };
 }
 
+export interface ClearedLabelLayout extends LabelLayout {
+  /**
+   * Lines the width was cleared against, which at the fixed point is the card's own line count.
+   *
+   * Returned rather than kept private because it is the property #183 buys: a card cleared against
+   * more lines than it draws was charged for room it does not use, and a spec that can only see the
+   * finished card cannot tell that from a card the frame legitimately squeezed.
+   */
+  clearedLines: number;
+}
+
+/** Lines a layout occupies, floored the way `labelCardHeight` floors it. */
+function drawnLines(layout: LabelLayout): number {
+  return Math.max(1, layout.lines.length);
+}
+
+/**
+ * Lay out `text` against a width that depends on how tall the card turns out to be (#183).
+ *
+ * `widthForLines` is the caller's own width limit for a card of that many lines — for a floating
+ * label, the nearer of the frame allowance and the face clearance at that height. Passing it as a
+ * function rather than a number is what resolves the circularity `faceClearanceLimit`'s docstring
+ * describes: width depends on the height cleared against, the height on the line count, and the
+ * line count on the width.
+ *
+ * Sizing against the *tallest* the card may become is the safe way out of that loop and is what
+ * shipped, but it charges a card that merely offers a duration line for a line it may never draw:
+ * measured over 192 pinned states, 21 cards ellipsized a title they had the room for.
+ *
+ * The loop starts at that same safe upper bound and walks down. Two properties make it sound:
+ *
+ * - **It terminates**, whatever `widthForLines` does, because `cleared` strictly decreases each
+ *   step and is a positive integer — at most `maxLines` steps.
+ * - **Every layout it returns was cleared against at least the height it draws.** With a monotone
+ *   `widthForLines` — taller card, no more width — a shorter card can only be granted more width
+ *   and more width can only wrap to fewer lines, so the step is safe by construction. The guard
+ *   below is what happens if that ever stops holding: the step is refused and the last safe layout
+ *   stands, rather than a card being sized against a height it exceeds.
+ */
+export function fitLabelToClearedWidth(
+  text: string,
+  fontSize: number,
+  maxLines: number,
+  padding: { x: number; y: number },
+  widthForLines: (lineCount: number) => number,
+  trailingLine?: string
+): ClearedLabelLayout {
+  // `maxLines` bounds the wrapped text; a trailing line sits below it and is one more line the card
+  // may grow by, so the safe starting height counts it.
+  let cleared = trailingLine === undefined ? maxLines : maxLines + 1;
+  let layout = fitLabelToWidth(
+    text,
+    widthForLines(cleared),
+    fontSize,
+    maxLines,
+    padding,
+    trailingLine
+  );
+
+  while (drawnLines(layout) < cleared) {
+    const next = drawnLines(layout);
+    const candidate = fitLabelToWidth(
+      text,
+      widthForLines(next),
+      fontSize,
+      maxLines,
+      padding,
+      trailingLine
+    );
+    if (drawnLines(candidate) > next) break;
+    cleared = next;
+    layout = candidate;
+  }
+
+  return { ...layout, clearedLines: cleared };
+}
+
 /**
  * Baseline offsets for `lineCount` lines centred on a card, in render order.
  *
