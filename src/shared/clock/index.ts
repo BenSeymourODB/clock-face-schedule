@@ -59,7 +59,6 @@ export {
   type DrainMasks,
   type OccludedSpan
 } from './drain';
-export { keepsItsName, shownName } from './duration-cost';
 export {
   FEATHER_DEGREES,
   FEATHER_MAX_SPAN_RATIO,
