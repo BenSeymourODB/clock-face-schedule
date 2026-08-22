@@ -230,6 +230,19 @@ describe("agendaPanel", () => {
     expect(element.querySelector('[data-testid="agenda-card-text-a-1"]')?.textContent).toBe("22 min");
   });
 
+  it("states no duration under the title when durations are off (#178)", () => {
+    // The panel link of the chain: the same card that carries "22 min" with the default has only its
+    // title line — the card is not blanked, its second line is.
+    const { element } = agendaPanel({
+      events: [event("a", "Yoga", 0, 22)],
+      time: NOW,
+      showDurations: false,
+    });
+
+    expect(element.querySelector('[data-testid="agenda-card-text-a-0"]')?.textContent).toBe("Yoga");
+    expect(element.querySelector('[data-testid="agenda-card-text-a-1"]')).toBeNull();
+  });
+
   /**
    * The rendered cards, borders included. `planAgendaCards` is asserted on the same property in node;
    * this is the check that the renderer passes the real stroke through rather than the default, so the

@@ -37,6 +37,13 @@ export const PANEL_VIEWBOX_HEIGHT = DIAL_VIEWBOX_SIZE;
 export interface AgendaPanelParams {
   events: ClockEventInput[];
   time: Date;
+  /**
+   * Whether each card states its event's length (#178) — the teacher's `showEventDurations`,
+   * resolved once by the host and handed to `agendaEntries`. Fixed for the panel's lifetime, so it
+   * is a construction parameter rather than something a tick can change. Defaulted on for a caller
+   * with no opinion.
+   */
+  showDurations?: boolean;
 }
 
 export interface AgendaPanelHandle {
@@ -65,7 +72,11 @@ function cardKey(cards: AgendaCard[]): string {
   return cards.map((card) => card.id).join("\n");
 }
 
-export function agendaPanel({ events, time }: AgendaPanelParams): AgendaPanelHandle {
+export function agendaPanel({
+  events,
+  time,
+  showDurations = true,
+}: AgendaPanelParams): AgendaPanelHandle {
   const element = svg("svg", {
     "data-testid": "agenda-panel",
     viewBox: `0 0 ${PANEL_VIEWBOX_WIDTH} ${PANEL_VIEWBOX_HEIGHT}`,
@@ -85,7 +96,7 @@ export function agendaPanel({ events, time }: AgendaPanelParams): AgendaPanelHan
   let renderedKey: string | null = null;
 
   function render(): void {
-    const { cards } = planAgendaCards(agendaEntries(currentEvents, currentTime), {
+    const { cards } = planAgendaCards(agendaEntries(currentEvents, currentTime, showDurations), {
       width: PANEL_VIEWBOX_WIDTH,
       height: PANEL_VIEWBOX_HEIGHT,
       fontSize: PANEL_CARD_FONT_SIZE,

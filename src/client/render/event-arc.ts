@@ -391,6 +391,15 @@ export interface EventArcParams {
    * as #26's hollow outline, the rest keeps its fill, and a short gradient marks the seam.
    */
   nowAngle?: number;
+  /**
+   * Whether this arc may state how long its event is (#178) — the teacher's setting, not a
+   * judgement about this arc.
+   *
+   * A boolean rather than a preference read: `showEventDurations` is resolved once for the load in
+   * `main.ts`, and a renderer that fetched it itself could disagree with the panel about it. The
+   * default keeps a standalone caller — a spec, mostly — on the behaviour that shipped.
+   */
+  showDuration?: boolean;
 }
 
 export function eventArc({
@@ -404,6 +413,7 @@ export function eventArc({
   isElapsed = false,
   bandThickness,
   nowAngle,
+  showDuration = true,
 }: EventArcParams): SVGGElement {
   const { id, cleanTitle, color, eventEmoji, startAngle, endAngle } = event;
   const displayTitle = combineTitleWithEmoji(cleanTitle, eventEmoji);
@@ -713,7 +723,7 @@ export function eventArc({
     // has elapsed, because a duration line appearing at the moment an event finished would flicker
     // on the wall.
     const durationLine =
-      fit.lines.length === 1
+      showDuration && fit.lines.length === 1
         ? fitDurationLine({
             durationMinutes: event.durationMinutes,
             arcSpan,

@@ -152,6 +152,17 @@ export interface AnalogClockParams {
    * allowance in place. The geometry never spends less than that either way.
    */
   labelMargin?: number | null;
+  /**
+   * Whether any surface on the dial states how long an event is (#178) — the teacher's
+   * `showEventDurations`, resolved once by the host and handed down.
+   *
+   * It reaches two surfaces from here: the arc's own second line and the floating card's trailing
+   * one. Off does not merely remove text from either. The arc gets back the line #35 takes under a
+   * one-line title, and every card is cleared against one line fewer — `fitLabelToClearedWidth`
+   * starts at `MAX_LINES + 1` whenever a trailing line is *offered*, so a card that offers a
+   * duration is charged for it whether or not it ever draws one (#183).
+   */
+  showDurations?: boolean;
 }
 
 export interface AnalogClockHandle {
@@ -180,6 +191,7 @@ export function analogClock({
   time,
   scale: scaleId = "12h",
   labelMargin = null,
+  showDurations = true,
 }: AnalogClockParams): AnalogClockHandle {
   const scale = dialScale(scaleId);
   const cx = size / 2;
@@ -369,6 +381,7 @@ export function analogClock({
           isElapsed: elapsed.has(event.id),
           bandThickness: arcThickness,
           nowAngle,
+          showDuration: showDurations,
         })
       );
 
@@ -388,8 +401,11 @@ export function analogClock({
             faceRadius,
             fontSize: labelFontSize,
             // Empty for anything under a minute, which `fitLabelToWidth` then treats as a line
-            // whose width is zero — so pass undefined instead and leave the card at its title.
-            duration: formatEventDuration(event.durationMinutes) || undefined,
+            // whose width is zero — so pass undefined instead and leave the card at its title. The
+            // same path the whole dial takes with durations switched off (#178).
+            duration: showDurations
+              ? formatEventDuration(event.durationMinutes) || undefined
+              : undefined,
           },
         });
       }

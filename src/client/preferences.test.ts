@@ -236,7 +236,8 @@ describe("the store", () => {
     expect(store.get()).toEqual({
       showSeconds: true,
       timerMuted: true,
-      timerDurationSeconds: 600
+      timerDurationSeconds: 600,
+      showEventDurations: true
     });
 
     await flush();
@@ -1047,7 +1048,7 @@ describe("resetting, against the write in flight", () => {
 
     store.reset(PREFERENCE_KEYS);
 
-    expect(sent).toEqual(["showSeconds;timerMuted;timerDurationSeconds"]);
+    expect(sent).toEqual(["showSeconds;timerMuted;timerDurationSeconds;showEventDurations"]);
   });
 });
 
