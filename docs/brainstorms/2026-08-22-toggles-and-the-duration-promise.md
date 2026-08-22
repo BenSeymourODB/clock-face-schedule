@@ -48,11 +48,33 @@ current figure is an accident of four gates. Measured over 2028 arcs in 192 stat
 | --- | --- | --- | --- |
 | the arc | 336 (16.6%) | **367 (18.1%)** | 875 arcs (43.1%) carry no title at all — too narrow for text, let alone a second line; another 356 (17.6%) carry a two-line title, and #145's model overruns by 6.09 units on the widest ring the dial has |
 | the floating card | 407 (20.1%) | **496 (24.5%)** — every card that exists | a card exists only where a title overflowed; making one for an event whose title fit is a new card, not a fuller one |
-| **arc + every existing card** | 743 (36.6%) | **832 (41.0%)** | — |
+| **arc + every existing card** | 743 (36.6%) | **832 (41.0%)** — and 863 (42.6%) only if the arc's gates go too | — |
 | the panel | **974 of 974 — 100%** | **5 cards** at 26 units, 7 at two lines (ADR 0009); 6 at #174's 21.26 | a fixed column, and it lists a window of the day rather than the dial's set |
 
-**So even a perfect card channel reaches 41.0%.** The gap is not a policy failure — it is 875 arcs
-that are geometrically too small for text and 356 whose text already fills them.
+**The combined ceiling deliberately does not sum the two above it.** 367 + 496 is 863, but the arc's
+367 spends the lone-arc gate, and the section below concludes that gate should be kept — so 832 is
+336 (the arc as it is) plus every card, and it is the figure the rest of this document uses. The
+distinction changes no conclusion: meaning 1 needs 100% and both numbers are far short of it.
+
+**So even a perfect card channel reaches 41.0%.** The gap is not a policy failure, and it is not one
+population but four. The 1196 arcs outside that ceiling are **379** with no identification anywhere
+(#146's class — no in-arc title *and* no card), **356** whose two-line title already fills the band,
+**449** carrying a one-line title on a *stacked* ring the duration gate refuses, and **12** carrying
+one on a **lone** arc and still stating nothing. Note that the 875 arcs with no in-arc title are *not*
+the gap: 496 of them carry their title on a card, and it is that card the ceiling is counting.
+
+**The last 12 are worth their own figure rather than being folded into the 449**, which an earlier
+draft of this paragraph did — reaching 461 by subtraction rather than by counting. 449 is
+`19 + 159 + 271` off the depth table below and 12 is its depth-1 cell, so both are read rather than
+inferred. The 12 matter because they are the *only* arcs in the gap that nothing radial is stopping:
+a lone arc at depth 1 clears a two-line stack by +7.73, so `fitDurationLine`'s radial test passes and
+its **angular** one refuses them — `max(duration, title)` against `arcCharBudget`.
+
+And they are entirely a **1-hour-scale** population: three short events, each at four pins —
+`⚪ Register` (11 min, the 18° leading-edge crosser), `🟡 🍽️ Break` (5 min) and
+`🔵 👩‍🏫 Parent Drop-in and Book Fair` (21 min). So the residue on the 12-hour dial really is the
+three geometric classes; the fourth is what a 5-minute arc looks like on a dial whose whole span is an
+hour, and it is #35's `MIN_ARC_DEGREES` floor rather than anything a duration policy can reach.
 
 **The panel row is not a dash, and that matters to the answer below.** Measured across the same 192
 states, the panel is present in every one, carries 5.07 cards a state (min 5, max 6) — and **every
@@ -216,13 +238,19 @@ looked at. They do not settle the decision, but they remove the arithmetic from 
   directly beside the four that do.** Nothing in the
   picture explains the difference — which is exactly the illegible half meaning 3 closes. Meaning 2
   additionally wants `Free Play` and `🎂 Reading and Snacks` to state lengths; both are *two-line*
-  titles on lone arcs, so #145 rules out a third line and each needs a new card — in the crowded
-  lower quadrant where the two collisions above already are.
+  titles on lone arcs, so #145 rules out a third line and each needs a new card. **Those two cards
+  are the cheap ones, though, and an earlier draft had this backwards.** The crowding at this pin is
+  at 4–6 o'clock, where the six existing cards sit between 4.3 and 6.3 o'clock and two of them cover
+  arc titles (`Deadline`, 27 × 26 px; `Tidy Up and Line Up`, 37 × 26 px). `🎂 Reading and Snacks`
+  and `Free Play` are at **9.4** and **10.9 o'clock** — the emptiest stretch of the label ring, which
+  carries one card (`Yoga`, 8.5) between 6.3 and 0.2. So meaning 2 costs nothing extra *here*; the
+  pin that refutes it is `01:45`, not this one.
 - **Panel at 16:9 and 16:10**, `#status` hidden. The panel is present in **all 192 states**, taking
   276.7 px at 16:9 (dial 1485.6 × 922.3) and 307.4 px at 16:10 (dial 1437.4 × 1024.8). A panel-off
   render is not available from the preview today — there is no flag for it, and `PREFERENCES` carries
-  three keys of which none is the panel — so the second half of the panel-toggle question is still
-  unlooked-at, and that is now the only render outstanding. **#185 is the flag it needs.**
+  three keys (`showSeconds`, `timerMuted`, `timerDurationSeconds`) of which none is the panel — so the
+  second half of the panel-toggle question is still unlooked-at, and that is now the only render
+  outstanding. **#185 is the flag it needs** (#186 was filed for the same thing and duplicates it).
 
 ## Related
 
@@ -240,3 +268,4 @@ looked at. They do not settle the decision, but they remove the arithmetic from 
 - #85 / #47 / ADR 0008 — the persistent switch, and the hazard a hidden mode carries
 - #174 — the panel's own width and type levers, which move its card capacity
 - #134 / #136 / #142 — the displacement pass and the slack it has left
+- #186 — a second filing of #185, kept in this list only so a reader arriving from it lands here
