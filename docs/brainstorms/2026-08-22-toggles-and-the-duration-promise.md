@@ -3,9 +3,13 @@
 **Status:** the reasoning behind #178's open decision, prompted by the owner asking whether the
 agenda panel is itself a teacher's toggle. **Decided here:** no promise may require the panel, and
 "every event states its length" is not available at any setting — both by measurement rather than by
-argument. **Not decided here:** which of the three surviving meanings `showEventDurations` takes, and
-whether the panel becomes a toggle at all. Numbers are from a 192-state sweep of the built preview
-(every 15 minutes, both scales, 1920×1080), reading rendered surfaces rather than code paths.
+argument. **Settled on #178 since, and this document is the input rather than the record:** the owner
+took the chain as `arc → card → panel` with the panel explicitly not guaranteed, and the wording as
+this document's **meaning 3 now, meaning 2 as the destination** — so the leaning below was adopted,
+and #178's comment of 2026-08-22 is the decision. **Still open:** whether the panel becomes a
+teacher's toggle at all, which needs the one render this document could not take (#185). Numbers are
+from a 192-state sweep of the built preview (every 15 minutes, both scales, 1920×1080), reading
+rendered surfaces rather than code paths.
 
 ## Why there is a question at all
 
@@ -216,14 +220,18 @@ looked at. They do not settle the decision, but they remove the arithmetic from 
   lower quadrant where the two collisions above already are.
 - **Panel at 16:9 and 16:10**, `#status` hidden. The panel is present in **all 192 states**, taking
   276.7 px at 16:9 (dial 1485.6 × 922.3) and 307.4 px at 16:10 (dial 1437.4 × 1024.8). A panel-off
-  render is not available from the preview today — there is no flag for it — so the second half of
-  the panel-toggle question is still unlooked-at, and that is now the only render outstanding.
+  render is not available from the preview today — there is no flag for it, and `PREFERENCES` carries
+  three keys of which none is the panel — so the second half of the panel-toggle question is still
+  unlooked-at, and that is now the only render outstanding. **#185 is the flag it needs.**
 
 ## Related
 
-- #178 — the boolean, and the open decision this document is for
+- #178 — the boolean, and the decision this document fed; its 2026-08-22 comment is where the chain
+  and the wording were settled
 - #177 — growing and wrapping the card so a title fits; where the trade this replaces went
 - #175 — closed unmerged; the measurement of what a duration costs a title
+- #185 — the panel-off preview flag this document's last render needs, filed because it could not
+  take it
 - #171 / #39 item 4 / ADR 0009 — the panel-less board that already exists, and the fallback still
   undesigned
 - #145 — why the band cannot be made to carry a third line
