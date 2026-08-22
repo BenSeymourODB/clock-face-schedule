@@ -105,7 +105,10 @@ nor an arc duration). Against that:
   with **five** cards;
 - #146 measured promotion of its own narrower class — the 237 arcs carrying no identification at all
   — as taking the peak from 6 cards to **9**, and called the combined list-label a prerequisite
-  rather than a fallback for that reason.
+  rather than a fallback for that reason. **Its 237 is not this sweep's denominator**: the same class
+  measures 379 over these 192 states (220 on the 12-hour scale alone), so read #146's figure as the
+  shape of its own result — a narrower class still reaching nine — rather than as a count comparable
+  with the 2028 above.
 
 Nine is already past what displacement can separate. Fifteen is not a layout question, it is a
 different display.
@@ -203,9 +206,10 @@ looked at. They do not settle the decision, but they remove the arithmetic from 
   smear at 4.36-unit text, and the cards that exist are colliding (`Staff Debrief and Planning`
   covers the `🍽️ Lunch` arc's own `50 min`). Eleven more cards is not a layout problem to solve;
   meaning 2 is unreachable at this pin.
-- **`?now=19:00&freeze=1`** — the decisive one, and it favours meaning 3. Five cards are in view:
-  `Yoga 22 min`, `Study Skills… 1 hr` and `Swimming… 1 hr` state a length; **`Staff Debrief and
-  Planning` and `Assembly` do not, and sit directly beside the three that do.** Nothing in the
+- **`?now=19:00&freeze=1`** — the decisive one, and it favours meaning 3. **Six** cards are in view:
+  `Yoga 22 min`, `Study Skills… 1 hr`, `Swimming… 1 hr` and `👩‍🏫 Parent Teacher Conference Planning
+  Committee 1 hr 10` state a length; **`Staff Debrief and Planning` and `Assembly` do not, and sit
+  directly beside the four that do.** Nothing in the
   picture explains the difference — which is exactly the illegible half meaning 3 closes. Meaning 2
   additionally wants `Free Play` and `🎂 Reading and Snacks` to state lengths; both are *two-line*
   titles on lone arcs, so #145 rules out a third line and each needs a new card — in the crowded
