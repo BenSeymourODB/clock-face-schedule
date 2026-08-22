@@ -93,19 +93,76 @@
   }
 
   /*
-   * ADR 0009: the dial keeps the board's full height, and is centred in the width that remains
-   * after the panel. This box is that remainder — the whole column, since there is no panel yet —
-   * and the drawing inside it fits the shorter axis, so height binds on anything wider than it is
-   * tall (every 16:9 and 16:10 board) and width binds on a portrait or near-square one instead of
-   * the dial painting off the frame.
+   * ADR 0009's allocation, as a layout: the dial keeps the board's full height and the panel takes
+   * 180 of the dial's 600 units beside it (#39).
    *
-   * ADR 0009's 180-unit panel (#36) is deliberately *not* reserved here by a width expression. The
-   * panel's pixels are a share of the dial (180 against 600) while the dial is sized from the
-   * height, so any reserve taken out of this box either mis-centres the drawing inside it or has to
-   * know a number CSS cannot see. #39 adds the panel as a second grid column instead: this column
-   * becomes the remainder, and being centred in it is then the same sentence as the ADR's.
+   * **Flex, not two grid columns**, and that is the whole of why this element exists. Grid resolves
+   * column widths before row heights, so a panel sized from the row's height cannot contribute a
+   * width to an `auto` column — which is the circularity the previous note here described as "a
+   * number CSS cannot see". A flex row resolves it in the order that works: `align-items: stretch`
+   * makes the panel's height definite from this box first, and `aspect-ratio` then makes its width
+   * definite too. Nothing measures a size in script to set another size.
+   */
+  #board {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: stretch;
+  }
+
+  /*
+   * The remainder after the panel. The drawing inside it fits the shorter axis, so height binds on
+   * anything wider than it is tall (every 16:9 and 16:10 board) and width binds on a portrait or
+   * near-square one instead of the dial painting off the frame — and *being centred in the
+   * remainder is then the same sentence as the ADR's*.
+   *
+   * `flex: 1 1 0` rather than `auto`: an `auto` basis is the content's own size, and the dial's
+   * content contributes the SVG's `width="600"` attribute, which is the fixed point #115 was.
+   * A zero basis makes this exactly "what is left", with `min-width: 0` so it may be less than 600.
    */
   #dial {
+    flex: 1 1 0;
+    min-width: 0;
+    height: 100%;
+  }
+
+  /*
+   * The panel's column, 180 units against the dial's 600 (ADR 0009).
+   *
+   * The ratio *is* the ADR's two numbers, so the stylesheet states the allocation rather than a
+   * pixel figure derived from it. `panel-layout.test.ts` reads this declaration back and compares it
+   * against `PANEL_RESERVE_UNITS` — the same width `label-margin.ts` holds out of the labels'
+   * allowance — so the column drawn and the width reserved for it cannot drift apart.
+   *
+   * `height: 100%` as well as the container's `stretch`, so the cross size is definite from a
+   * percentage of a definite box rather than only from stretching. That is what `aspect-ratio` needs
+   * in order to give a definite width.
+   *
+   * Hidden by the client, not by a media query, when the board cannot afford the panel — measured on
+   * `#board`, whose size does not depend on whether the panel is in it. Two conditions, and the
+   * second was found by rendering: the dial must keep its full height (ADR 0009's absolute), *and*
+   * the room left beside the dial must stay above ADR 0009's 75.4-unit knee, below which the panel
+   * and the labels trade width one-for-one. A card cannot land on the column at all, because the
+   * host grants the labels the room that actually exists beside the dial once this column is up --
+   * see `measureLabelMargin`. The frame above is the *vertical* allowance and was the wrong currency
+   * for this: a 1-hour dial's card reaches 138.7 units where the frame is 51.3.
+   *
+   * The dial then keeps the whole remainder, which is the layout as it was before this column
+   * existed. What a narrow board *should* show instead is #39 item 4 and is still open; absent is not
+   * collapsed.
+   */
+  #panel {
+    flex: 0 0 auto;
+    height: 100%;
+    aspect-ratio: 180 / 600;
+  }
+
+  #panel[hidden] {
+    display: none;
+  }
+
+  #panel svg {
+    display: block;
     width: 100%;
     height: 100%;
   }

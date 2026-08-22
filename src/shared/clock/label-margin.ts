@@ -22,6 +22,22 @@
  */
 export const PANEL_RESERVE_UNITS = 180;
 
+/**
+ * The margin above which a card's usable width stops growing — ADR 0009's knee.
+ *
+ * > Guaranteed card width — `min(labelWidthLimit, faceClearanceLimit)` minimised over the half-dial
+ * > — saturates at **155.2 units, 13 chars a line, for any margin at or above 75.4**.
+ *
+ * `clamp-label.ts` names the same figure from the other side: *"Above a 75.4-unit margin the face
+ * becomes the binding constraint instead and the width saturates at 155.2, so no board gets more
+ * than thirteen."* `panel-layout.test.ts` derives the saturation rather than trusting the number.
+ *
+ * It is the panel's admission test (#39): a board that cannot leave this much beside the dial is one
+ * where the panel and the labels have started trading width one-for-one, which is the trade ADR 0009
+ * says its 180 units must not make.
+ */
+export const LABEL_MARGIN_KNEE_UNITS = 75.4;
+
 /** The box the dial is drawn into, in CSS pixels, as `getBoundingClientRect` reports it. */
 export interface DrawingBox {
   width: number;
