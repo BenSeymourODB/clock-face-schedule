@@ -137,32 +137,52 @@ Filter:
 3. Every "Blocked by" issue is `CLOSED`.
 4. No open PR already closes it:
    `gh pr list --state open --search "in:body Closes #<n>"`.
-5. **No live claim.** A claim comment opens with
-   `🤖 implement-issue claiming this for the next session.` and names the branch
-   it will push to. It is live if it is newer than 6 hours, or if that branch
-   exists on the remote:
+5. **No claim newer than 6 hours.** A claim is any comment opening with one of the
+   three markers below, each naming the branch its run will push to. Skip the
+   issue while the newest one is under 6 hours old — whichever marker it carries.
 
-   ```bash
-   git ls-remote --heads origin "<the branch the claim named>"
+   ```
+   🤖 implement-issue claiming this for the next session.
+   🤖 implement-issue taking this over from a claim that has gone quiet.
+   🤖 implement-issue resuming this from a claim that stopped pushing.
    ```
 
-A claim inside the window is live either way — leave it alone. Past it, the
-branch is what separates the two states the timeout cannot: **a stale claim whose
-branch exists is not a dead claim, it is a resume.** The branch says that run got
-as far as pushing, which is evidence rather than an inference from the clock (and
-step 4 has already ruled out its having opened a PR). Fetch it and continue the
-work that is on it rather than starting again. If your driver has pinned you to a
-branch of its own, merge the stale one in so its commits are not lost, and say so
-on the issue.
+Past 6 hours the claim is stale, which is not the same as dead — and the branch it
+named is what separates the two states the timeout cannot:
 
-A stale claim with **no** branch is the dead case, and the only one that releases.
-Say so before starting, so the original run can stand down when it returns
-(step 7):
+```bash
+git ls-remote --heads origin "<the branch the claim named>"
+```
+
+**The branch exists → this is a resume, not a death.** The branch says that run got
+as far as pushing, which is evidence rather than an inference from the clock (and
+filter 4 above has already ruled out its having opened a PR). Continue the work
+that is on it rather than starting again; if your driver has pinned you to a
+branch of its own, merge the stale one in so its commits are not lost. **Post the
+resume marker before you touch that branch** — the original run is still out
+there, and step 7's return check is what makes it stand down rather than push over
+you:
+
+```
+🤖 implement-issue resuming this from a claim that stopped pushing.
+Branch: <the branch you will push to>
+```
+
+**No branch → this is the dead case**, and the only one that releases. Say so
+before starting, so the original run can stand down when it returns (step 7):
 
 ```
 🤖 implement-issue taking this over from a claim that has gone quiet.
 Branch: <the branch you will push to>
 ```
+
+Either marker replaces the claim comment rather than adding to it, which is why
+filter 5 above reads all three: a take-over or a resume **is** the live claim now.
+
+**A claim that names its branch in prose rather than on a `Branch:` line** is one
+written before this rule landed — read the name out of the prose. A claim naming
+no branch anywhere is not the dead case either: treat it as live, and say on the
+issue that you could not tell.
 
 **Why the window stays at 6 hours.** It is too short — the run that produced
 #131 took 7h56m from claim to PR — but lengthening it without a liveness signal
@@ -172,9 +192,12 @@ idle a whole session. The branch check above is what shortens the guesswork
 instead, and step 7's return check is what makes the remaining ambiguity cheap.
 Do not tune the number (#133).
 
-**Resume case:** a worktree under `.claude/worktrees/issue-<n>-…` with no open PR
-is a crashed run. Pick that issue back up and reuse the worktree
-(`git fetch && git rebase origin/main` inside it).
+**Resuming your own crashed run, on this machine:** a worktree under
+`.claude/worktrees/issue-<n>-…` with no open PR is a run that died here. Pick that
+issue back up and reuse the worktree (`git fetch && git rebase origin/main` inside
+it). This is the local twin of the remote-branch resume above — same situation, but
+the evidence is a directory rather than a ref, and no marker is owed because the
+run being resumed is your own.
 
 **Nothing eligible?** Pick the highest-priority blocked / decision-bound item,
 post a comment summarising exactly which decision would unblock it, and exit.
@@ -203,15 +226,24 @@ If the branch exists from a crashed run, reuse it: `git worktree add "$worktree"
 exit.
 
 **That name is a default, not a rule, and the claim is what makes it findable.**
-A scheduled driver may hand this session a branch of its own — `claude/funny-curie-…`,
+A driver may hand this session a branch of its own — `claude/funny-curie-…`,
 `claude/focused-cray-…` — together with an instruction not to push anywhere else.
-Measured over the 54 branches on this remote: 12 of the 15 pushed before
-2026-08-19 match the pattern above, and **1 of the 39 pushed since** does — the
-date the runs became scheduled ones. So a later run cannot
-derive your branch from the issue number, and must not try — it reads the name
-out of your claim comment, which is why step 2 requires it there. Use the
-driver's name when you are given one; use the pattern above when the choice is
-yours.
+Measured over the 54 branches on this remote as of 2026-08-22, excluding `main`
+and the branch this rule was written on: 12 of the 15 pushed before 2026-08-19
+match the pattern above, and **1 of the 39 pushed since** does. Of those 39, 32
+were driver-assigned and **6 were chosen by the run — none of them conforming**,
+which is the part that settles it: asking harder would not have worked either.
+
+So a later run cannot derive your branch from the issue number, and must not try —
+it reads the name out of your claim comment, which is why step 2 requires it
+there. Use the driver's name when you are given one; use the pattern above when
+the choice is yours.
+
+**When the driver has already checked your branch out, you are in your working
+tree — skip `git worktree add` and work where you are.** Neither form above can
+succeed there: `-b` fails because the branch exists, and the reuse form fails
+because the branch is already checked out in the main working tree.
+`.claude/worktrees/` is for a run that created its own branch.
 
 ## 4. Read the plan and the brainstorm
 
@@ -280,11 +312,19 @@ gh issue view <n> --comments
 gh pr list --state open --search "in:body Closes #<n>"
 ```
 
-If either turns up an open PR closing the issue, or a take-over comment —
-`🤖 implement-issue taking this over from a claim that has gone quiet.` — then
-**do not open a second PR.** Comment on the issue naming both branches and what
-each carries, so the maintainer can take anything yours has that the other lacks,
-and stop there. Leave your branch pushed and your worktree intact.
+Someone may have moved in while you were working, in either of two ways:
+
+- an open PR closing the issue;
+- a comment carrying
+  `🤖 implement-issue taking this over from a claim that has gone quiet.` or
+  `🤖 implement-issue resuming this from a claim that stopped pushing.` — and the
+  resume case is the one that matters most, because that run is on **your** branch
+  and you are about to open a PR over work that includes its own.
+
+If any of those turns up, **do not open a second PR.** Comment on the issue naming
+both branches and what each carries, so the maintainer can take anything yours has
+that the other lacks, and stop there. Leave your branch pushed and your worktree
+intact — and do not force-push over a resume to make room for your version.
 
 This costs one session. Opening the duplicate costs two, plus a conflict resolved
 by hand (#133).
@@ -377,8 +417,12 @@ left mid-conversation.
 
 - **PR ready and pushed:** leave the worktree intact.
 - **Exiting early:** comment on the issue summarising what is blocked and what
-  would unblock it, replace your claim marker with a status update, leave the
-  worktree intact, exit cleanly.
+  would unblock it, replace your claim marker with a status update **that keeps
+  the `Branch:` line**, leave the worktree intact, exit cleanly. Dropping that
+  line is how a partly-pushed branch becomes unfindable: nothing derives it from
+  the issue number any more (step 3), so the status update is the only pointer
+  left to the commits you did land.
+- **Stood down at step 7's return check:** same, plus name the PR you gave way to.
 - **Delete any scratch artefacts you created outside the repo.** Screenshot and
   temp-server output belong in the scratchpad, not in the parent directory.
 

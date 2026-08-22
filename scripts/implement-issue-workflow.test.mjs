@@ -9,9 +9,13 @@ import { describe, expect, it } from "vitest";
  * evidence is a duplicate PR two sessions later (#114, #133).
  *
  * Each assertion below names the silent failure it prevents, in `deploy-workflow.test.mjs`'s idiom.
- * None of them are style, and none assert that a rule is *worded* a particular way — they assert
- * that the two halves of a rule still agree with each other, which is what an edit to one half
- * quietly breaks.
+ *
+ * Two of them do pin literal wording, deliberately. The markers are a **wire format between two
+ * runs that never meet**, so renaming one has to be an edit here as well as there, the way the
+ * deploy guard pins `cancel-in-progress: false` rather than "some concurrency policy" — a rename
+ * consistent across both sites still goes red, and that is the intended cost. And because the
+ * marker pattern reads to the end of the line, quoting a marker in prose *without* backticks reads
+ * as a third spelling; that is the price of not parsing markdown, which the sibling file pays too.
  */
 const guide = readFileSync(
   new URL("../.claude/commands/implement-issue.md", import.meta.url),
@@ -27,8 +31,12 @@ const markers = guide.match(/🤖 implement-issue [^`\n]+/g) ?? [];
 
 const CLAIM = "🤖 implement-issue claiming this for the next session.";
 const TAKE_OVER = "🤖 implement-issue taking this over from a claim that has gone quiet.";
+const RESUME = "🤖 implement-issue resuming this from a claim that stopped pushing.";
 
-describe("the claim protocol's two markers", () => {
+/** Only the closed set of three, so a typo in a name is a failure rather than a pattern. */
+const escaped = (marker) => marker.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+describe("the claim protocol's three markers", () => {
   /**
    * The step-2 filter reads a marker the step-2 instruction writes, and the step-7 return check
    * reads a marker the take-over instruction writes. If either pair drifts by a word, the reader
@@ -36,26 +44,29 @@ describe("the claim protocol's two markers", () => {
    * passes, which is worse than no check because the run then says so in its PR body.
    */
   it("writes and reads each marker in exactly one spelling", () => {
-    expect(new Set(markers)).toStrictEqual(new Set([CLAIM, TAKE_OVER]));
+    expect(new Set(markers)).toStrictEqual(new Set([CLAIM, TAKE_OVER, RESUME]));
   });
 
   /** A marker quoted once is a marker with only a writer or only a reader. */
   it("quotes each marker at both the writing and the reading site", () => {
-    for (const marker of [CLAIM, TAKE_OVER]) {
+    for (const marker of [CLAIM, TAKE_OVER, RESUME]) {
       expect(markers.filter((found) => found === marker).length).toBeGreaterThanOrEqual(2);
     }
   });
 
   /**
-   * #133's measurement: 38 of the last 39 branches on this remote were named by the scheduled
-   * driver, not by the run, so a claim that does not say where it is pushing leaves liveness on
-   * elapsed time alone — which is the whole of the problem. The branch line has to be part of the
-   * template, because a claim comment is the one artefact every run posts.
+   * #133's measurement: 38 of the last 39 branches on this remote do not match the documented
+   * naming pattern — 32 assigned by a driver, and 6 chosen by the run with none of them
+   * conforming. So a comment that does not say where it is pushing leaves liveness on elapsed time
+   * alone, which is the whole of the problem. Every marker needs the line, not just the first: a
+   * take-over or a resume replaces the claim, so it becomes the only pointer there is.
    */
-  it("makes the claim name the branch it will push to", () => {
-    expect(guide).toMatch(
-      new RegExp(`${CLAIM.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\nBranch: `),
-    );
+  it.each([
+    ["claim", CLAIM],
+    ["take-over", TAKE_OVER],
+    ["resume", RESUME],
+  ])("makes the %s name the branch it will push to", (_name, marker) => {
+    expect(guide).toMatch(new RegExp(`${escaped(marker)}\\nBranch: `));
   });
 });
 
@@ -98,6 +109,28 @@ describe("the return check", () => {
     expect(section).toContain(TAKE_OVER);
     expect(section).toMatch(/in:body Closes #/);
   });
+
+  /**
+   * A resume is the case this check exists for and the one it is easiest to leave out: that run is
+   * on *your* branch, so a PR opened over it publishes a diff containing someone else's commits,
+   * and the two runs then race for the same ref. A take-over at least leaves the branches separate.
+   */
+  it("looks for a resume, which is the collision that shares a branch", () => {
+    expect(guide.slice(returnCheck, createsPr)).toContain(RESUME);
+  });
+
+  /**
+   * The property this whole step is for, and the one an earlier draft of this file left unpinned:
+   * a check that finds the collision, reports it, and opens the PR anyway is #114 with a paragraph
+   * in front of it. Both halves are asserted — the instruction *and* the command that gathers the
+   * evidence, since a check with nothing to read cannot find anything either.
+   */
+  it("tells the run not to open the second PR, and how to find out", () => {
+    const section = guide.slice(returnCheck, createsPr);
+
+    expect(section).toMatch(/do not open a second PR/);
+    expect(section).toMatch(/gh issue view <n> --comments/);
+  });
 });
 
 describe("the staleness window", () => {
@@ -131,7 +164,8 @@ describe("the branch liveness check", () => {
    * obvious way to find a claiming run's branch, and it would find nothing for 38 of the last 39
    * runs on this remote — reporting every live claim dead, in the direction #133 measures as
    * costing two sessions rather than one. The pattern is a default for a run that chooses its own
-   * name; the claim's declared branch is the thing to look up.
+   * name, and 6 of those 39 runs did choose and still did not conform; the claim's declared branch
+   * is the thing to look up.
    */
   it("looks up the branch the claim declared, not a guess from the naming pattern", () => {
     const lookups = guide.match(/git ls-remote[^\n]*/g) ?? [];

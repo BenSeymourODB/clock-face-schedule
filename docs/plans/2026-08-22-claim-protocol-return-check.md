@@ -3,15 +3,22 @@
 **Status:** done — shipped in [#165](https://github.com/BenSeymourODB/clock-face-schedule/pull/165)
 **Issue:** [#133](https://github.com/BenSeymourODB/clock-face-schedule/issues/133)
 **Docs:** `.claude/commands/implement-issue.md` steps 2, 3, 7 and 12 (the claim protocol),
-`.claude/commands/README.md` (which still says these commands are manual),
+`.claude/commands/README.md` (which said these commands were manual),
 `scripts/deploy-workflow.test.mjs` (the idiom this plan's guard copies), #114 (the duplicate PRs),
 #124 / #111 (the argument that a guard belongs where the author is)
 
 ## What this changes
 
 The claim protocol gains the cheap half of a liveness signal and loses its most expensive failure.
-Three edits to `.claude/commands/implement-issue.md`, one to `.claude/commands/README.md`, and a
-`scripts/implement-issue-workflow.test.mjs` guard over the properties whose violation is silent.
+Four edits to `.claude/commands/implement-issue.md` — steps 2, 3, 7 and 12 — one to
+`.claude/commands/README.md`, and a `scripts/implement-issue-workflow.test.mjs` guard over the
+properties whose violation is silent.
+
+Step 12's is the one that is easy to miss and matters anyway: *"replace your claim marker with a
+status update"* was free while the branch was derivable from the issue number, and this plan is
+what removes that derivability. Left alone, it instructs a run that pushed two phases and then
+exited early to **delete the only pointer to its own work.** The status update has to keep the
+`Branch:` line.
 
 ## The decision this implements
 
@@ -36,26 +43,37 @@ argued below rather than worked around.
 
 #133's reasoning is that #131's branch was `claude/funny-curie-ff235c` rather than the documented
 `claude/issue-<n>-<slug>`, and that this is *"the single reason `git ls-remote` cannot be leaned on
-today"*. True. But it reads as one run's slip, and it is not. Every branch on the remote, by the date
-its head was committed:
+today"*. True. But it reads as one run's slip, and it is not. Every branch on the remote as of
+2026-08-22, by the date its head was committed — excluding `main` and the branch this was measured
+on, which is why the counts are one below what a re-run on 08-22 will report:
 
 | period | branches | matching `claude/issue-<n>-<slug>` |
 | --- | --- | --- |
 | 2026-08-17 → 08-18 | 15 | **12 (80%)** |
 | 2026-08-19 → 08-22 | 39 | **1 (2.6%)** |
-| **all** | **54** (excluding `main`) | **13 (24%)** |
+| **all** | **54** | **13 (24%)** |
 
 35 of the 54 are `claude/<adjective>-<name>-<hash>` — `funny-curie`, `focused-cray` — which is not a
-slug any run composes from an issue title. It is the shape a **scheduled driver** hands a session,
-along with an instruction not to push anywhere else. The convention did not decay gradually; it
-stopped being the run's decision on 08-19, when the runs became scheduled ones — 80% conformance
-before that date, **2.6% after**. `.claude/commands/README.md` still says *"These commands are manual
-today"*, which is where the assumption survived.
+slug any run composes from an issue title. It is the shape a **driver** hands a session, along with
+an instruction not to push anywhere else. The convention did not decay gradually; it stopped being
+the run's decision on 08-19 — 80% conformance before that date, **2.6% after** — and
+`.claude/commands/README.md` said *"These commands are manual today"*, which is where the assumption
+survived.
 
-So a rule that says *"name your branch `claude/issue-<n>-<slug>`"* cannot be made binding by asking,
-and a later `git ls-remote claude/issue-133-*` would find nothing for 38 of the last 39 runs — while
-reading, to whoever wrote it, as if it had a signal. That is the same class of defect as the pin
-table and the plan headers: a claim about the repo that nothing checks.
+**The 08-19 break is about who names the branch, not about a schedule**, and the repo cannot show a
+schedule: there is no `cron`, no `schedule:` and no `ANTHROPIC_API_KEY` anywhere in the tree, and
+`claude/funny-curie-…` is the shape any driven session is given. So the README says driven, and
+names the Actions-based version as still absent, rather than asserting a cron nobody can find.
+
+The sharper version of the argument is in the 39: **32 were driver-assigned and 6 were named by the
+run — and not one of the 6 conforms.** `claude/clasp-named-deployment-slots-2ry0c5`,
+`claude/trim-derived-count-docstring` (no hash at all), `claude/unblock-open-issues-069rup` and three
+more are hand-composed descriptive slugs. So the runs that *were* free to choose did not follow the
+pattern either, which is the counter to "then just tell them to". A rule that says *"name your branch
+`claude/issue-<n>-<slug>`"* cannot be made binding by asking, and a later
+`git ls-remote claude/issue-133-*` would find nothing for 38 of the last 39 runs — while reading, to
+whoever wrote it, as if it had a signal. That is the same class of defect as the pin table and the
+plan headers: a claim about the repo that nothing checks.
 
 **The signal that works is a declared branch rather than a derived one.** The claim comment names the
 ref the run will push to. Then:
@@ -70,6 +88,33 @@ ref the run will push to. Then:
 
 This is strictly more available than what the decision asked for, and available now rather than
 later, which is why it is worth arguing rather than quietly implementing the literal instruction.
+
+## A resume has to announce itself, and the first draft did not make it
+
+Found in review, and it is the sharpest thing here. The resume path — stale claim, branch exists,
+continue the work on it — was written with no marker of its own, and step 7's return check fires on
+an open PR or the take-over marker. So:
+
+| t | event |
+| --- | --- |
+| T | run A claims, `Branch: claude/x` |
+| T+1h | run A pushes phase 1 (step 5 asks for 2–4 phases, each ending in a push) |
+| T+6h | run B finds the claim stale and `claude/x` present → **resumes it** |
+| T+7h56m | run A returns, finds no PR and no marker → **opens one** |
+
+7h56m is this document's own datapoint for a slow run, so a live run sits in that trigger state for
+about a quarter of its life, and step 5's per-phase push makes it the *normal* state of a slow run
+rather than an edge case. The outcome is worse than #114's: two runs on one ref (and A may not
+force-push, with no recovery documented), or two PRs whose diffs share commits — where #114 at least
+had two independent branches a reviewer could diff.
+
+So the protocol carries **three** markers, not two: claim, take-over, resume. Each names its branch,
+because a take-over or a resume *replaces* the claim rather than adding to it — which also closes the
+hole where filter 5 grepped only for the claim marker and a third run read a taken-over issue as
+unclaimed. Filter 5 reads all three; the return check reads the two that mean someone else moved in.
+
+#133's other half — bounding the branch test by head-commit recency — is still not built, and is
+part of what #166 has to settle: recency is a *release* rule, and this plan releases nothing.
 
 ## What is deliberately not built
 
@@ -99,12 +144,19 @@ Each is silent when violated — the document still reads as though the protocol
 
 | property | what its violation costs |
 | --- | --- |
-| The return check appears **before** the `gh pr create` snippet | A run reads the check after it has already opened the duplicate PR — #114's outcome exactly. The one genuinely order-sensitive property here, and the same shape as the deploy guard's "checks the slot exists before the push can mutate anything". |
-| The take-over marker is **byte-identical** where it is written (step 2) and where it is read (step 7) | The return check greps for a string no take-over run writes, finds nothing, and reports "no take-over" for every issue. A check that always passes is worse than no check. |
-| The claim template **names the branch** | Liveness falls back to elapsed time alone, which is the thing #133 exists about — and the doc would still read as if a branch signal existed. |
-| The claim template is byte-identical wherever the doc quotes it | Two spellings mean the step-2 filter searches for one and the claiming run writes the other, so every claim looks unclaimed. |
+| The return check **tells the run not to open the second PR**, and names the command that gathers the evidence | The property this whole change is for. A check that finds the collision, reports it and opens the PR anyway is #114 with a paragraph in front of it — and an earlier draft of this guard pinned the check's existence, position and vocabulary while leaving the instruction itself free to be inverted. Found in review, not by reasoning. |
+| The return check appears **before** the `gh pr create` snippet | A run reads the check after it has already opened the duplicate PR. Order-sensitive in the same way as the deploy guard's "checks the slot exists before the push can mutate anything". |
+| The return check reads the **resume** marker as well as the take-over one | The resume is the collision that shares a branch, so a PR opened over it publishes someone else's commits and the two runs then race for one ref. A take-over at least leaves the branches separate. |
+| All three markers are **byte-identical** where they are written (step 2) and where they are read (step 7 / filter 5) | A reader greps for a string no writer produces, finds nothing, and reports "unclaimed" or "no take-over" for every issue. A check that always passes is worse than no check. |
+| **Every** marker template names its branch, not just the claim's | A take-over or a resume *replaces* the claim, so it becomes the only pointer there is. Liveness otherwise falls back to elapsed time, which is the thing #133 exists about — while the document still reads as if a branch signal existed. |
 | Exactly one window figure | Step 2 filtering on one number while the return check reasons about another is undetectable by reading either half. |
-| One spelling of the `claude/issue-<n>-<slug>` pattern | A run pushes one form and a later `ls-remote` looks for the other. |
+| The liveness lookup does not glob the naming pattern | `'claude/issue-<n>-*'` is the obvious implementation and finds nothing for 38 of the last 39 runs, reporting every live claim dead — the two-session direction. |
+
+**What it deliberately does not pin:** the `claude/issue-<n>-<slug>` pattern's own spelling. An
+earlier version of this table claimed it did, and review showed it did not — mutating step 3's
+`branch=` line left the suite green. The row is gone rather than backfilled, because the pattern is
+now a *default* that nothing reads programmatically; the one assertion that touches it is the
+negative one, that a liveness lookup must not be built from it.
 
 ## Related
 
