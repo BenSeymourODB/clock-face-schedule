@@ -10,6 +10,13 @@ export {
   type ArcTitleLayout
 } from './arc-title-layout';
 export {
+  SWATCH_GAP,
+  SWATCH_RESERVE,
+  SWATCH_WIDTH,
+  cardSwatchLayout,
+  type CardSwatchLayout
+} from './card-swatch';
+export {
   clampLabelPosition,
   faceClearanceLimit,
   labelVerticalBand,

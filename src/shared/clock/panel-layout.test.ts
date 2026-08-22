@@ -11,6 +11,7 @@ import {
   panelFitsBoard,
   planAgendaCards
 } from './panel-layout';
+import { SWATCH_RESERVE } from './card-swatch';
 import { LABEL_MARGIN_KNEE_UNITS, PANEL_RESERVE_UNITS } from './label-margin';
 import { charBudget } from './pack-lines';
 import type { ClockEventInput } from './types';
@@ -164,11 +165,17 @@ describe('the card geometry against ADR 0009', () => {
 
   /**
    * ADR 0009: "It holds 10 characters a line at 26 units." That figure is what justifies 180 rather
-   * than something smaller, so the padding must not quietly eat into it.
+   * than something smaller, so nothing may quietly eat into it — and #160's swatch openly does, by
+   * the one character its own costing prices it at. Both numbers are asserted so the *reason* the
+   * shipped figure is nine stays visible, rather than ten drifting to nine unremarked.
    */
-  it('holds ADR 0009’s ten characters a line', () => {
+  it('holds ADR 0009’s ten characters a line before the swatch, and nine after it', () => {
     const cardWidth = PANEL_WIDTH_UNITS - PANEL_CARD_STROKE;
+
     expect(charBudget(cardWidth - PANEL_CARD_PADDING.x * 2, PANEL_CARD_FONT_SIZE)).toBe(10);
+    expect(
+      charBudget(cardWidth - SWATCH_RESERVE - PANEL_CARD_PADDING.x * 2, PANEL_CARD_FONT_SIZE)
+    ).toBe(9);
   });
 
   /**
@@ -177,7 +184,7 @@ describe('the card geometry against ADR 0009', () => {
    * eleven, `HH:MM–HH:MM` becomes affordable and this test is the prompt to revisit it.
    */
   it('cannot afford an HH:MM–HH:MM line, which is why the trailing line is a duration', () => {
-    const cardWidth = PANEL_WIDTH_UNITS - PANEL_CARD_STROKE;
+    const cardWidth = PANEL_WIDTH_UNITS - PANEL_CARD_STROKE - SWATCH_RESERVE;
     const budget = charBudget(cardWidth - PANEL_CARD_PADDING.x * 2, PANEL_CARD_FONT_SIZE);
     expect('09:00–09:45'.length).toBeGreaterThan(budget);
   });

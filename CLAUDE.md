@@ -155,6 +155,10 @@ board, and waiting for someone's real day to contain a useful overlap is not a p
   ends the review is the one edit that PR cannot make to itself, so 20 of the first 24 plans landed
   on `main` needing a later correction (#111). `npm run check-plans` reports it offline; `npm test`
   gates it.
+- **A plan carries three headers, all checked** — `**Status:**`, `**Issue:**` and `**Docs:**` (#126).
+  The last two are checked for being *there* rather than for what they say: a plan for work nobody
+  filed writes `**Issue:** none — <why>`, and saying so is the point. 40 of the first 41 plans
+  carried both by hand, which says the convention was followed, not that the next one will be.
 - **SVG attribute names are the real ones** — `stroke-width`, not `strokeWidth`. A camelCase name is
   not an error; it sets an attribute nothing reads, and the element renders unstyled with nothing
   logged. Specs assert on rendered attribute names for this reason.

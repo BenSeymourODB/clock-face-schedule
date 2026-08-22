@@ -9,6 +9,7 @@
  * Pure arithmetic over numbers the caller reads off the DOM — no host types, so `src/shared/`
  * compiles without the DOM lib (ADR 0003) and every figure here is checkable in node.
  */
+import { SWATCH_RESERVE } from './card-swatch';
 import { formatEventDuration } from './duration';
 import { fitLabelToWidth } from './fit-label';
 import { combineTitleWithEmoji, parseEventTitle } from './clock-utils';
@@ -28,6 +29,10 @@ export const PANEL_WIDTH_UNITS = PANEL_RESERVE_UNITS;
 /**
  * Card body size, straight from ADR 0009: *"180 is the smallest width that serves the panel's own
  * justification. It holds 10 characters a line at 26 units."*
+ *
+ * **Nine as it ships, not ten:** #160's swatch takes `SWATCH_RESERVE` out of every card's text, which
+ * its own costing puts at *"one character a line"* — the same character #98's comment says a
+ * band-clearing locus would cost. The ADR's figure is the pre-swatch one.
  *
  * This is the figure the whole allocation was chosen for. #70's decision is that a three-deep
  * cluster's arc titles — 6.24 units, about 1.1 m of reading distance once the dial's 85.4% share of
@@ -275,9 +280,18 @@ export function planAgendaCards(
   let y = inset;
 
   for (const entry of entries) {
+    /**
+     * The swatch's reserve comes out of the *text*, not the card (#160).
+     *
+     * `eventCardNodes` draws the patch unconditionally and `cardSwatchLayout` is explicit that it is
+     * only clear of the text if the caller sized the card with `SWATCH_RESERVE` included — otherwise
+     * "a line's ink [sits] 2 units over the patch and hard against the far border". `floatingLabel`
+     * keeps the contract by fitting to `maxWidth − reserve` and adding it back to the card; here the
+     * card's width is the column's and cannot grow, so only the subtraction applies.
+     */
     const fit = fitLabelToWidth(
       entry.title,
-      cardWidth,
+      Math.max(0, cardWidth - SWATCH_RESERVE),
       fontSize,
       maxTitleLines,
       padding,
@@ -294,6 +308,8 @@ export function planAgendaCards(
       // label a card no wider than its text is what keeps it off its neighbours.
       x: inset,
       y,
+      // The column's width, not `fit.width`: the text was fitted inside the swatch's reserve, and a
+      // ragged right edge down a column of five reads as damage anyway.
       width: cardWidth,
       height: fit.height,
       didOverflow: fit.didOverflow

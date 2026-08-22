@@ -7,7 +7,7 @@
  * is all that is required. See ADR 0002 and scripts/build.mjs.
  */
 
-import { preferencesWire } from "./preferences";
+import { deploymentPreferencesWire, preferencesWire } from "./preferences";
 
 export { getEvents } from "./calendar";
 export { resetPreferences, savePreferences } from "./preferences";
@@ -34,6 +34,11 @@ export { resetPreferences, savePreferences } from "./preferences";
  * The viewer's stored preferences ride along in the same template (#31). Reading them here costs
  * nothing — `doGet` is already running server-side — where fetching them over `google.script.run`
  * would cost the 0.5–2 s of ADR 0006 and a second render once they arrived.
+ *
+ * The deployment's own set rides along beside it, for the same price and the same reason (#157). It
+ * is what remains when the viewer's own store is taken away, so it is the layer a reset lands on —
+ * and the resolved wire alone cannot say which layer any value came from, which is why a reset used
+ * to have to wait for the server to tell it.
  */
 export function doGet(event?: GoogleAppsScript.Events.DoGet): GoogleAppsScript.HTML.HtmlOutput {
   const template = HtmlService.createTemplateFromFile("Index");
@@ -43,6 +48,7 @@ export function doGet(event?: GoogleAppsScript.Events.DoGet): GoogleAppsScript.H
   template["freezeClock"] = event?.parameter?.["freeze"] === "1" ? "1" : "";
   template["scaleParam"] = event?.parameter?.["scale"] ?? "";
   template["preferences"] = preferencesWire();
+  template["deploymentPreferences"] = deploymentPreferencesWire();
 
   return template
     .evaluate()

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { compositeOver, contrastRatio, roundCoord } from "../../shared/clock";
+import { SWATCH_RESERVE, compositeOver, contrastRatio, roundCoord } from "../../shared/clock";
 import { arcFillColor, BAND_BACKGROUND } from "./event-arc";
 import { connectorColor, floatingLabel, floatingLabelGeometry } from "./floating-label";
 
@@ -62,10 +62,10 @@ describe("floatingLabel", () => {
     const rect = part(group, "rect");
 
     it("sizes itself from the text length", () => {
-      // 25 chars × 14px × 0.6 + 6px padding either side.
+      // 25 chars × 14px × 0.6 + 6px padding either side, plus the swatch's own room (#118).
       const [width, height] = numbers(rect, "width", "height");
 
-      expect(width).toBeCloseTo(25 * 14 * 0.6 + 12, 4);
+      expect(width).toBeCloseTo(25 * 14 * 0.6 + 12 + SWATCH_RESERVE, 4);
       expect(height).toBeCloseTo(14 * 1.4 + 6, 4);
     });
 
@@ -73,8 +73,25 @@ describe("floatingLabel", () => {
       const [x, y, width, height] = numbers(rect, "x", "y", "width", "height");
       const [textX, textY] = numbers(line(group), "x", "y");
 
-      expect(x + width / 2).toBeCloseTo(textX, 4);
+      // The card centres on the position; its text centres on the room the swatch leaves, which is
+      // half the reserve to the right of that.
+      expect(x + width / 2).toBeCloseTo(textX - SWATCH_RESERVE / 2, 4);
       expect(y + height / 2).toBeCloseTo(textY, 4);
+    });
+
+    /**
+     * The swatch's room comes out of the text budget rather than being added to the card, so every
+     * bound in this file — the face clearance, the horizontal clamp, the label allowance — is
+     * measured against the same total width it was before #118. A card that grew instead would pass
+     * its own spec and move all of theirs.
+     */
+    it("takes the swatch's room from the text, not from the card's width bound", () => {
+      const wide = render({ text: "A Rather Long Committee Meeting Title", anchorAngle: 270 });
+      const [x, width] = numbers(part(wide, "rect"), "x", "width");
+      const allowance = CLOCK_BOX.width * 0.1;
+
+      expect(x).toBeGreaterThanOrEqual(CLOCK_BOX.left - allowance - 1e-6);
+      expect(x + width).toBeLessThanOrEqual(CLOCK_BOX.right + allowance + 1e-6);
     });
 
     it("inverts the face tokens rather than hard-coding a light chip", () => {
@@ -265,10 +282,13 @@ describe("floatingLabel", () => {
     });
 
     it("slides vertically without re-projecting around the circle", () => {
-      // x is preserved so the label stays visually attached to the arc it points at.
+      // x is preserved so the label stays visually attached to the arc it points at. Measured on
+      // the card, not on its text: the text sits off-centre by the swatch's reserve (#118), and the
+      // card is the thing whose position the clamp is about.
       const group = render({ anchorAngle: 0, labelRadius: 400 });
+      const [x, width] = numbers(part(group, "rect"), "x", "width");
 
-      expect(numbers(line(group), "x")[0]).toBeCloseTo(CX, 4);
+      expect(x + width / 2).toBeCloseTo(CX, 4);
     });
 
     it("leaves a label inside the box alone", () => {
@@ -297,11 +317,9 @@ describe("floatingLabel", () => {
     it("still slides vertically rather than horizontally when it fits", () => {
       // x is preserved whenever the card has room, so labels stay pointing outward radially.
       const group = render({ anchorAngle: 45, text: "Short" });
+      const [x, width] = numbers(part(group, "rect"), "x", "width");
 
-      expect(numbers(line(group), "x")[0]).toBeCloseTo(
-        CX + LABEL_RADIUS * Math.sin((45 * Math.PI) / 180),
-        3
-      );
+      expect(x + width / 2).toBeCloseTo(CX + LABEL_RADIUS * Math.sin((45 * Math.PI) / 180), 3);
     });
   });
 });
@@ -409,6 +427,13 @@ describe("floatingLabel against the dial's real geometry", () => {
    * So this is a guard on a known regression rather than a fix: the numbers are here, at the angle
    * where the allowance binds, so the next change to the locus or to a card's width is measured
    * against them instead of found by rendering.
+   *
+   * #118's swatch is the first change to be measured against them, and it moved both. At today's
+   * inherited allowance the card reflows and gives back most of the swatch's 12 units, so the inner
+   * edge moves 0.74 (249.79 → 249.05, 55.6% → 56.6%). At the granted 16:9 margin the text is bound
+   * by the face rather than by the budget, so the whole 12 lands on the width and the edge moves the
+   * full 6 (218.26 → 212.26) — **past** the band's inner edge at 216.08, which is why the second
+   * figure is now a coverage over 1 rather than a percentage of the band.
    */
   describe("the granted margin, and what it costs the band (#98)", () => {
     const BAND_INNER = OUTER - OUTER * 0.26;
@@ -437,23 +462,22 @@ describe("floatingLabel against the dial's real geometry", () => {
 
     const coverage = (inner: number) => (OUTER - inner) / (OUTER - BAND_INNER);
 
-    it.each([90, 270])("covers 55.6% of the band at %i degrees, inherited", (angle) => {
+    it.each([90, 270])("covers 56.6% of the band at %i degrees, inherited", (angle) => {
       const inner = innerEdge(angle);
 
-      expect(inner).toBeCloseTo(249.79, 2);
-      expect(coverage(inner)).toBeCloseTo(0.556, 3);
+      expect(inner).toBeCloseTo(249.05, 2);
+      expect(coverage(inner)).toBeCloseTo(0.566, 3);
     });
 
     it.each([90, 270])(
-      "covers 97.1% of it at %i degrees once a 16:9 board's margin is granted",
+      "covers the whole of it at %i degrees once a 16:9 board's margin is granted",
       (angle) => {
         // Sized by `faceClearanceLimit` rather than by the frame at this margin — and then by the
-        // widest line the text actually needs, which is why the edge stops 13.9 units short of the
-        // face rather than on it.
+        // widest line the text actually needs, which is why the edge stops short of the face.
         const inner = innerEdge(angle, 234.5 + 8);
 
-        expect(inner).toBeCloseTo(218.26, 2);
-        expect(coverage(inner)).toBeCloseTo(0.971, 3);
+        expect(inner).toBeCloseTo(212.26, 2);
+        expect(coverage(inner)).toBeCloseTo(1.05, 3);
       }
     );
 
@@ -461,6 +485,16 @@ describe("floatingLabel against the dial's real geometry", () => {
       for (let angle = 0; angle < 360; angle += 15) {
         expect(innerEdge(angle, 234.5 + 8)).toBeGreaterThanOrEqual(FACE);
       }
+    });
+
+    /**
+     * `>= FACE` is satisfiable with nothing to spare, and #118 spent 6 of the units that were spare:
+     * clearance to the face at the binding angle went 13.86 → **7.86**. Pinned as a floor rather than
+     * left to the inequality, because the next change to a card's width is the one that would find
+     * out by rendering — which is how #21 was found in the first place.
+     */
+    it.each([90, 270])("keeps 7.86 units between the card and the face at %i degrees", (angle) => {
+      expect(innerEdge(angle, 234.5 + 8) - FACE).toBeCloseTo(7.86, 2);
     });
   });
 
