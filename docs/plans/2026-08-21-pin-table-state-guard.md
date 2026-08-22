@@ -48,11 +48,13 @@ partition of two booleans, and `clamped` is orthogonal to all three:
 | `live` | ✔ | — | either |
 | `draining` | ✔ | ✔ | either |
 | `elapsed` | — | ✔ | either |
-| `clamped` | — | — | `arc-fade-<id>-start` or `-end` present |
+| `clamped` | any | any | `arc-fade-<id>-start` or `-end` present |
 
 `live` covers an arc with nothing spent, which on this dial means one that has not begun: an event
-spanning `now` always drains (`computeDrainFraction` is defined for any `now` strictly inside it), so
-there is no fourth "in progress but not draining" state to name.
+spanning `now` always drains, so there is no fourth "in progress but not draining" state to name.
+**Strictly** inside, though — `computeDrainFraction` is interior — so an event starting exactly at
+`now` renders `live` rather than draining, which is why the `01:30` row can say 🟣 Study Skills is
+`live` at the very minute it starts.
 
 ## The grammar the cells are rewritten into
 
@@ -69,10 +71,11 @@ to understand it:
   the afternoon draws copy 1 rather than copy 0.
 - **`clamped` takes a direction** — `at the leading edge` or `at the trailing edge` — because the two
   ends are different claims and a bare `clamped` would pass on either.
-- **A cluster claim** is `the <n>-deep cluster:` followed by claims for its members. It asserts
-  `assignRings`' reported depth **and** membership: the arcs the dial puts in a cluster of that depth
-  are exactly the events named after the colon. Both halves of what went stale — #67's fourth member
-  was an absence, which no per-event claim can catch.
+- **A cluster claim** is `the <n>-deep cluster[ …]:` followed by claims for its members, to the end
+  of that sentence. It asserts `assignRings`' reported depth **and** membership: the arcs the dial
+  thins to that many rings are exactly the events named. Both halves of what went stale — #67's
+  fourth member was an absence, which no per-event claim can catch. Two or more deep only: at one
+  deep every arc with the band to itself would be "in" it.
 
 ## Verification
 
@@ -80,8 +83,9 @@ to understand it:
   `analog-clock.ts` runs (`eventsToClockEvents` → `assignRings`), not a re-derivation of it.
 - The parser is unit-tested against synthetic cells, including the failing side: an unknown name, an
   ambiguous prefix, a cell whose claim states the wrong state.
-- The table is checked for having been read at all: every `?now=` row parsed, a floor on the number
-  of claims, and every word of the vocabulary exercised somewhere in the table. A parser that matched
+- The table is checked for having been read at all: every row parsed to at least one claim, one row
+  per pin, a floor on the number of claims, a floor on the number of cluster claims, and every word
+  of the vocabulary plus both window edges exercised somewhere in the table. A parser that matched
   nothing would otherwise leave a green test asserting nothing.
 - Rendered: `build/preview.html` at each of the five pins, to confirm the rewritten cells describe
   what is on screen.
@@ -100,9 +104,21 @@ to understand it:
 
 ## What building it changed about the design
 
-The cluster phrase was `the <n>-deep cluster:` until a mutation run found that the `01:30` row read
-*"The four-deep cluster mid-drain:"* and matched nothing — so that row carried no membership claim,
-and deleting a member from it stayed green. That is the failure this plan exists to prevent, one
-level down, and it was invisible to reasoning and immediate under mutation. Two changes came out of
-it: the phrase may carry a word of its own before the colon, and a cell that mentions a cluster the
-parser cannot read now **throws** rather than yielding nothing.
+Everything in this section was found by mutating README or by reviewing the guard against its own
+mutations — none of it by reasoning about the design, and all of it in the cluster claim, which is
+the one part with no per-event fallback.
+
+- The phrase was `the <n>-deep cluster:` until a mutation run found the `01:30` row reading *"The
+  four-deep cluster mid-drain:"* and matching nothing — so that row carried **no membership claim**
+  and deleting a member from it stayed green. Fixed twice over: the phrase may carry a word of its
+  own before the colon, and a cell that mentions a cluster the parser cannot read now **throws**.
+- Rewording *both* phrases out of the table left every per-event claim intact, every floor satisfied,
+  and no membership assertion anywhere on the dial — the #67 shape exactly. So the table now has to
+  keep at least two cluster claims, each at the **deepest** cluster its pin opens; naming a shallower
+  one would otherwise be a way past the check.
+- The member list had no terminator, so a row going on to claim something about an arc *outside* the
+  cluster failed on a cell that was true. It now ends at the sentence's end.
+- The claimed depth is `assignRings`' — the divisor the dial is handed — and the dial caps that at
+  `maxRings`. The fixture sits exactly at the cap, so nothing would have said if the two diverged.
+  The membership check is now paired with the members' **drawn radii**: the arcs of an `n`-deep
+  cluster have to land on `n` distinct rings.

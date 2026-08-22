@@ -78,12 +78,23 @@ interface ArcState {
   temporal: Temporal;
   /** The window edges this arc fades at — a clamp is orthogonal to the three temporal states. */
   edges: Edge[];
+  /** The radius the arc was drawn at, which is to say which ring of its cluster it landed on. */
+  outerRadius?: number;
 }
 
 interface DrawnDial {
   /** Rendered state per event id, `d@1` included: the recurring fixture's copies reach the DOM. */
   states: Map<string, ArcState>;
-  /** Event ids the dial assigns to a cluster of each depth. */
+  /**
+   * Event ids the dial thins to each number of rings.
+   *
+   * Keyed on depth rather than on cluster identity, because that is the property a cell states —
+   * "the four-deep cluster" is the set of arcs the band divides four ways. `assignRings` reports a
+   * depth per event and no cluster id, and deriving components here would be a second derivation of
+   * the very thing being checked. The cost is that two distinct clusters of the same depth on one
+   * dial would merge into one entry; the fixture has never had that, and if it ever does the
+   * membership message names both sets rather than passing quietly.
+   */
   clusters: Map<number, Set<string>>;
 }
 
@@ -131,9 +142,17 @@ function drawAtPin(pinQuery: string, at = AT): DrawnDial {
     if (gradients.some((id) => id.endsWith("-start"))) edges.push("leading");
     if (gradients.some((id) => id.endsWith("-end"))) edges.push("trailing");
 
+    // The ring this arc was drawn on, off the fill path's own outer sweep: `describeArc` writes
+    // `A <outerRadius> <outerRadius> …`. Read rather than recomputed, so a cluster claim can be
+    // checked against the rings the dial *opened* and not only against the depth it was handed.
+    const drawn = /A ([\d.]+) /.exec(
+      root.querySelector(`[data-testid="event-arc-${event.id}"]`)?.getAttribute("d") ?? ""
+    );
+
     states.set(event.id, {
       temporal: separator && outline ? "draining" : outline ? "elapsed" : "live",
       edges,
+      outerRadius: drawn ? Number(drawn[1]) : undefined,
     });
   }
 
@@ -194,10 +213,10 @@ interface Row {
   cluster?: ClusterClaim;
 }
 
-/** Fixture titles, longest first, against the ids they reach the DOM as. */
-const FIXTURE_TITLES: Array<[string, string]> = sampleEvents(new Date(2026, 7, 18))
-  .map((event): [string, string] => [event.title.replace(/\s+/g, " ").trim(), event.id])
-  .sort(([left], [right]) => right.length - left.length);
+/** Every fixture title against the id it reaches the DOM as, which is what a subject resolves to. */
+const FIXTURE_TITLES: Array<[string, string]> = sampleEvents(new Date(2026, 7, 18)).map(
+  (event): [string, string] => [event.title.replace(/\s+/g, " ").trim(), event.id]
+);
 
 /**
  * Words a cell may put between a subject and its state. Deliberately short: anything not on it
@@ -285,16 +304,35 @@ function parseCell(cell: string, pin: string): { claims: Claim[]; cluster?: Clus
     );
   }
 
+  /** The span of the cell whose claims are the cluster's members: the list, and nothing after it. */
+  let members = { from: Number.POSITIVE_INFINITY, to: Number.POSITIVE_INFINITY };
+
   if (clusterPhrase) {
     const [written, word] = clusterPhrase as unknown as [string, string];
     const depth = NUMBER_WORDS[word.toLowerCase()];
+
     if (depth === undefined) {
       throw new Error(
         `README's ${pin} row says "${written}", and "${word}" is not a number this guard knows. ` +
           `Write one of ${Object.keys(NUMBER_WORDS).join(", ")}.`
       );
     }
+    // One deep is every lone arc on the dial, so "the one-deep cluster" would name a set of a dozen
+    // unrelated events and read as a membership check while checking nothing in particular.
+    if (depth < 2) {
+      throw new Error(
+        `README's ${pin} row says "${written}", and a cluster is two or more overlapping arcs — ` +
+          "at one deep every arc with the band to itself is in it."
+      );
+    }
     cluster = { depth, written };
+
+    // The list ends at the sentence's end, not at the cell's: a row is free to go on and claim
+    // something about an arc outside the cluster, and forcing that into the membership set would
+    // fail on a cell that is perfectly true.
+    const from = clusterPhrase.index + written.length;
+    const ends = /\.(?:\s|$)/.exec(cell.slice(from));
+    members = { from, to: from + (ends ? ends.index : cell.length) };
   }
 
   const claims: Claim[] = [];
@@ -302,7 +340,7 @@ function parseCell(cell: string, pin: string): { claims: Claim[]; cluster?: Clus
 
   for (let found = stated.exec(cell); found; found = stated.exec(cell)) {
     const word = found[1] as string;
-    const inCluster = clusterPhrase !== null && found.index > clusterPhrase.index;
+    const inCluster = found.index >= members.from && found.index < members.to;
     const subject = resolveSubject(cell.slice(0, found.index), pin);
 
     if (word !== "clamped") {
@@ -419,6 +457,20 @@ function problemsWith(row: Row, dial: DrawnDial): string[] {
           `dial puts ${drawn.length ? drawn.join(", ") : "nothing"} in a ${row.cluster.depth}-deep ` +
           "cluster"
       );
+    } else {
+      // And the rings actually opened, off the members' own radii. `assignRings`' depth is the
+      // divisor the dial is *handed*; the dial then caps it at `maxRings`, so a fixture grown past
+      // the cap would leave README naming a depth the band never divides into. The fixture sits
+      // exactly at the cap today, which is why the two agree and why nothing would say if they
+      // stopped.
+      const rings = new Set(drawn.map((id) => dial.states.get(id)?.outerRadius));
+
+      if (rings.size !== row.cluster.depth) {
+        problems.push(
+          `"${row.cluster.written}" claims ${row.cluster.depth} rings and its arcs are drawn on ` +
+            `${rings.size}`
+        );
+      }
     }
   }
 
@@ -438,10 +490,10 @@ describe("README's pin table", () => {
    * failure mode one level down from the one this file exists for.
    */
   it("parses a claim out of every row", () => {
-    expect(ROWS.map((row) => row.pin)).toEqual(
-      tableRows(PIN_TABLE_HEADER).map(([pin]) => (pin ?? "").trim())
-    );
     expect(ROWS.length).toBeGreaterThanOrEqual(5);
+
+    // Two rows on one pin would read as coverage and be one pin's worth of it.
+    expect(new Set(ROWS.map((row) => row.pin)).size).toBe(ROWS.length);
 
     for (const row of ROWS) {
       expect(row.claims.length, `?now=${row.pin} states nothing checkable`).toBeGreaterThan(0);
@@ -450,6 +502,26 @@ describe("README's pin table", () => {
     // A floor, not today's figure (18), for the reason the counts guard gives: with every other
     // assertion here biting, *deleting* a claim is otherwise the cheap way past a red one.
     expect(ROWS.reduce((total, row) => total + row.claims.length, 0)).toBeGreaterThanOrEqual(12);
+  });
+
+  /**
+   * The one hole the floors above leave, and the one that matters most: rewording both cluster
+   * phrases out of the table leaves every per-event claim intact and every count satisfied, with no
+   * membership assertion left anywhere — which is exactly the #67 shape this file exists to catch.
+   * Found by mutation, not by reading.
+   */
+  it("keeps a cluster's membership stated somewhere, which is what went stale", () => {
+    const claimed = ROWS.filter((row) => row.cluster);
+
+    expect(claimed.length, "no row states a cluster's membership").toBeGreaterThanOrEqual(2);
+
+    // At the deepest the dial goes, not at some shallower cluster on the same dial: the fixture's
+    // four-deep stack is the case #67 broke and the one `maxRings` is authored against.
+    for (const row of claimed) {
+      const deepest = Math.max(...drawAtPin(`?now=${row.pin}&freeze=1`).clusters.keys());
+
+      expect(row.cluster?.depth, `?now=${row.pin}`).toBe(deepest);
+    }
   });
 
   /**
@@ -570,6 +642,19 @@ describe("parsing a cell", () => {
 
   it("refuses a clamp that does not say which edge", () => {
     expect(() => claimsIn("🟢 Aftercare clamped")).toThrow(/which edge/);
+  });
+
+  it("ends the member list at its sentence, not at the cell", () => {
+    const claims = claimsIn("the four-deep cluster: 🔴 Deadline elapsed. 🔵 Yoga live beside it");
+
+    expect(claims.map((claim) => [claim.id, claim.inCluster])).toEqual([
+      ["b", true],
+      ["j", false],
+    ]);
+  });
+
+  it("refuses a cluster shallower than two, which every lone arc would be in", () => {
+    expect(() => claimsIn("the one-deep cluster: 🔵 Yoga live")).toThrow(/two or more/);
   });
 
   it("refuses a cluster mentioned in a phrasing it cannot read", () => {

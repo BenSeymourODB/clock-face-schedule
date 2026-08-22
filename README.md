@@ -191,7 +191,7 @@ one state, in this vocabulary:
 
 | state | what the dial draws |
 | --- | --- |
-| `live` | The fill and its separator, whole — nothing of it spent. On this dial that means it has not begun: an event spanning `now` always drains. |
+| `live` | The fill and its separator, whole — nothing of it spent. An event spanning `now` always drains, so this is an arc that has not begun, the boundary included: the drain fraction is strictly interior, so an event starting on this very minute is still whole. |
 | `draining` | Spanning `now` (#28) — the spent side hollowed to the elapsed outline, the rest still filled, and a short gradient at the seam. |
 | `elapsed` | Finished (#26) — the fill dropped to that outline, and no separator. |
 | `clamped` | The *window* ended the arc rather than the event, so that end fades (#22): `clamped at the leading edge` or `clamped at the trailing edge`. Orthogonal to the three above and combines with any of them. |
