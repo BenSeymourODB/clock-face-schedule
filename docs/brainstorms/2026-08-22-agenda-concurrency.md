@@ -236,6 +236,20 @@ answers it if it is.
   the panel answers "what is it called and when". **Zero cost**, and it should be the baseline every
   other option is measured against, because #40 has never been priced against doing nothing.
 
+### The panel is conditional, which is an argument in C2's favour
+
+Landed on `main` while this was being written:
+`docs/brainstorms/2026-08-22-toggles-and-the-duration-promise.md` decides that **no promise may
+require the panel**, on the grounds that the panel is already conditional and not by anyone's choice
+— ADR 0009's undesigned narrow-board fallback and #171 both produce boards where it simply **vanishes**
+— and that it may additionally become a teacher's toggle (#178).
+
+The same reasoning transfers here directly. **A cursor that is the only statement of where the day has
+got to would be a promise resting on the panel**, and would break on exactly the boards that already
+lose it. That does not decide anything, but it changes the ranking: it is a point for C2 and for
+treating any panel cursor as a *second* copy of a reading the dial already carries, rather than as the
+place that reading lives.
+
 ## Cross-cutting: how the list states concurrency at all
 
 Independent of the cursor, and still needed under every family above — B and C both leave concurrent
@@ -267,7 +281,8 @@ line. That is the shape worth rendering first.
 ## Still undecided
 
 1. **Whether the panel owes a whole-column "where the day has got to" reading at all**, given the dial
-   is on the same screen doing exactly that. Everything else here follows from it. C2 is the free
+   is on the same screen doing exactly that — and given #178's decision that no promise may require a
+   panel that already vanishes on some boards. Everything else here follows from it. C2 is the free
    answer and has never been tested against #40.
 2. **Which per-card indicator**, if Family B — card, swatch, or explicit rule — and whether draining
    the swatch damages the identity channel #118 built.
