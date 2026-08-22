@@ -10,7 +10,7 @@
 import { preferencesWire } from "./preferences";
 
 export { getEvents } from "./calendar";
-export { savePreferences } from "./preferences";
+export { resetPreferences, savePreferences } from "./preferences";
 
 /**
  * Bring-up switches, all off by default because the display itself must carry no chrome.

@@ -172,7 +172,9 @@ carries the reasoning and the constraints the issue only summarises. If no plan
 exists and the work is non-trivial, produce one grounded in the issue's
 acceptance criteria, the brainstorm, and `docs/DESIGN.md`, and save it as
 `docs/plans/<YYYY-MM-DD>-<slug>.md` with `**Status:**`, `**Issue:**` and
-`**Docs:**` headers before implementing.
+`**Docs:**` headers before implementing. **All three are checked** (#126); the
+last two only for being there, so a plan for work nobody filed writes
+`**Issue:** none — <why>` rather than omitting the line.
 
 **The status header has a checked vocabulary**, and only two states, because both
 have to stay true through the merge that lands them:
