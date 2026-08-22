@@ -1,6 +1,6 @@
 # Suppressing a floating label the agenda panel already names
 
-**Status:** in progress — #172
+**Status:** done — shipped in #192
 **Issue:** #172 (the suppression half only; the leader half stays open on the issue)
 **Docs:** `docs/DESIGN.md` ADR 0009 — the panel this rule treats as a naming surface. No ADR is
 amended: this adds a rule about *floating labels*, and the panel's own allocation is untouched.
