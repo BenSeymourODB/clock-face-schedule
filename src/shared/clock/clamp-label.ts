@@ -134,10 +134,17 @@ export function labelWidthLimit(x: number, clockBox: ClockBox): number {
  * places — on the diagonals the frame leaves plenty of width and the card's inner corner walks
  * into the face anyway, since a centred card grows toward the dial as well as away from it.
  *
- * `maxHeight` is the tallest the card may grow to. A taller card passes closer to the face from
- * the side, so sizing against the maximum stays safe whatever the text turns out to need — and
- * avoids a circular dependency, since height comes from the line count and the line count comes
- * from the width.
+ * `maxHeight` is a height the card will not exceed. A taller card passes closer to the face from
+ * the side, so the clearance is only sound against a height the card actually stays inside.
+ *
+ * Passing the *tallest* the card may grow to is the cheap way to guarantee that, and it is what
+ * this function was written for: it sidesteps the circular dependency, since height comes from the
+ * line count and the line count comes from the width. It also charges a card for lines it never
+ * draws, which was 356 of 496 cards over a 192-state sweep (#183). `fitLabelToClearedWidth` is what
+ * resolves the circularity instead — it scans that upper bound down to the smallest height the card
+ * does not outgrow, and carries the termination and safety argument. This function is unchanged
+ * either way: it
+ * answers for the height it is handed.
  *
  * Returns `Infinity` where there is no horizontal constraint to apply: directly above or below the
  * dial the card clears the face however wide it gets, which is why a label at twelve o'clock may
