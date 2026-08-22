@@ -381,7 +381,9 @@ to the 75.4-unit knee. So the headroom past 180 is **90 units, not 29**. This is
 number, not licence to spend it: 180 was chosen for the panel's own legibility rather than as the
 most it could take.
 
-**2. The panel's body is 21.26 units, not 26** — the arc-title size, decided on #174. The panel was
+**2. The panel's body becomes 21.26 units rather than 26** — the arc-title size, decided on #174 and
+**not yet built**: #173 shipped the column at the 26 this ADR specified, and #174 is where the
+constant moves. Treat 26 as what renders and 21.26 as what was decided until that lands. The panel was
 the second-loudest text on the display, above every arc title and above the floating-label cards it
 shares its styling with, which inverts the relationship between a surface and the surface it exists
 to serve. Consequences, all of them gains except the last:
