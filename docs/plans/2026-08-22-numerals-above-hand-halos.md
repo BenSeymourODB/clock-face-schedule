@@ -1,6 +1,6 @@
 # Stop a hand's halo erasing the numeral the hand is pointing at
 
-**Status:** in progress — the look #112 asked for is done and this is the build it reopened as, outstanding as [#112](https://github.com/BenSeymourODB/clock-face-schedule/issues/112)
+**Status:** done — shipped in [#182](https://github.com/BenSeymourODB/clock-face-schedule/pull/182)
 **Issue:** [#112](https://github.com/BenSeymourODB/clock-face-schedule/issues/112)
 **Docs:** #107 / #113 (the same defect on the AM/PM indicator, and the halo mechanism this plan
 declines to reuse), #44 (why the hands carry a halo at all), #34 (the quiet hand, and the 1-hour
