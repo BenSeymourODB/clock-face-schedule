@@ -9,7 +9,7 @@ margin, which #138's fork decides), [#141](https://github.com/BenSeymourODB/cloc
 precedent for iterating two dependent passes), [#178](https://github.com/BenSeymourODB/clock-face-schedule/issues/178)
 (the durations boolean, which the corrected measurement below hands most of #183's cost table to),
 [#98](https://github.com/BenSeymourODB/clock-face-schedule/issues/98) (what a wider card costs the
-band)
+band — **the open cost of this change**)
 
 ## The mechanism
 
@@ -24,7 +24,7 @@ and sizing against the maximum sidesteps a circular dependency between width and
 consequence is that a card that merely *offers* a duration is charged for a fourth line whether or
 not it ever draws one, and wraps its title into the narrower budget that buys.
 
-## What is actually being spent, measured
+## What is being over-charged, measured
 
 192 pinned states on the built preview at 1920×1080, both scales, `#status` hidden — every floating
 label read off the rendered DOM, with the geometry temporarily instrumented to report the line count
@@ -38,83 +38,124 @@ each card was cleared against.
 | — over-cleared by one line | 43 |
 | — over-cleared by two lines | 313 |
 
-So the over-charge is near-universal rather than marginal: 72% of cards drawn.
-
-## The correction #183's cost table needs, and it changes what this buys
+## The correction #183's cost table needs
 
 **#183 says the guard "fails today at 21 cards a sweep". It does not fail at all**, and the same
 sweep says why: every one of the 70 ellipsized cards draws **four** lines — three of title and the
 duration — so each was already cleared against exactly the height it occupies. Not one ellipsized
-card is over-cleared. This lever therefore recovers **zero** truncated titles, and no arrangement of
-it could.
+card is over-cleared. This lever recovers **zero** truncated titles.
 
 What #183's table measures is a different lever. Suppressing the duration line entirely — #178's
 boolean, patched in and swept — takes the ellipsized count from **70 to 54**: **16 cards are cut by
-carrying a duration at all**, which is the same quantity as #183's 21 on a slightly different basis.
-That cost belongs to #178, and #183's own note that the two "overlap in the off case only" turns out
-to be the wrong way round: in the *on* case this issue does not reach them either.
+carrying a duration at all**, the same quantity as #183's 21 on a slightly different basis. That cost
+belongs to #178. The remaining 54 cuts are face-bound at every occurrence (the frame limit is the
+looser of the two on all 70), so they are #177 / #138's margin.
 
-The remaining 54 cuts are face-bound at every occurrence (the frame limit is the looser of the two
-on all 70), so they are #177 / #138's margin, not this.
+## A search, not a walk — and the first attempt was wrong
 
-## What it does buy, and what it costs
+The first implementation walked from the safe upper bound straight to the line count the card turned
+out to draw, on the reasoning that a wider budget can only wrap to fewer lines.
 
-| | before | after |
+**That reasoning is false, and `pack-lines.ts` is where.** A word too long for the budget is
+ellipsized onto a line of its own rather than hyphenated, so a *narrower* budget can produce *fewer*
+lines. `Extracurricular Activities` with a duration, at 2 o'clock on a 600-unit dial:
+
+| clearance | width | layout |
+| --- | --- | --- |
+| 4 lines (the starting bound) | 151.2 | 2 lines — `Extracurri…` / `1 hr 10`, the long word cut |
+| **3 lines** | **184.7** | **3 lines — `Extracurricular` / `Activities` / `1 hr 10`, whole** |
+| 2 lines | 227.4 | 3 lines — inadmissible |
+
+The walk jumped 4 → 2, found 2 inadmissible, and gave up on the starting layout: the cut title, with
+two lines of its own clearance unspent. **That is the defect #183 exists to remove, shipping inside
+the fix for it.** Three is admissible and only a linear scan finds it.
+
+So the shipped version scans every height and takes the smallest admissible one. A height is
+**admissible** when the card laid out at its width draws no more lines than the height allows. No
+monotonicity is assumed anywhere. What holds regardless:
+
+- **It terminates** — a counted loop of `maxLines` steps, whatever the limit function does.
+- **The result is admissible** — only admissible candidates are adopted and the starting bound is one.
+- **No smaller admissible height exists** — every one below was tried, which is what a spec can
+  assert. The fixed-point *equality* is not: a card whose only admissible height is the starting
+  bound legitimately draws fewer lines than it cleared, and that is 2 o'clock in the table above.
+
+The scan is worth three times the walk on the fixture: 99 cards re-wrap against 33, and 97 drop a
+line against 10.
+
+## What it buys
+
+| | main | shipped |
 | --- | --- | --- |
 | cards cleared against more lines than they draw | 356 | **0** |
-| card-instances whose text re-wraps | — | 33 |
-| — of those, dropping a line entirely | — | **10** |
-| cards whose wrap gets worse | — | 0 |
-| widest single card gain | — | +52.6 u |
+| card-instances whose text re-wraps | — | **99** |
+| — dropping a line entirely | — | **97** |
+| cards whose wrap gets worse | — | **0** |
+| cards that get narrower | — | **0** |
+| widest single card gain | — | **+147.2 u** |
 | ellipsized cards | 70 | 70 |
 
-Two cards on one dial each: `Spelling Test` at `?now=02:00&freeze=1&scale=1h` and `Breakfast Club`
-at `?now=05:45&freeze=1` both stop splitting a two-word title across two lines, and their cards lose
-38 px of height at 1920×1080.
+`Assembly Notes and Reminders` fits on one line at `?now=04:00&freeze=1&scale=1h` where it took
+three; `Spelling Test` and `Breakfast Club` stop splitting a two-word title.
 
-The cost is #98's, and it is small but real — a centred card grows inward as well as outward:
+## What it costs, and this is the open question
 
-| | before | after |
+A centred card grows inward as well as outward, so a wider card covers more of the band. That is #98,
+and this makes it **broader while making its worst case better**:
+
+| | main | shipped |
 | --- | --- | --- |
-| cards whose box reaches inside the band's outer edge | 453 | 453 |
+| arc text elements swept (titles, durations, emoji) | 519 | 519 |
+| **covered ≥2% by a card** | **72** | **87** |
+| worst single element, fraction covered | **1.00** (an emoji covered outright) | **0.876** |
+| cards reaching inside the band's outer edge | 453 | 453 |
 | deepest intrusion into the band | 87.56 u | **87.56 u** |
-| mean intrusion, over cards that intrude | 50.38 u | 50.91 u |
-| cards reaching deeper than before | — | 32 (worst +22.80 u) |
+| cards reaching deeper than before | — | 98 (worst +24.24 u) |
 | closest any card comes to the face | 0.043 u | **0.043 u** |
+| worst vertical reach past the dial box, fixture | 49.08 u | **49.08 u** |
 
-The worst case moves on neither measure. The card that sets the face clearance is a four-line card
-and this change does not touch it.
+Fifteen more pieces of arc text are touched. Found by rendering rather than by measuring: at
+`?now=04:00&freeze=1&scale=1h` the one-line `Assembly Notes and Reminders` card covers the 🍽️ on the
+adjacent Break arc, which is #98's defect verbatim.
 
-## The circularity, and why the loop is safe
+**#183 named this in advance** — *"#98 — why a wider card is not free, and the ordering that puts
+another event's identity first"* — and it is the one part of this that is a judgement rather than a
+measurement. It is not decided here. Both faces of it are in the table so it can be settled in one
+sitting.
 
-`fitLabelToClearedWidth` takes the width limit as a *function of line count* and walks down from the
-safe upper bound the current code uses:
+## The existing guard this moved, and why it is not a weakening
 
-- **It terminates** whatever the limit function does: `cleared` strictly decreases each step and is
-  a positive integer, so at most `maxLines` steps. Asserted, not argued.
-- **Every layout returned was cleared against at least the height it draws.** With a monotone limit
-  — taller card, no more width — a shorter card is granted more width and more width wraps to no
-  more lines, so each step is safe by construction. A step that would break that is refused and the
-  last safe layout stands, which is a spec rather than a comment.
+`analog-clock.test.ts` asserted that granting the margin never increases vertical reach, reasoning
+that *"a wider card is a shorter one — it needs fewer lines for the same title — so this cannot
+regress"*, and saying explicitly that it was asserted rather than reasoned because the frame has no
+clamp behind it. **The assertion earned its keep by catching the reasoning.** A wider card is
+shorter, but it also overlaps more neighbours horizontally, so displacement spreads the stack further
+vertically: on that sweep of 22 identical over-long titles, granted reach went 11.3 → 42.9 units.
 
-A two-pass measure-then-place was priced, per #183's ask, and is the same thing: the first pass *is*
-the safe upper bound, and one pass is not enough whenever the widened card wraps to fewer lines
-again. The loop is that generalised, and on the fixture it never runs past three steps.
+Retired in favour of the bound that actually exists and that the old test never asserted — every
+card's centre stays inside the clamp band, the 10% of dial height `Styles.html` sizes the frame from
+— with both reach figures pinned beside it so movement in either is still caught. The proxy stopped
+tracking what it was named for: fewer cards reach at all (three against six), and the fixture does
+not move (49.08 either way, already further than this sweep reaches).
+
+`still drops a duration displacement cannot make room for` moved from two yielders to one, the same
+way #118 moved it from one to two, and for the same reason: a card's width changed. The property is
+untouched — the last card clockwise still gives up its duration and keeps its whole title.
 
 ## Tests
 
-- `fit-label.test.ts` — the fixed point, the starting height, termination, and the refused unsafe
-  step, against a synthetic monotone limit and a deliberately perverse one.
-- `floating-label.test.ts` — `limits.clearedLines === lines.length` at every 15°, with and without a
-  duration on offer; the concrete `Spelling Test` regression at two o'clock with the face figures
-  (187.0 against the four-line 155.9); and the control that a card genuinely filling three lines is
-  still cleared against four.
+- `fit-label.test.ts` — the smallest-admissible-height property (safety *and* that nothing below was
+  skipped), the starting height, termination, the real non-monotone case from `pack-lines`, and the
+  case where the starting bound is the only admissible height.
+- `floating-label.test.ts` — the card never outgrows its clearance, at every 15° across three titles
+  with and without a duration; `Extracurricular Activities` kept whole at 45°; the same title cut at
+  60° where nothing smaller is admissible; and the `Spelling Test` / `Assembly Notes` pair with their
+  face figures.
 
-The guard is stated as the equality rather than as #183's ellipsis phrasing, and deliberately: an
-ellipsis-only guard was green before this change, so it would not have caught the defect.
+All three new specs fail on the walk and pass on the scan.
 
 ## Not done here
 
 - Growing a card into the margin — #177's lever 2, blocked on #138's locus fork.
 - Whether a duration is drawn at all — #178, which the measurement above hands the 16 cards.
-- The 54 face-bound cuts that remain, which are the margin's.
+- Guarding a card against covering another arc's identity — #98, which this makes broader.

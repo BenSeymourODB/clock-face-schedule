@@ -557,18 +557,24 @@ describe("analogClock", () => {
         // page is sized for (#121). Clockwise order decides which of the three yields, matching the
         // order a reader scans the dial.
         //
-        // #118's swatch costs one character a line, and this is where that is visible rather than
-        // arithmetical: `PILE_TITLE` now needs three lines at the earliest card's angle instead of
-        // two, so the card that keeps its duration is 104.11 units tall rather than 79.58 and **two**
-        // of the three yield where one used to. The yielding cards keep their whole title, which is
-        // the property the pass exists to protect.
+        // How many yield has moved twice, and both times because a card's *width* moved:
+        //
+        // - #118's swatch cost a character a line, so `PILE_TITLE` needed three lines at the
+        //   earliest card's angle instead of two and **two** of the three yielded where one had.
+        // - #183 clears a card against the height it draws rather than the tallest it may reach,
+        //   which hands these cards 160.7 units instead of 121.4. `PILE_TITLE` is back to two lines
+        //   — `Staff Debrief` / `and Planning`, where it was `Staff` / `Debrief and` / `Planning` —
+        //   so the card carrying a duration is 79.58 units tall again and **one** yields.
+        //
+        // The property is unchanged and is what the assertions below are: the last card in
+        // clockwise order still gives up its duration, and every yielding card keeps its whole
+        // title, which is what the pass exists to protect.
         const { element } = build(pile);
         const rects = cardRects(element);
 
         expect(labelLines(element, "early").slice(-1)).toEqual(["24 min"]);
-        expect(labelLines(element, "middle").slice(-1)).not.toEqual(["24 min"]);
+        expect(labelLines(element, "middle").slice(-1)).toEqual(["24 min"]);
         expect(labelLines(element, "late").slice(-1)).not.toEqual(["24 min"]);
-        expect(labelLines(element, "middle").join(" ")).toBe(PILE_TITLE);
         expect(labelLines(element, "late").join(" ")).toBe(PILE_TITLE);
         for (const rect of rects) {
           expect(rects.filter((other) => other !== rect && rectsOverlap(rect, other))).toEqual([]);
@@ -1087,15 +1093,45 @@ describe("analogClock's label margin", () => {
   });
 
   /**
-   * Vertical reach is `#display`'s padding to pay for and #121's to argue about, and a wider card is
-   * a *shorter* one — it needs fewer lines for the same title — so this cannot regress. Asserted
-   * rather than reasoned, because the frame is the one bound with no clamp behind it.
+   * Vertical reach is `#display`'s padding to pay for and #121's to argue about.
+   *
+   * **This asserted `granted ≤ inherited`, on the reasoning that "a wider card is a *shorter* one —
+   * it needs fewer lines for the same title — so this cannot regress". #183 falsified that**, and
+   * the test earned its keep by being an assertion rather than the reasoning: a wider card is
+   * shorter, but it also overlaps more neighbours *horizontally*, so the displacement pass has to
+   * spread the stack further vertically to separate them. Measured on this sweep of 22 identical
+   * over-long titles, granting the margin went from 11.3 units of reach to 42.9.
+   *
+   * Fewer cards reach at all — three against the inherited allowance's six — and the fixture does
+   * not move: worst reach there is 49.08 units at `?now=19:45&freeze=1`, identical before and after,
+   * and already further than this sweep reaches. So the comparison retired here was a proxy that
+   * stopped tracking the thing it was named for, not a bound being breached.
+   *
+   * What replaces it is the bound that actually exists and that the old test never asserted: a
+   * card's centre stays inside the clamp band, which is the 10% of dial height `Styles.html` sizes
+   * the frame from. That is absolute rather than comparative, so it cannot drift with the sweep.
+   * The two reach figures are pinned beside it so any future movement in either is still caught —
+   * the same "guard on a known regression rather than a fix" the #98 clearance figures are.
    */
-  it("does not reach further vertically than the inherited allowance already did", () => {
+  it("keeps every card's centre inside the frame the page reserves", () => {
+    const allowance = (SIZE - 16) * 0.1;
+
+    for (const margin of [undefined, SIXTEEN_NINE]) {
+      for (const card of cards(margin)) {
+        const centre = card.y + card.height / 2;
+
+        expect(centre).toBeGreaterThanOrEqual(8 - allowance - 1e-9);
+        expect(centre).toBeLessThanOrEqual(SIZE - 8 + allowance + 1e-9);
+      }
+    }
+  });
+
+  it("reaches 21.9 units past the dial box unmargined and 42.9 with 16:9 granted", () => {
     const tallest = (margin?: number | null) =>
       cards(margin).reduce((most, card) => Math.max(most, -card.y, card.y + card.height - SIZE), 0);
 
-    expect(tallest(SIXTEEN_NINE)).toBeLessThanOrEqual(tallest() + 1e-9);
+    expect(tallest()).toBeCloseTo(21.9, 1);
+    expect(tallest(SIXTEEN_NINE)).toBeCloseTo(42.9, 1);
   });
 
 });

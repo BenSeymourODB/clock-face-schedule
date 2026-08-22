@@ -11,6 +11,8 @@ const PADDING = { x: 6, y: 3 };
 /** One character's advance at FONT, by the shared heuristic. */
 const CHAR = FONT * 0.6;
 const LONG = 'Parent Teacher Conference Planning Committee';
+/** A title whose first word is too long for a tight budget — the non-monotone case (#184 review). */
+const EXTRACURRICULAR = 'Extracurricular Activities';
 
 function fit(text: string, maxWidth: number, maxLines = 3) {
   return fitLabelToWidth(text, maxWidth, FONT, maxLines, PADDING);
@@ -126,8 +128,8 @@ describe('fitLabelToWidth', () => {
 describe('fitLabelToClearedWidth', () => {
   /**
    * A width limit shaped like the one a floating label faces: the taller the card, the less room it
-   * has. Linear rather than the real circle's arithmetic — the property under test is that the loop
-   * settles where height and width agree, and a monotone limit is all that takes.
+   * has. Linear rather than the real circle's arithmetic — what these exercise is which height the
+   * search settles on, and the limit only has to shrink for that to be the same question.
    */
   function shrinking(perLine: number, atOneLine: number) {
     const calls: number[] = [];
@@ -149,11 +151,76 @@ describe('fitLabelToClearedWidth', () => {
     return fitLabelToClearedWidth(text, FONT, maxLines, PADDING, widthFor, trailingLine);
   }
 
+  /**
+   * The two properties the search actually has, checked together. The equality
+   * `clearedLines === lines.length` is **not** one of them and must not be asserted: where the only
+   * admissible height is the starting bound, a card legitimately draws fewer lines than it cleared.
+   */
+  function assertSmallestAdmissible(
+    result: ReturnType<typeof cleared>,
+    text: string,
+    widthFor: (lineCount: number) => number,
+    trailingLine?: string,
+    maxLines = 3
+  ) {
+    // Admissible: the card does not outgrow the height its width was cleared against.
+    expect(result.clearedLines).toBeGreaterThanOrEqual(Math.max(1, result.lines.length));
+
+    // Smallest: every height below it puts the card over that height, so none was skipped.
+    for (let lineCount = result.clearedLines - 1; lineCount >= 1; lineCount -= 1) {
+      const at = fitLabelToWidth(text, widthFor(lineCount), FONT, maxLines, PADDING, trailingLine);
+
+      expect(Math.max(1, at.lines.length)).toBeGreaterThan(lineCount);
+    }
+  }
+
   it('settles where the card is cleared against the height it draws', () => {
     const limit = shrinking(25, 205);
     const result = cleared('Spelling Test', limit.widthFor, '1 hr');
 
     expect(result.clearedLines).toBe(result.lines.length);
+    assertSmallestAdmissible(result, 'Spelling Test', limit.widthFor, '1 hr');
+  });
+
+  /**
+   * The hole the first attempt at this had, and the reason it is a scan rather than a walk (#184
+   * review).
+   *
+   * `packLines` ellipsizes a word too long for the budget onto a line of its own rather than
+   * hyphenating it, so a **narrower** budget can produce **fewer** lines — width to line count is not
+   * monotone, and these numbers are the real geometry's: `Extracurricular Activities` with a duration
+   * at 2 o'clock on a 600-unit dial faces 151.2 units on a four-line clearance and 184.7 on a
+   * three-line one.
+   *
+   * Walking from the bound to the line count the card turned out to draw lands on two, finds two
+   * inadmissible, and gives up on the starting layout — the cut title, with two lines of its own
+   * clearance unspent. Three is admissible and keeps both words whole.
+   */
+  it('finds an admissible height that jumping to the drawn line count skips', () => {
+    const byLines: Record<number, number> = { 1: 267.6, 2: 227.4, 3: 184.7, 4: 151.2 };
+    const widthFor = (lineCount: number): number => byLines[lineCount];
+
+    // The non-monotonicity itself, so this test states its own premise rather than assuming it.
+    expect(fitLabelToWidth(EXTRACURRICULAR, 151.2, FONT, 3, PADDING, '1 hr 10').lines).toHaveLength(2);
+    expect(fitLabelToWidth(EXTRACURRICULAR, 184.7, FONT, 3, PADDING, '1 hr 10').lines).toHaveLength(3);
+
+    const result = cleared(EXTRACURRICULAR, widthFor, '1 hr 10');
+
+    expect(result.lines).toEqual(['Extracurricular', 'Activities', '1 hr 10']);
+    expect(result.clearedLines).toBe(3);
+    assertSmallestAdmissible(result, EXTRACURRICULAR, widthFor, '1 hr 10');
+  });
+
+  // The other side of that: where no smaller height is admissible, the card keeps the starting bound
+  // and draws fewer lines than it cleared. That is correct, and it is why the equality is not the
+  // guard — every height below 4 here puts the card over its own clearance.
+  it('keeps the starting bound when no smaller height is admissible', () => {
+    const widthFor = (lineCount: number): number => (lineCount >= 4 ? 400 : 130);
+    const result = cleared('Parent Teacher Conference', widthFor, '1 hr');
+
+    expect(result.lines).toEqual(['Parent Teacher Conference', '1 hr']);
+    expect(result.clearedLines).toBe(4);
+    assertSmallestAdmissible(result, 'Parent Teacher Conference', widthFor, '1 hr');
   });
 
   // The defect, at the function: sized against the tallest it may become, this card wraps into a

@@ -577,14 +577,23 @@ describe("floatingLabel against the dial's real geometry", () => {
      * #183 — a card that merely *offers* a duration was cleared against a fourth line whether or
      * not it ever drew one, and wrapped its title into the narrower budget that bought.
      *
-     * The guard #183 asks for is "no card renders an ellipsis while any of its own limits is
-     * unspent". Stated against the clearance it is the equality below, and it is asserted
-     * unconditionally rather than only for ellipsized cards — measured over 192 pinned states on
-     * the built preview, all 70 cuts are four-line cards, so an ellipsis-only guard was green
-     * before the fix and would not have caught this. What the fix moves is the other 356 cards, of
-     * which 313 were cleared against two lines they never drew.
+     * #183 asks for "no card renders an ellipsis while any of its own limits is unspent". Two
+     * things had to be measured before that could be turned into an assertion, and both reversed a
+     * first attempt at it:
+     *
+     * - **An ellipsis-only guard is green on the fixture either way.** All 70 cuts over 192 pinned
+     *   states are four-line cards, so they were already cleared against exactly their own height.
+     *   What the fix moves is the other 356 cards, 313 of them cleared against two lines they never
+     *   drew.
+     * - **The equality `clearedLines === lines.length` is not a property this has**, and asserting
+     *   it unconditionally passed only because `LONG` has no word over ten characters. A card whose
+     *   only admissible height is the starting bound draws fewer lines than it cleared and is
+     *   correct — 60° below is exactly that. The honest guard is that the card never outgrows its
+     *   clearance, plus the concrete cases that pin which height was chosen.
      */
     describe("the height the card is cleared against (#183)", () => {
+      const NON_MONOTONE = "Extracurricular Activities";
+
       function geometry(anchorAngle: number, text: string, duration?: string) {
         return floatingLabelGeometry({
           id: "e1",
@@ -603,19 +612,26 @@ describe("floatingLabel against the dial's real geometry", () => {
       }
 
       it.each(EVERY_15_DEGREES)(
-        "is the height it draws, with a duration on offer, at %i°",
+        "never lets the card outgrow its own clearance, with a duration on offer, at %i°",
         (anchorAngle) => {
-          const { lines, limits } = geometry(anchorAngle, LONG, "1 hr 10");
+          for (const text of [LONG, NON_MONOTONE, "Spelling Test"]) {
+            const { lines, limits } = geometry(anchorAngle, text, "1 hr 10");
 
-          expect(limits.clearedLines).toBe(lines.length);
+            expect(limits.clearedLines).toBeGreaterThanOrEqual(Math.max(1, lines.length));
+          }
         }
       );
 
-      it.each(EVERY_15_DEGREES)("is the height it draws, with none on offer, at %i°", (anchorAngle) => {
-        const { lines, limits } = geometry(anchorAngle, LONG);
+      it.each(EVERY_15_DEGREES)(
+        "never lets the card outgrow its own clearance, with none on offer, at %i°",
+        (anchorAngle) => {
+          for (const text of [LONG, NON_MONOTONE, "Spelling Test"]) {
+            const { lines, limits } = geometry(anchorAngle, text);
 
-        expect(limits.clearedLines).toBe(lines.length);
-      });
+            expect(limits.clearedLines).toBeGreaterThanOrEqual(Math.max(1, lines.length));
+          }
+        }
+      );
 
       // Two o'clock, where the face binds rather than the frame. Cleared against four lines it has
       // 155.9 units and eleven characters, so a thirteen-character title split; the card only ever
@@ -628,8 +644,34 @@ describe("floatingLabel against the dial's real geometry", () => {
         expect(limits.face).toBeCloseTo(187.0, 1);
       });
 
+      /**
+       * The case the first attempt shipped an ellipsis on (#184 review), at the dial rather than at
+       * the pure function: `Extracurricular` does not fit the four-line width of 151.2 and is cut
+       * onto a line of its own, so the card draws **two** lines there. Walking from the bound to the
+       * drawn count lands on two, finds two inadmissible, and gives up — cutting a title that the
+       * three-line width of 184.7 holds whole, with two lines of clearance unspent.
+       */
+      it("keeps a long first word whole by clearing against a height between the two", () => {
+        const { lines, limits } = geometry(45, NON_MONOTONE, "1 hr 10");
+
+        expect(lines).toEqual(["Extracurricular", "Activities", "1 hr 10"]);
+        expect(limits.clearedLines).toBe(3);
+      });
+
+      // The other side of it, and why the equality above is not the guard: at 2 o'clock the face is
+      // tighter and no height below the bound is admissible, so the card keeps three lines of
+      // clearance and draws two. The cut is real and it belongs to the margin (#177 / #138).
+      it("keeps its clearance where no smaller height admits the card", () => {
+        const { lines, limits } = geometry(60, NON_MONOTONE, "1 hr 10");
+
+        expect(lines[lines.length - 1]).toBe("1 hr 10");
+        expect(lines[0]).toMatch(/(\.\.\.|…)$/);
+        expect(limits.clearedLines).toBe(3);
+        expect(limits.clearedLines).toBeGreaterThan(lines.length);
+      });
+
       // The control, on the same dial at the same angle: a title that genuinely fills its three
-      // lines is cleared against all four and gains nothing. Without it the test above could pass
+      // lines is cleared against all four and gains nothing. Without it the tests above could pass
       // by never clearing against the duration at all.
       it("still clears against every line a card that fills them does draw", () => {
         const { lines, limits } = geometry(60, "Assembly Notes and Reminders", "1 hr 10");
