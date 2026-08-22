@@ -1,6 +1,6 @@
 # A return check before the PR, and a branch a later run can actually find
 
-**Status:** in progress — the guard and the doc edits for [#133](https://github.com/BenSeymourODB/clock-face-schedule/issues/133)
+**Status:** done — shipped in [#165](https://github.com/BenSeymourODB/clock-face-schedule/pull/165)
 **Issue:** [#133](https://github.com/BenSeymourODB/clock-face-schedule/issues/133)
 **Docs:** `.claude/commands/implement-issue.md` steps 2, 3, 7 and 12 (the claim protocol),
 `.claude/commands/README.md` (which still says these commands are manual),
@@ -76,7 +76,9 @@ later, which is why it is worth arguing rather than quietly implementing the lit
 - **The window stays six hours.** The decision says so, and this plan adds nothing that would justify
   shortening it: a *declared* branch makes "alive" provable, not "dead". Point 2's own 30-minute rule
   is recorded as available, not adopted — adopting it is a release rule, and releasing wrongly is the
-  expensive direction (#133 measures the asymmetry as two sessions against one).
+  expensive direction (#133 measures the asymmetry as two sessions against one). Filed as #166, with
+  the measurement a decision there would need: run A on #114 was silent and branchless for 5h57m and
+  still alive, so a 30-minute rule would have declared it dead seven hours early.
 - **No heartbeat.** Rejected on the issue: most correct, most expensive, and a run that dies between
   beats still burns the full window.
 - **Nothing runs the check.** The return check is a step a run performs, not a script. There is no
