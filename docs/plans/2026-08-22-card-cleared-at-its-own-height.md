@@ -1,6 +1,6 @@
 # Clearing a card's width against the height it draws, not the height it may reach
 
-**Status:** in progress — [#183](https://github.com/BenSeymourODB/clock-face-schedule/issues/183)
+**Status:** done — shipped in [#184](https://github.com/BenSeymourODB/clock-face-schedule/pull/184)
 **Issue:** [#183](https://github.com/BenSeymourODB/clock-face-schedule/issues/183)
 **Docs:** [#177](https://github.com/BenSeymourODB/clock-face-schedule/issues/177) (lever 2, the
 margin, which #138's fork decides), [#141](https://github.com/BenSeymourODB/clock-face-schedule/issues/141)
