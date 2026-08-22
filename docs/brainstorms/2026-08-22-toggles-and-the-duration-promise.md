@@ -230,8 +230,9 @@ looked at. They do not settle the decision, but they remove the arithmetic from 
   pin that refutes it is `01:45`, not this one.
 - **Panel at 16:9 and 16:10**, `#status` hidden. The panel is present in **all 192 states**, taking
   276.7 px at 16:9 (dial 1485.6 × 922.3) and 307.4 px at 16:10 (dial 1437.4 × 1024.8). A panel-off
-  render is not available from the preview today — there is no flag for it — so the second half of
-  the panel-toggle question is still unlooked-at, and that is now the only render outstanding.
+  render is not available from the preview today — there is no flag for it, which is **#186** — so
+  the second half of the panel-toggle question is still unlooked-at, and that is now the only render
+  outstanding.
 
 ## Related
 
@@ -246,3 +247,4 @@ looked at. They do not settle the decision, but they remove the arithmetic from 
 - #85 / #47 / ADR 0008 — the persistent switch, and the hazard a hidden mode carries
 - #174 — the panel's own width and type levers, which move its card capacity
 - #134 / #136 / #142 — the displacement pass and the slack it has left
+- #186 — the preview flag for a panel-off render, which is the one render this document still wants
