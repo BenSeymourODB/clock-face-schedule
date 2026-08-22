@@ -5,7 +5,8 @@
  * **Why the panel exists rather than being more dial.** #70's decision: a three-deep cluster's arc
  * titles render at 6.24 units, which is 7.0 mm on a 4 ft board and legible to about a metre. The
  * band keeps those titles — dropping an event's name outright is worse — and the panel becomes the
- * surface that answers *"what is that arc"* from the back of the room, at 26 units.
+ * surface that answers *"what is that arc"* from the back of the room, at 21.2576 units — the size a
+ * lone arc's own title renders at, so the panel never out-shouts the band it serves (#174).
  *
  * Drawn as its own SVG rather than inside the dial's. Its viewBox is `180 × 600` against the dial's
  * `600 × 600` and the stylesheet gives it exactly `0.3` of the dial's box, so **a unit is the same
