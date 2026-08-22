@@ -42,34 +42,58 @@ current figure is an accident of four gates. Measured over 2028 arcs in 192 stat
 
 | surface | states a length today | its ceiling | what stops it |
 | --- | --- | --- | --- |
-| the arc | 336 (16.6%) | **~359 (17.7%)** | 875 arcs (43.1%) carry no title at all — too narrow for text, let alone a second line; another 407 (20.1%) carry a two-line title, and #145's model overruns by 6.09 units on the widest ring the dial has |
+| the arc | 336 (16.6%) | **367 (18.1%)** | 875 arcs (43.1%) carry no title at all — too narrow for text, let alone a second line; another 356 (17.6%) carry a two-line title, and #145's model overruns by 6.09 units on the widest ring the dial has |
 | the floating card | 407 (20.1%) | **496 (24.5%)** — every card that exists | a card exists only where a title overflowed; making one for an event whose title fit is a new card, not a fuller one |
 | **arc + every existing card** | 743 (36.6%) | **832 (41.0%)** | — |
-| the panel | — | **5 cards** at 26 units, 7 at two lines (ADR 0009); 6 at #174's 21.26 | a fixed column, and it lists a window of the day rather than the dial's set |
+| the panel | **974 of 974 — 100%** | **5 cards** at 26 units, 7 at two lines (ADR 0009); 6 at #174's 21.26 | a fixed column, and it lists a window of the day rather than the dial's set |
 
 **So even a perfect card channel reaches 41.0%.** The gap is not a policy failure — it is 875 arcs
-that are geometrically too small for text and 407 whose text already fills them.
+that are geometrically too small for text and 356 whose text already fills them.
+
+**The panel row is not a dash, and that matters to the answer below.** Measured across the same 192
+states, the panel is present in every one, carries 5.07 cards a state (min 5, max 6) — and **every
+one of those 974 cards states a duration.** It is today the display's only surface with a consistent
+duration channel; the dial's 36.6% is the inconsistent one. That does not rescue meaning 4, which
+still dies on the panel-less board, but it does re-price the panel toggle: switching the panel off
+removes the one place a length is currently guaranteed.
 
 ### A measured reversal, recorded so nobody spends a session on it
 
 The obvious lever looked like the arc's gate: `fitDurationLine` refuses anything but a **lone** arc,
 while #145's own clearance model says a two-line stack clears at depth 1 (**+7.73**) *and* depth 2
-(**+1.70**), failing only at depth 3 (−0.32) and 4 (−1.32). Replacing the lone-arc proxy with the
-model it approximates should therefore free the stacked rings.
+(**+1.70**), failing only at depth 3 (−0.32) and 4 (−1.32). Dropping the lone-arc rule in favour of
+the clearance model should therefore free the stacked rings.
 
-It frees **23 arcs of 2028 — 1.1%.** The one-line-title-with-no-duration population lives where the
+It frees **31 arcs of 2028 — 1.5%.** The one-line-title-with-no-duration population lives where the
 model says no:
 
 | ring depth | arcs | states a duration | one-line title, none | two-line title | no title | 2-line stack clears? |
 | --- | --- | --- | --- | --- | --- | --- |
-| 1 | 1231 | 336 | 8 | 242 | **645** | yes (+7.73) |
-| 2 | 188 | 0 | 15 | 4 | 169 | yes (+1.70) |
-| 3 | 250 | 0 | **132** | 93 | 25 | no (−0.32) |
-| 4 | 359 | 0 | **255** | 68 | 36 | no (−1.32) |
+| 1 | 1231 | 336 | 12 | 238 | **645** | yes (+7.73) |
+| 2 | 188 | 0 | 19 | 0 | 169 | yes (+1.70) |
+| 3 | 250 | 0 | **159** | 66 | 25 | no (−0.32) |
+| 4 | 359 | 0 | **271** | 52 | 36 | no (−1.32) |
 
-The gate is not what is stopping it; the band is. Worth having as a small correctness fix — the code
-would then say what it means — but not as a coverage lever, and this document's first draft had it as
-the cheap win.
+The gate is not what is stopping it; the band is.
+
+**And the swap is not the correctness tidy-up this document's first draft called it.** The lone-arc
+rule is not a proxy for the clearance model — `arc-title-layout.ts` documents them as two independent
+gates, and says so explicitly: *"the legibility gate happens to cover every one of those cases today,
+but this is the check that is actually about not drawing text on a stroke, and the two move
+independently."* The lone-arc rule is the **legibility** gate, and it is about font size, not
+clearance. Title text is `TITLE_FONT_SIZE_RATIO` (0.28) of the *ring*, so on the measured band:
+
+| ring depth | ring | arc title size | vs the floating card's 17.52 |
+| --- | --- | --- | --- |
+| 1 | 75.92 | **21.26** | larger |
+| 2 | 35.68 | **9.99** | 57% of it |
+| 3 | 22.27 | 6.24 | rendered as "a smear along the band rather than words" (#70) |
+| 4 | 15.56 | 4.36 | — |
+
+So freeing depth 2 does not just add 19 durations; it puts duration text at **9.99 units** on rings
+where the card channel deliberately uses 17.52, and the source's reasoning is that *a name is worth
+having small — a redundant channel is not*. Removing that gate is a legibility decision, not a
+cleanup, and it should be argued on its own rather than smuggled in as one. Keep both gates.
 
 ### And "a card for everything" is refuted by placement, not by taste
 
@@ -110,7 +134,7 @@ Four candidate meanings. The first is dead on the numbers above; the last dies w
 2. **Every event that states its *name* states its length.** Ties the duration channel to the name
    channel — *if you can read what it is, you can read how long it is* — which is a rule a viewer can
    infer from the picture without knowing any geometry. Reaches the 1153 arcs (56.9%) that carry a
-   title, but the 407 two-line ones need their duration on a card that does not exist yet, so it
+   title, but the 356 two-line ones need their duration on a card that does not exist yet, so it
    depends on #177's growth work and on a promotion rule (#146's, widened). Aspiration, not a
    near-term promise.
 3. **Every card states its length; an arc states it whenever it carries a title.** Consistency
@@ -156,26 +180,40 @@ guarantee.
   help the near-square board, where the panel is unavailable rather than merely off.
 - **A per-event decision with a legend.** Explaining an inconsistency on screen costs more room than
   the inconsistency saves, on a display whose premise is no interaction and nothing behind a menu.
-- **Relaxing the arc's lone-arc gate as a coverage lever.** 1.1%, measured above. Keep it as a
-  correctness tidy-up, not as an answer.
+- **Relaxing the arc's lone-arc gate as a coverage lever.** 1.5%, measured above — and it is a
+  legibility gate rather than a redundant proxy, so relaxing it costs 9.99-unit duration text on
+  depth-2 rings. Not an answer, and not a cleanup either.
 - **Making the panel non-optional to save the chain.** #171 is a real board shape, not a bug to
   legislate away; and #39 item 4's fallback has to be designed for it regardless, so the chain would
   still need the panel-less answer.
 
-## What to render before deciding
+## What the renders showed
 
-Per `CLAUDE.md`, none of the above is evidence about legibility until it is looked at.
+Per `CLAUDE.md`, none of the above is evidence about legibility until it is looked at. The four sets
+below were rendered at 1920×1080 with `#status` hidden (dial 922.3 px, the healthy-board figure) and
+looked at. They do not settle the decision, but they remove the arithmetic from it.
 
-- **`?now=23:30&freeze=1`** — the worst pin, 2 of 13 events stating a length, against
-  **`?now=05:00&freeze=1`** at 8 of 14. Same schedule, so the pair is the case for the toggle
-  existing at all.
-- **`?now=01:45&freeze=1`** — 16 arcs, 4 cards, 11 events that would need a new card. The picture that
-  says whether meaning 2 is reachable or whether the dial is simply full.
-- **Both meanings 2 and 3 at `?now=19:00&freeze=1`**, which carries two-line arc titles beside a lone
-  arc that does state its length (`Aftercare 2 hr 25`) — the comparison that decides whether "named
-  things have times" reads as a rule or as another inconsistency.
-- **Panel off and on at 16:9 and 16:10**, `#status` hidden. What the dial does with the returned 180
-  units is the other half of whether a panel toggle is worth having.
+- **`?now=23:30&freeze=1`** (2 of 13 on the dial) against **`?now=05:00&freeze=1`** (8 of 14) —
+  both verified. The pair is a real contrast, but **not the contrast the document assumed**: at
+  23:30 the panel beside the dial states five durations, so the viewer's actual experience of the
+  "worst" pin is five legible lengths in the column and two on the dial. The case for the toggle is
+  about the *dial's* inconsistency, not about a display that goes quiet.
+- **`?now=01:45&freeze=1`** — 16 arcs, 4 cards, 11 events with neither, all confirmed. The picture
+  says the dial is **full**: the four-deep cluster between 1 and 3 o'clock is already an illegible
+  smear at 4.36-unit text, and the cards that exist are colliding (`Staff Debrief and Planning`
+  covers the `🍽️ Lunch` arc's own `50 min`). Eleven more cards is not a layout problem to solve;
+  meaning 2 is unreachable at this pin.
+- **`?now=19:00&freeze=1`** — the decisive one, and it favours meaning 3. Five cards are in view:
+  `Yoga 22 min`, `Study Skills… 1 hr` and `Swimming… 1 hr` state a length; **`Staff Debrief and
+  Planning` and `Assembly` do not, and sit directly beside the three that do.** Nothing in the
+  picture explains the difference — which is exactly the illegible half meaning 3 closes. Meaning 2
+  additionally wants `Free Play` and `🎂 Reading and Snacks` to state lengths; both are *two-line*
+  titles on lone arcs, so #145 rules out a third line and each needs a new card — in the crowded
+  lower quadrant where the two collisions above already are.
+- **Panel at 16:9 and 16:10**, `#status` hidden. The panel is present in **all 192 states**, taking
+  276.7 px at 16:9 (dial 1485.6 × 922.3) and 307.4 px at 16:10 (dial 1437.4 × 1024.8). A panel-off
+  render is not available from the preview today — there is no flag for it — so the second half of
+  the panel-toggle question is still unlooked-at, and that is now the only render outstanding.
 
 ## Related
 
