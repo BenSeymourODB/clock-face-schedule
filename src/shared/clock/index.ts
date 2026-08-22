@@ -87,10 +87,26 @@ export {
   type GrowthPlan
 } from './grow-labels';
 export {
+  LABEL_MARGIN_KNEE_UNITS,
   PANEL_RESERVE_UNITS,
   labelMarginUnits,
   type DrawingBox
 } from './label-margin';
+export {
+  PANEL_CARD_FONT_SIZE,
+  PANEL_CARD_GAP,
+  PANEL_CARD_MAX_TITLE_LINES,
+  PANEL_CARD_PADDING,
+  PANEL_CARD_STROKE,
+  PANEL_WIDTH_UNITS,
+  agendaEntries,
+  panelFitsBoard,
+  planAgendaCards,
+  type AgendaCard,
+  type AgendaCardPlan,
+  type AgendaEntry,
+  type PanelBoard
+} from './panel-layout';
 export {
   CHAR_WIDTH_RATIO,
   charBudget,

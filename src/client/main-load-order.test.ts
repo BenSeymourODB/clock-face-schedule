@@ -101,4 +101,26 @@ describe("main.ts's load path", () => {
 
     expect(beforeDial.match(/\bnow\(\)/g)).toHaveLength(1);
   });
+
+  /**
+   * #152's property, extended to the panel (#39) — the second drawing the load path builds.
+   *
+   * Two reads here are invisible until an event ends between them, at which point the column and the
+   * band disagree about the event set on the load frame: a card for something the arcs have already
+   * finished drawing, or the reverse. Exactly #152's shape on a new surface, so it gets #152's guard
+   * rather than waiting to be found by looking.
+   */
+  it("builds the panel from the same instant as the dial", () => {
+    const [, dialTime] = sourceSays(
+      /analogClock\(\{[\s\S]*?\btime:\s*([^,\n]+)/,
+      "`analogClock` is no longer given a `time`"
+    );
+    const [, panelTime] = sourceSays(
+      /agendaPanel\(\{[\s\S]*?\btime:\s*([^,\n}]+)/,
+      "`agendaPanel` is no longer given a `time`"
+    );
+
+    expect((panelTime as string).trim()).toBe((dialTime as string).trim());
+    expect((panelTime as string).trim()).toMatch(/^[A-Za-z_$][\w$]*$/);
+  });
 });
