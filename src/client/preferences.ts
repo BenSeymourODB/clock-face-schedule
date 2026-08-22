@@ -15,6 +15,13 @@
  * the store holding whichever landed last — and a reload then silently reverts what the viewer set.
  * At most one save is in flight; changes made meanwhile are held, coalesced per key, and sent when
  * it settles. Ordering is total because there is only ever one writer.
+ *
+ * A write therefore gets a **deadline** (#122). One writer means one stuck write is every write: a
+ * promise that neither resolves nor rejects would leave the queue shut for the life of the page,
+ * which on a wall display is however long the board has been up — and with no symptom, since the
+ * screen keeps showing what the viewer set and only a reload reveals the store fell behind. That is
+ * the one axis on which a single writer is worse than the fire-and-forget it replaced, which could
+ * lose a write and could order two wrongly but could not stop writing.
  */
 import {
   type PreferenceKey,
@@ -72,7 +79,33 @@ export interface PreferenceStoreOptions {
    * thing that catches the omission at build time.
    */
   reset: (keysWire: string) => PromiseLike<string>;
+  /**
+   * Runs `run` after `delayMs`, and returns a function that cancels it. `window.setTimeout` unless a
+   * caller passes something else, which only a spec has reason to.
+   *
+   * A parameter rather than a direct `setTimeout` because the store is otherwise pure apart from the
+   * `save` it is handed: injecting the timer is what lets a spec hold a write past its deadline
+   * without fake timers, in a suite that needs none.
+   */
+  schedule?: (run: () => void, delayMs: number) => () => void;
 }
+
+/**
+ * How long a write may be with the server before the queue gives up its turn (#122).
+ *
+ * Five times the slow end of ADR 0006's 0.5–2 s round trip. The number is a trade rather than a
+ * measurement: past it, a slow-but-alive write races the one behind it, which is the defect the
+ * single writer exists to remove — so the deadline has to be long enough that the race is rarer than
+ * the stall it prevents. 2 s would race a merely-loaded board routinely; 60 s would leave a minute of
+ * dead queue per occurrence, giving most of the value back.
+ */
+const WRITE_DEADLINE_MS = 10_000;
+
+/** The real timer, for every caller that is not a spec. */
+const browserSchedule = (run: () => void, delayMs: number): (() => void) => {
+  const id = window.setTimeout(run, delayMs);
+  return () => window.clearTimeout(id);
+};
 
 /**
  * The templated wire string, from the element the dial mounts into.
@@ -86,7 +119,12 @@ export function readPreferenceWire(mount: Element | null | undefined): string | 
   return wire === undefined ? null : wire;
 }
 
-export function preferenceStore({ wire, save, reset }: PreferenceStoreOptions): PreferenceStore {
+export function preferenceStore({
+  wire,
+  save,
+  reset,
+  schedule = browserSchedule
+}: PreferenceStoreOptions): PreferenceStore {
   let values = decodePreferences(wire);
 
   /** Whether a write is with the server. The queue's only state that is not the queue. */
@@ -116,30 +154,75 @@ export function preferenceStore({ wire, save, reset }: PreferenceStoreOptions): 
   const normalise = (keys: readonly PreferenceKey[]): PreferenceKey[] =>
     decodePreferenceKeys(encodePreferenceKeys(keys));
 
+  /**
+   * One write's turn at the queue, arming its deadline and ending **exactly once** — whichever of the
+   * server's answer and the deadline arrives first (#122).
+   *
+   * Both halves of "exactly once" are load-bearing, and each is a way the deadline could be worse
+   * than the stall it prevents:
+   *
+   * - **The answer cancels the deadline**, so a settled write leaves no timer behind it. One outliving
+   *   its own write would fire while a *later* write was in flight and abandon that healthy write's
+   *   turn — a leak that gets worse the longer the display runs.
+   * - **The deadline closes the turn**, so an answer arriving afterwards does nothing. Draining twice
+   *   for one write would send the queue's next entry while the previous one was still out, which is
+   *   the race a single writer exists to remove.
+   */
+  function writeTurn(): (finish: () => void) => void {
+    let over = false;
+
+    function end(finish: () => void): void {
+      if (over) return;
+      over = true;
+      cancel();
+      finish();
+    }
+
+    const cancel = schedule(() => {
+      // The only record an abandoned write leaves. `main.ts` logs the sibling failures from inside
+      // the functions handed in here, which is upstream of this deadline, so without a line the
+      // failure would be invisible on a display nobody is watching.
+      console.warn(`preference write abandoned after ${WRITE_DEADLINE_MS} ms — no answer`);
+      end(drain);
+    }, WRITE_DEADLINE_MS);
+
+    return end;
+  }
+
   function sendValues(patch: Partial<Preferences>): void {
     writing = true;
+    const end = writeTurn();
 
     try {
-      save(encodePreferences(patch)).then(drain, drain);
+      save(encodePreferences(patch)).then(
+        () => end(drain),
+        () => end(drain)
+      );
     } catch {
       // A `save` that throws rather than rejecting has still finished, and the queue has to keep
       // moving: wedging here would cost every later preference, not just this one. The `then` is
       // inside the try for the same reason — a `save` that returns something un-thenable throws
       // here, and it would throw out of `set` and into a click handler with the queue left shut.
-      drain();
+      // `end` rather than `drain` so the throw also disarms the deadline it just armed.
+      end(drain);
     }
   }
 
   function sendKeys(keys: PreferenceKey[]): void {
     writing = true;
+    const end = writeTurn();
 
     try {
-      reset(encodePreferenceKeys(keys)).then((resolved) => {
-        adopt(keys, resolved);
-        drain();
-      }, drain);
+      reset(encodePreferenceKeys(keys)).then(
+        (resolved) =>
+          end(() => {
+            adopt(keys, resolved);
+            drain();
+          }),
+        () => end(drain)
+      );
     } catch {
-      drain();
+      end(drain);
     }
   }
 

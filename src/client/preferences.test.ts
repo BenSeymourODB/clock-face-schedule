@@ -89,6 +89,45 @@ function controllableSave(): {
   };
 }
 
+/**
+ * The deadline timer the store is handed, armed and fired by the test rather than by a clock (#122).
+ *
+ * Injected rather than faked, which is the whole reason the store takes it: the suite needs none of
+ * vitest's timer machinery to hold a write past its deadline, and the delay the store *asks* for is
+ * observable as a value rather than inferred from how long a test waited.
+ */
+function controllableClock(): {
+  delays: number[];
+  armed: () => number;
+  schedule: (run: () => void, delayMs: number) => () => void;
+  elapse: () => Promise<void>;
+} {
+  const timers: { run: () => void; live: boolean }[] = [];
+  const delays: number[] = [];
+
+  return {
+    delays,
+    armed: () => timers.filter((timer) => timer.live).length,
+    schedule: (run, delayMs) => {
+      const timer = { run, live: true };
+      timers.push(timer);
+      delays.push(delayMs);
+      return () => {
+        timer.live = false;
+      };
+    },
+    /** Fires the oldest deadline still armed, the way real time would reach it first. */
+    elapse: () => {
+      const timer = timers.find((candidate) => candidate.live);
+      if (timer !== undefined) {
+        timer.live = false;
+        timer.run();
+      }
+      return flush();
+    }
+  };
+}
+
 describe("the store", () => {
   let saved: string[];
 
@@ -339,6 +378,212 @@ describe("the store, with a write still in flight", () => {
 
     await settle();
     expect(store.get().timerDurationSeconds).toBe(900);
+  });
+});
+
+/**
+ * #122. `drain` runs on fulfilment *and* rejection, so a failed write costs its own value and not the
+ * ones behind it — but a promise that does neither leaves `writing` true forever, and nothing is
+ * written again for the life of the page. On a wall display that is however long the board has been
+ * up, and the stall has no symptom: the screen stays correct and only a reload reveals it.
+ *
+ * This is the one axis on which #84's queue can be worse than the fire-and-forget it replaced, which
+ * could lose a write and could order two wrongly but could not stop writing.
+ *
+ * The deadline is 10 s, and the assertions are on the sequence of writes rather than on timing, for
+ * the reason the block above gives. The one that matters is the **negative** one: a write that never
+ * settles must not stop the next write from being sent. Asserting only that the timer fires would
+ * pass without testing the property this issue exists to protect.
+ */
+describe("the store, with a write that never settles", () => {
+  /** The deployment's answer for `showSeconds`, which differs from the code default of `true`. */
+  const DEPLOYMENT_WIRE = encodePreferences({ ...defaultPreferences(), showSeconds: false });
+
+  it("sends the queued write once the abandoned one's deadline passes", async () => {
+    const { sent, save, reset } = controllableSave();
+    const clock = controllableClock();
+    const store = preferenceStore({ wire: "", save, reset, schedule: clock.schedule });
+
+    store.set({ showSeconds: false });
+    store.set({ timerMuted: true });
+
+    expect(sent).toEqual(["showSeconds=0"]);
+
+    // The defect, as a sequence: without a deadline the second entry is never sent at all, and nor
+    // is anything set after it, for as long as the page is open.
+    await clock.elapse();
+    expect(sent).toEqual(["showSeconds=0", "timerMuted=1"]);
+  });
+
+  it("does not resend the abandoned write's own value", async () => {
+    const { sent, save, reset, pending } = controllableSave();
+    const clock = controllableClock();
+    const store = preferenceStore({ wire: "", save, reset, schedule: clock.schedule });
+
+    store.set({ showSeconds: false });
+    await clock.elapse();
+
+    // Same bargain as a refused write: a lost save costs the next reload's memory of a setting rather
+    // than interrupting a lesson, and a retry loop on a display up for weeks costs more than that.
+    // The write is still with the server — abandoning it is the store giving up its turn, not the
+    // bridge answering.
+    expect(sent).toEqual(["showSeconds=0"]);
+    expect(pending()).toBe(1);
+  });
+
+  it("abandons a reset the same way, so a reset cannot shut the queue either", async () => {
+    const { sent, save, reset } = controllableSave();
+    const clock = controllableClock();
+    const store = preferenceStore({ wire: "", save, reset, schedule: clock.schedule });
+
+    store.reset(["showSeconds"]);
+    store.set({ timerMuted: true });
+
+    expect(sent).toEqual(["showSeconds"]);
+
+    await clock.elapse();
+    expect(sent).toEqual(["showSeconds", "timerMuted=1"]);
+  });
+
+  it("sends the follow-up at the settle, not at the deadline", async () => {
+    const { sent, save, reset, settle } = controllableSave();
+    const clock = controllableClock();
+    const store = preferenceStore({ wire: "", save, reset, schedule: clock.schedule });
+
+    store.set({ showSeconds: false });
+    store.set({ timerMuted: true });
+    await settle();
+
+    // A healthy round trip is 0.5–2 s (ADR 0006) against a 10 s deadline, so the deadline must be
+    // invisible in the ordinary case rather than a delay every write waits out.
+    expect(sent).toEqual(["showSeconds=0", "timerMuted=1"]);
+  });
+
+  it("leaves no deadline armed once a write is over", async () => {
+    const { save, reset, settle, fail } = controllableSave();
+    const clock = controllableClock();
+    const store = preferenceStore({ wire: "", save, reset, schedule: clock.schedule });
+
+    store.set({ showSeconds: false });
+    await settle();
+    store.set({ timerMuted: true });
+    await fail();
+
+    // A board is up for weeks. A stray deadline outliving its own write would fire while a *later*
+    // write was in flight and abandon that healthy write's turn — a slow leak that gets worse the
+    // longer the display runs, which is the opposite of what this change is for.
+    expect(clock.armed()).toBe(0);
+  });
+
+  it("does not end the next write's turn when the abandoned one answers late", async () => {
+    const { sent, save, reset, settle } = controllableSave();
+    const clock = controllableClock();
+    const store = preferenceStore({ wire: "", save, reset, schedule: clock.schedule });
+
+    store.set({ showSeconds: false });
+    store.set({ timerMuted: true });
+    await clock.elapse();
+    store.set({ timerDurationSeconds: 600 });
+
+    // `settle` completes the *oldest* unfinished write, which is the abandoned one. Draining a second
+    // time for it would send the queue's next entry while the previous entry was still out — #84's
+    // defect, reintroduced by the fix for the stall.
+    await settle();
+    expect(sent).toEqual(["showSeconds=0", "timerMuted=1"]);
+
+    await settle();
+    expect(sent).toEqual(["showSeconds=0", "timerMuted=1", "timerDurationSeconds=600"]);
+  });
+
+  it("does not adopt a reset echo that arrives after the deadline", async () => {
+    const { save, reset, settle } = controllableSave();
+    const clock = controllableClock();
+    const store = preferenceStore({
+      wire: "showSeconds=1",
+      save,
+      reset,
+      schedule: clock.schedule
+    });
+
+    store.reset(["showSeconds"]);
+    await clock.elapse();
+
+    // An abandoned reset is a failed reset, and a failed reset adopts nothing. The echo below is a
+    // reading of the layer beneath from before the store gave up its turn, so applying it now would
+    // move a value the store has already stopped waiting on.
+    await settle(DEPLOYMENT_WIRE);
+    expect(store.get().showSeconds).toBe(true);
+  });
+
+  it("arms a real timer when no clock is injected, so a board gets a deadline at all", () => {
+    // The one property every other spec in this block cannot see, because they all inject. A default
+    // that armed nothing would leave production with no deadline and leave all of them green — the
+    // same shape of hole as a test that exercises a geometry the renderer does not produce.
+    const armed = vi.spyOn(window, "setTimeout");
+    const { save, reset } = controllableSave();
+    const store = preferenceStore({ wire: "", save, reset });
+
+    store.set({ showSeconds: false });
+
+    expect(armed).toHaveBeenCalledWith(expect.any(Function), 10_000);
+    armed.mockRestore();
+  });
+
+  it("arms the deadline at ten seconds", () => {
+    const { save, reset } = controllableSave();
+    const clock = controllableClock();
+    const store = preferenceStore({ wire: "", save, reset, schedule: clock.schedule });
+
+    store.set({ showSeconds: false });
+
+    // Five times the slow end of ADR 0006's 0.5–2 s round trip. Not 2 s, which races a merely-loaded
+    // board routinely; not 60 s, which leaves a minute of dead queue per occurrence.
+    expect(clock.delays).toEqual([10_000]);
+  });
+
+  it("reports an abandoned write, so the failure leaves some trace", async () => {
+    const warned = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const { save, reset } = controllableSave();
+    const clock = controllableClock();
+    const store = preferenceStore({ wire: "", save, reset, schedule: clock.schedule });
+
+    store.set({ showSeconds: false });
+    await clock.elapse();
+
+    // `main.ts` logs the sibling failures — `preference not saved`, `preference not reset` — from
+    // inside the functions this store is handed, which is upstream of the deadline. Without a line
+    // here an abandoned write is the only failure in this store with no record anywhere, on a display
+    // nobody is watching.
+    expect(warned).toHaveBeenCalledWith(expect.stringContaining("abandoned"));
+    warned.mockRestore();
+  });
+
+  it("keeps a synchronous throw draining at once, deadline and all", async () => {
+    const clock = controllableClock();
+    const sent: string[] = [];
+    let thrown = false;
+    const store = preferenceStore({
+      wire: "",
+      save: (wire) => {
+        sent.push(wire);
+        if (!thrown) {
+          thrown = true;
+          throw new Error("bridge missing");
+        }
+        return Promise.resolve();
+      },
+      reset: () => Promise.resolve(""),
+      schedule: clock.schedule
+    });
+
+    store.set({ showSeconds: false });
+    store.set({ timerMuted: true });
+    await flush();
+
+    // The deadline must not turn a throw that drained *synchronously* into one that waits 10 s, and
+    // must not leave the throwing write's timer armed behind it.
+    expect(sent).toEqual(["showSeconds=0", "timerMuted=1"]);
+    expect(clock.armed()).toBe(0);
   });
 });
 
