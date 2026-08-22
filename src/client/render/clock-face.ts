@@ -138,9 +138,15 @@ const STROKE = {
  * Halo added to each side of a hand's own stroke, as a fraction of the face radius.
  *
  * Sized to match the thinnest hairlines already on the face (`STROKE.face` / `minuteTick` /
- * `secondHand`) rather than to stand out — the halo is currently invisible in normal use, since
- * hands never cross anything but `--card`, and it should stay that way until something is drawn
- * under them.
+ * `secondHand`) rather than to stand out — the halo should stay invisible in normal use until
+ * something is drawn under it, and the only candidate today is whatever the timer eventually draws
+ * inside this radius (#48).
+ *
+ * It was not invisible, and the docstring here said it was: the hour numerals *were* drawn under
+ * the hands, so the halo cut a 4.09-unit stripe of `var(--card)` through every numeral a hand
+ * crossed — 16.4% of a numeral's ink, and the "6" at 18:30 in three detached pieces (#112). The
+ * numerals now mount above the halos, which is where the fix lives; this ratio is unchanged and
+ * still correct for the job it was sized against.
  */
 const HAND_HALO_RATIO = 0.01;
 
@@ -245,6 +251,10 @@ export function clockFace({
 
   const element = svg("g", { "data-testid": "clock-face" });
 
+  // The numerals are held back from the append order their markers use so they can mount between
+  // the halos and the hands (#112) — see the append site for why.
+  const numeralLayer = svg("g", { "data-testid": "hour-numerals" });
+
   element.append(
     svg("circle", {
       "data-testid": "clock-face-bg",
@@ -301,7 +311,10 @@ export function clockFace({
         stroke: "var(--card-foreground)",
         "stroke-width": stroke(isQuarter ? STROKE.quarterMarker : STROKE.hourMarker),
         "stroke-linecap": "round",
-      }),
+      })
+    );
+
+    numeralLayer.append(
       svg(
         "text",
         {
@@ -326,7 +339,7 @@ export function clockFace({
     if (isMinuteScale) {
       const inner = polarToCartesian(cx, cy, faceRadius * RADIUS.hourNumeralInner, angle);
 
-      element.append(
+      numeralLayer.append(
         svg(
           "text",
           {
@@ -527,6 +540,15 @@ export function clockFace({
   // on top regardless of which other hand shares its angle.
   element.append(hourHalo, minuteHalo);
   if (secondHalo) element.append(secondHalo);
+  // Then the numerals, above every halo and below every hand (#112). Appended with their markers
+  // they sat *under* the halos, and a halo is `var(--card)` painted over whatever is beneath it —
+  // so a hand did not overlap the numeral it points at, it cut a 4.09-unit stripe of face straight
+  // through it and left the fragments detached: 16.4% of a numeral's ink over the twelve pins where
+  // the minute hand lands on one, and the "6" at 18:30 in three pieces. Here the halo has nothing
+  // left to separate them from, since the arcs it was sized against are a different layer outside
+  // the face radius. The cost is that a hand and a numeral now touch where they cross, which is the
+  // reading a mechanical clock has and the one the gap was destroying.
+  element.append(numeralLayer);
   element.append(hourHand, minuteHand);
   if (secondHand) element.append(secondHand);
 
