@@ -1,6 +1,6 @@
 # A duration line never bought with a character of the title
 
-**Status:** in progress — [#141](https://github.com/BenSeymourODB/clock-face-schedule/issues/141) outstanding until this ships
+**Status:** done — shipped in [#175](https://github.com/BenSeymourODB/clock-face-schedule/pull/175)
 **Issue:** [#141](https://github.com/BenSeymourODB/clock-face-schedule/issues/141)
 **Docs:** [#136](https://github.com/BenSeymourODB/clock-face-schedule/issues/136) /
 [#142](https://github.com/BenSeymourODB/clock-face-schedule/pull/142) (the pass that hands the line
