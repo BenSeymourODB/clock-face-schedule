@@ -44,7 +44,7 @@ makes the width definite too:
 
 ```
 #board  →  display: flex        (the grid's first row, definite on both axes)
-#dial   →  flex: 1 1 auto; min-width: 0     the remainder
+#dial   →  flex: 1 1 0; min-width: 0        the remainder (an `auto` basis would be #115)
 #panel  →  flex: 0 0 auto; height: 100%; aspect-ratio: 180 / 600
 ```
 
@@ -56,13 +56,16 @@ the ratio in the stylesheet is the ADR's two numbers written down rather than a 
 remainder", the drawing still fits its shorter axis, and *being centred in the remainder is the same
 sentence as the ADR's* — which is what `Styles.html` predicted.
 
-### What the margin measurement does, and why it needs no change
+### What the margin measurement does, and the one thing that did have to change
 
-`measureLabelMargin` reads `#dial`'s box and `labelMarginUnits` divides the **viewport**, not the
-box. With the panel in place `#dial`'s box loses width but keeps its height, and on a landscape board
-`drawn = min(width, height)` is the height either way — so `boardUnits` is unchanged and the margin
-returned is unchanged. Nothing to retune, which is the reserve doing its job. Asserted rather than
-assumed.
+The *scale* is untouched, and that is what keeps the dial's own size out of this: `measureLabelMargin`
+reads `#dial`'s box, and with the panel in place that box loses width but keeps its height, so
+`drawn = min(width, height)` is the height either way on a landscape board. The dial renders at the
+same 1.5372 px per unit with the panel as without it — measured, not assumed.
+
+What did change is the **divisor**, and it had to: dividing the viewport grants the labels the page's
+frame as well as the room beside the dial, and on the panel side the frame is the panel. See the
+section below, which is where rendering found it.
 
 ## Item 4, the narrow display: the minimum that is not a decision
 
@@ -76,7 +79,7 @@ item 4. This plan picks **neither**, and instead builds the guard that both answ
 > **The panel is drawn only where the board can afford it**, and *afford* has two terms: the dial
 > keeps its full height, **and** the room left beside the dial covers a floating label's reach.
 
-### The second term was found by rendering, and the first alone is not enough
+### The second term was found by rendering — twice, and the first correction was also wrong
 
 The dial-size condition on its own is `board.width ≥ board.height × (600 + 180) / 600` — an aspect
 ratio of **1.3**. Built and looked at, that is wrong, and the whole suite was green through it:
@@ -85,43 +88,51 @@ ratio of **1.3**. Built and looked at, that is wrong, and the whole suite was gr
 | --- | --- | --- | --- |
 | 16:9 | 1.911 | 183.2 | clean |
 | 16:10 | 1.703 | 120.8 | clean |
-| 1400×1000 | 1.468 | 50.5 | clean |
 | **1330×1000** | **1.386** | **25.9** | **`⚫ Assembly`'s card crossed into the column by 5.9 px** |
 | **4:3 (1024×768)** | **1.390** | **27.1** | same shape — a plausible classroom projector |
 
-A card paints outside the dial's viewBox by design and the page reserves `--label-frame` — **51.29
-units** — for it to paint into. On the panel side that frame *is the panel*, so the room between the
-dial's viewBox and the column has to hold a card on its own. Requiring it raises the threshold to
-**1.4710**, which both aspects ADR 0009 targets clear with 2–3× headroom, so nothing about the
-deployment changes.
+The first fix required the room beside the dial to cover `--label-frame`, 51.29 units. **That was the
+wrong currency, and the review caught it:** the frame is the *vertical* allowance — a four-line card
+on the label locus — and the panel is on the horizontal axis, where a card reaches much further. On
+the 1-hour dial the worst is **138.7 units**, so at **16:10, one of ADR 0009's two target boards**,
+`?scale=1h&now=07:17&freeze=1` put a card **30.7 px** inside the column with the frame test passing.
 
-The reach is read off `#display`'s own rendered padding rather than restated, so raising the frame for
-a taller card raises the aspect at which the panel may appear, in the same commit.
+### What actually bounds a card, and why the collision is now structural
 
-### One residual, priced rather than fixed
+`analog-clock.ts` sets `labelAllowance = grantedMargin + EDGE_MARGIN`, so **a card's permitted reach
+past the viewBox *is* the margin the host grants**. And the host was granting more room than exists:
+`labelMarginUnits` divides the **viewport**, while the room beside the dial is the viewport less the
+page's frame — and on the panel side that frame *is* the panel. The grant therefore over-stated the
+panel side by exactly one frame width on every board, which is why the number to compare against kept
+being wrong.
 
-`labelMarginUnits` grants the labels `(board − dial − panel) / 2` measured on the **viewport**, and
-the room actually beside the dial is that minus the frame, because the frame is padding *outside*
-`#board`. So the grant over-states the panel side by exactly one frame width on every board. On 16:9
-that is invisible — the widest card the fixture draws reaches 65.5 units against 183.2 of room — but
-just above the threshold it is not: at 1410×1000, `?now=19:45` puts a card 16.4 px into the column.
-Measured band: content aspect ~1.471 to ~1.50, clean at 1.585 and above.
+So `measureLabelMargin` now measures the **row** rather than the viewport while the panel is up. A
+card cannot reach the column because it is never granted permission to:
 
-Closing it structurally needs one of two things, and both are decisions rather than implementations:
-a `gap` of **twice** the frame on `#board` (which makes room ≥ grant by construction, and breaks ADR
-0009's "both label margins are equal" consequence), or narrowing the grant itself (which changes a
-shipped ADR figure and every card on every board). Filed with item 4, which is the issue that owns
-what happens as the board approaches square.
+| | grant before | grant now = room |
+| --- | --- | --- |
+| 16:9 | 234.5 | **183.2** |
+| 16:10 | 172.1 | **120.8** |
 
-That is a pure function of two measured lengths (`panelFitsBoard`, in `src/shared/`, node-testable,
-ADR 0003-safe) and the client sets one attribute from it in the `ResizeObserver` it already runs for
-the label margin. It makes no claim about what a narrow board *should* show, which is what item 4 is
-about and what the follow-up issue carries.
+**It costs nothing.** ADR 0009's guaranteed card width saturates at 155.2 units — 13 characters a
+line — for any margin at or above **75.4**, and both figures are far above it.
 
-**There is no feedback loop, and that is the reason the test reads `#board` and not `#dial`.** The
-condition is measured on the container, whose box does not depend on whether the panel is in it.
-Measuring `#dial` instead would flap: hiding the panel widens the dial, which would re-satisfy the
-test, which would show the panel, which would narrow the dial.
+That knee is then what the threshold is for, and it is about *cost* rather than collisions: below it
+the panel and the labels trade width one-for-one, which is the trade ADR 0009 says its 180 units must
+not make. `(600 + 180 + 150.8) / 600` = **1.5513**, which 16:9 (1.911) and 16:10 (1.703) both clear.
+
+Swept 144 pins per board across both scales after the fix: **zero intrusion on 16:9 and 16:10**,
+panel absent at 1410×1000, 1330×1000, 4:3 and square. The residual this plan previously priced —
+a card reaching into the column just above the threshold — is closed rather than deferred.
+
+### One consequence worth knowing
+
+The panel's presence depends on the row's height, so **the status line showing makes a narrow board
+afford the panel**: the notice takes height, the dial shrinks, and 180 units becomes fewer pixels. On
+4:3 in demo mode the panel appears; with `#status` hidden — what a healthy board shows, and what
+`CLAUDE.md` says to judge size on — it does not. Swept both ways and the intrusion is zero either
+way, because the grant follows the row. It is the same mechanism that already makes the label margin
+depend on the notice, which is why the resize observer exists.
 
 ## What goes in the column
 
@@ -136,11 +147,18 @@ these are the constants the ADR was written against:
 | | units |
 | --- | --- |
 | font size | 26 (ADR 0009) |
+| usable column height, `600 − PANEL_CARD_STROKE` | 597.92 |
 | `labelCardHeight(3, 26, 3)` | 115.2 |
-| five three-line cards + four 6-unit gaps | **576 + 24 = 600** |
+| five three-line cards + four 5-unit gaps | **576 + 20 = 596** |
 | `labelCardHeight(2, 26, 3)` | 78.8 |
-| seven two-line cards + six 6-unit gaps | 551.6 + 36 = 587.6 ≤ 600 |
-| eight | 630.4 + 42 = 672.4 — does not fit |
+| seven two-line cards + six gaps | 551.6 + 30 = 581.6 |
+| eight | 630.4 + 35 = 665.4 — does not fit |
+
+The gap is 5 rather than 6 because a card's border is centred on its edge and an outermost `<svg>`
+clips it: a card flush with the column had its left and right borders painted at **half** the weight
+of its horizontals, 1.6 px of stroke gone at 1920×1080. Every attribute was correct, so only looking
+found it. Insetting the cards by half a stroke costs 2.08 units of column, and 5 is the largest whole
+gap that still keeps ADR 0009's five — 5.48 is the ceiling, and 6 holds only four.
 
 > **"The panel holds five cards at 26 units over three lines, seven at two lines."** — ADR 0009
 

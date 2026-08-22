@@ -12,6 +12,7 @@ import {
   describeClockPin,
   describePinnedInstant,
   getFetchWindow,
+  LABEL_MARGIN_KNEE_UNITS,
   PANEL_RESERVE_UNITS,
   getPeriodBounds,
   labelMarginUnits,
@@ -124,44 +125,46 @@ function displayPreferences(mount: Element): PreferenceStore {
 /**
  * The board's spare width, in the dial's own units — ADR 0009's allocation, measured (#30 item 1).
  *
- * `#dial` is the grid column the drawing sits in and its box is definite on both axes, so its
- * rendered size is the scale the whole page resolved at. `clientWidth` rather than `innerWidth`
- * because the latter counts a scrollbar, and this page has none by construction.
+ * `#dial` is the flex remainder of `#board` — the row it shares with the panel (#39) — and its box
+ * is definite on both axes, so its rendered size is the scale the whole page resolved at.
+ * `clientWidth` rather than `innerWidth` because the latter counts a scrollbar, and this page has
+ * none by construction.
  *
  * `null` on a page with no layout — the preview before paint, a jsdom spec — which leaves the
  * renderer on its inherited allowance rather than on a zero.
  */
-function measureLabelMargin(mount: Element): number | null {
+function measureLabelMargin(mount: Element, board: Element, panelShown: boolean): number | null {
   const box = mount.getBoundingClientRect();
-  return labelMarginUnits(box, document.documentElement.clientWidth, DIAL_VIEWBOX_SIZE);
+
+  /**
+   * The viewport, or the row — and which one it is decides whether a card can land on the panel.
+   *
+   * A card may paint into `#display`'s padding: that frame exists for it (#115), so dividing the
+   * *viewport* is the right answer for three of the dial's four sides. On the fourth, once the panel
+   * is up, the frame **is** the panel — so the room that actually exists beside the dial is the row's
+   * own width minus the column, and granting more than that is granting a card permission to paint
+   * over the agenda. `analog-clock.ts` turns the grant straight into `labelAllowance`, so the reach
+   * it permits is exactly this number: measure the row and a collision stops being possible rather
+   * than becoming unlikely.
+   *
+   * Costs nothing where it matters. ADR 0009's guaranteed card width saturates at 13 characters a
+   * line for any margin at or above 75.4, and `panelFitsBoard` will not show a panel that leaves
+   * less — so 16:9 goes 234.5 → 183.2 and 16:10 172.1 → 120.8, both still saturated.
+   */
+  const available = panelShown
+    ? board.getBoundingClientRect().width
+    : document.documentElement.clientWidth;
+
+  return labelMarginUnits(box, available, DIAL_VIEWBOX_SIZE);
 }
 
 /**
- * How far a floating label may reach past the dial's viewBox, in the dial's units — read off the
- * frame the page actually reserves for it rather than restated here.
+ * Whether the board can carry the panel without the dial paying for it and without the labels paying
+ * either (#39, ADR 0009).
  *
- * `#display`'s padding *is* that reserve (`--label-frame`, sized in `Styles.html` from the worst card
- * the renderer can draw), so one read keeps the panel's threshold and the page's frame the same
- * number. Converted through `size / board.height`, the scale the dial resolves at while it is bound
- * by the board's height — which is the hypothesis `panelFitsBoard` is testing.
- *
- * Zero where there is nothing to measure, which leaves the threshold at the dial-size condition
- * alone rather than refusing the panel outright.
- */
-function labelReachUnits(board: Element): number {
-  const display = document.querySelector("#display");
-  const height = board.getBoundingClientRect().height;
-  if (!display || !(height > 0)) return 0;
-
-  const padding = Number.parseFloat(window.getComputedStyle(display).paddingRight);
-  if (!Number.isFinite(padding)) return 0;
-
-  return (padding * DIAL_VIEWBOX_SIZE) / height;
-}
-
-/**
- * Whether the board can carry the panel without the dial paying for it and without a floating label
- * landing on it (#39, ADR 0009).
+ * The second term is ADR 0009's own knee: below 75.4 units of margin the labels stop being saturated
+ * and every unit the panel takes is a character off a card, which is the trade the ADR says its 180
+ * units must not make. Above it, both are at their best and the panel is free.
  *
  * Measured on `#board` — the row the dial and the panel share — and never on the dial's own box. The
  * dial's width depends on whether the panel is in it, so testing the dial would flap: hiding the
@@ -176,7 +179,7 @@ function showPanel(board: Element): boolean {
     board.getBoundingClientRect(),
     DIAL_VIEWBOX_SIZE,
     PANEL_RESERVE_UNITS,
-    labelReachUnits(board)
+    LABEL_MARGIN_KNEE_UNITS
   );
 }
 
@@ -204,10 +207,12 @@ function trackBoardLayout(
   clock: AnalogClockHandle
 ): void {
   const apply = (): void => {
-    // The panel first: it decides the dial's width, so granting the margin from a box measured
-    // before the column settled would hand the renderer the wrong allowance for a frame.
-    panelHost?.toggleAttribute("hidden", !showPanel(board));
-    clock.setLabelMargin(measureLabelMargin(mount));
+    // The panel first, and its answer reused rather than asked twice: it decides both the dial's
+    // width and which width the margin is measured against, so a box read before the column
+    // settled would hand the renderer the wrong allowance for a frame.
+    const shown = showPanel(board);
+    panelHost?.toggleAttribute("hidden", !shown);
+    clock.setLabelMargin(measureLabelMargin(mount, board, shown));
   };
 
   apply();
@@ -221,9 +226,9 @@ function trackBoardLayout(
 function startDisplay(): void {
   const statusLine = document.querySelector("#status");
   const panelHost = document.querySelector("#panel");
-  // The row the dial and the panel share. Falls back to the mount on a page templated before #39
-  // added it, which is the diagnostics-only case: the measurement is then the dial's own box, so the
-  // panel does not appear rather than appearing at the wrong width.
+  // The row the dial and the panel share. `Index.html` emits it outside every scriptlet, so a real
+  // page always has one and the fallback below is only reached by a jsdom fixture that mounts a bare
+  // `#dial`. Falling back to the mount keeps such a page working with no panel, rather than throwing.
   const board = document.querySelector("#board");
   if (!mount) return;
 
@@ -270,6 +275,11 @@ function startDisplay(): void {
 
   // Hands before data. A google.script.run round trip runs 0.5–2s and the server cache does not
   // help a cold start, so the wall shows a working clock rather than an empty panel.
+  // The panel is ticked even where the board is too narrow to show it. `setTime` early-returns
+  // unless the card set changed, so a hidden column costs a filter and a sort over one day's events
+  // and touches no DOM — and gating it on visibility would need a "bring it current on re-show" path
+  // that reads the clock a second time, which is the defect #152 was. Same call #57 makes about the
+  // drain rebuild: cheap on any modern device, and no measurement says otherwise.
   window.setInterval(() => {
     const at = now();
     clock.setTime(at);
@@ -471,8 +481,15 @@ async function renderDiagnostics(list: Element): Promise<void> {
   // the page, since the sections below it take height the dial would otherwise have. So the two
   // numbers are only ADR 0009's figures when read together, and the pixel one is the direct check
   // on #115: 600 px on a board taller than that is the defect, whatever the margin says.
-  if (mount) {
-    const margin = measureLabelMargin(mount);
+  //
+  // Reported against the panel's own state (#39), because the two answers differ: with the column up
+  // the margin is the room beside the dial, and without it the whole of the board's slack. A row
+  // saying "234.5" on a board whose panel is drawn would mean `measureLabelMargin` had divided the
+  // viewport rather than the row, which is the intrusion this panel exists to make visible.
+  const board = document.querySelector("#board");
+  if (mount && board) {
+    const shown = showPanel(board);
+    const margin = measureLabelMargin(mount, board, shown);
     const { width, height } = mount.getBoundingClientRect();
 
     addRow(
@@ -480,7 +497,7 @@ async function renderDiagnostics(list: Element): Promise<void> {
       "label margin",
       margin === null
         ? "not measurable — the dial has no layout"
-        : `${margin.toFixed(1)} units per side past the viewBox, at ${Math.min(width, height).toFixed(0)} px of dial`,
+        : `${margin.toFixed(1)} units per side past the viewBox, at ${Math.min(width, height).toFixed(0)} px of dial, panel ${shown ? "drawn" : "absent"}`,
       margin === null ? "fail" : "ok"
     );
   }

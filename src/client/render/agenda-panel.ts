@@ -26,7 +26,7 @@ import {
 } from "../../shared/clock";
 import { svg } from "../svg";
 import { DIAL_VIEWBOX_SIZE } from "./analog-clock";
-import { RECT_PADDING_X, RECT_PADDING_Y, eventCardNodes } from "./event-card";
+import { RECT_PADDING_X, RECT_PADDING_Y, cardStrokeWidth, eventCardNodes } from "./event-card";
 
 const ID_PREFIX = "agenda-card";
 
@@ -55,9 +55,14 @@ export interface AgendaPanelHandle {
   setTime(time: Date): void;
 }
 
-/** Which cards are up, cheaply comparable — the rebuild trigger. */
+/**
+ * Which cards are up, cheaply comparable — the rebuild trigger.
+ *
+ * Newline-joined rather than space-joined: calendar ids carry no spaces today, but `["a b", "c"]`
+ * and `["a", "b c"]` would share a key, and a key collision here is a column that stops updating.
+ */
 function cardKey(cards: AgendaCard[]): string {
-  return cards.map((card) => card.id).join(" ");
+  return cards.map((card) => card.id).join("\n");
 }
 
 export function agendaPanel({ events, time }: AgendaPanelParams): AgendaPanelHandle {
@@ -84,9 +89,12 @@ export function agendaPanel({ events, time }: AgendaPanelParams): AgendaPanelHan
       width: PANEL_VIEWBOX_WIDTH,
       height: PANEL_VIEWBOX_HEIGHT,
       fontSize: PANEL_CARD_FONT_SIZE,
-      // The shared card's own insets, passed in rather than looked up: `src/shared/` cannot reach
-      // `src/client/`, so `PANEL_CARD_PADDING` restates them and this is where the two meet.
+      // The shared card's own insets and border weight, passed in rather than looked up:
+      // `src/shared/` cannot reach `src/client/`, so `PANEL_CARD_PADDING` and `PANEL_CARD_STROKE`
+      // restate them and this is where the two meet. The stroke matters to the *geometry* because a
+      // border is centred on the card's edge, so the column has to hold half of it.
       padding: { x: RECT_PADDING_X, y: RECT_PADDING_Y },
+      strokeWidth: cardStrokeWidth(PANEL_CARD_FONT_SIZE),
     });
 
     const key = cardKey(cards);

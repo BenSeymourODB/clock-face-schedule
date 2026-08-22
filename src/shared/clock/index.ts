@@ -80,6 +80,7 @@ export {
   type GrowthPlan
 } from './grow-labels';
 export {
+  LABEL_MARGIN_KNEE_UNITS,
   PANEL_RESERVE_UNITS,
   labelMarginUnits,
   type DrawingBox
@@ -89,6 +90,7 @@ export {
   PANEL_CARD_GAP,
   PANEL_CARD_MAX_TITLE_LINES,
   PANEL_CARD_PADDING,
+  PANEL_CARD_STROKE,
   PANEL_WIDTH_UNITS,
   agendaEntries,
   panelFitsBoard,

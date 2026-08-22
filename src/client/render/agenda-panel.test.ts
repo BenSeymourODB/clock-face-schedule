@@ -16,8 +16,11 @@ import styles from "../../../static/Styles.html?raw";
 import {
   type ClockEventInput,
   PANEL_CARD_FONT_SIZE,
+  LABEL_MARGIN_KNEE_UNITS,
   PANEL_CARD_PADDING,
+  PANEL_CARD_STROKE,
   PANEL_RESERVE_UNITS,
+  labelMarginUnits,
   panelFitsBoard,
 } from "../../shared/clock";
 import {
@@ -26,7 +29,7 @@ import {
   agendaPanel,
 } from "./agenda-panel";
 import { DIAL_VIEWBOX_SIZE } from "./analog-clock";
-import { RECT_PADDING_X, RECT_PADDING_Y } from "./event-card";
+import { RECT_PADDING_X, RECT_PADDING_Y, cardStrokeWidth } from "./event-card";
 
 const NOW = new Date(2026, 7, 22, 9, 0, 0);
 
@@ -103,66 +106,97 @@ describe("the panel's column, against the width reserved for it", () => {
     expect(PANEL_CARD_PADDING).toEqual({ x: RECT_PADDING_X, y: RECT_PADDING_Y });
   });
 
+  /**
+   * The same restatement problem for the border weight, and it matters to the *geometry*: a border is
+   * centred on the card's edge, so the column reserves half of it at each side. A stroke constant that
+   * drifted below the real one would put the clipping back.
+   */
+  it("keeps the planner's border weight equal to the card's own", () => {
+    expect(PANEL_CARD_STROKE).toBe(cardStrokeWidth(PANEL_CARD_FONT_SIZE));
+  });
+
   /** Absent, not collapsed — #39 item 4 is still open, and `hidden` needs a rule to obey. */
   it("has a rule that actually hides it when the board cannot afford it", () => {
     expect(block("#panel\\[hidden\\]")).toMatch(/display:\s*none/);
   });
 
   /**
-   * **The assertion that was missing when a card crossed into the column.**
+   * **The assertion that was missing when a card crossed into the column**, in its corrected form.
    *
-   * `dial-frame.test.ts` binds `--label-frame` to the worst card the renderer draws. This binds the
-   * same declaration to the panel's threshold, which is the other thing that frame now has to cover:
-   * on the panel side the frame *is* the panel, so the room between the dial's viewBox and the column
-   * has to hold a card on its own.
+   * The first version of this compared the room beside the dial against `--label-frame`. That was the
+   * wrong currency and the review caught it: the frame is the *vertical* allowance, and on the 1-hour
+   * dial a card reaches 138.7 units past the viewBox, so at 16:10 a card landed 30.7 px inside the
+   * column with the frame test passing.
    *
-   * Derived from the stylesheet rather than restated, so raising the frame for a taller card raises
-   * the aspect ratio at which the panel is allowed to appear, in the same commit and without anyone
-   * remembering to.
+   * The real bound is the margin the labels are *granted*, because `analog-clock.ts` turns it straight
+   * into `labelAllowance` — a card's permitted reach past the viewBox is exactly that number. So the
+   * property to hold is that the grant never exceeds the room, which `measureLabelMargin` now makes
+   * true by measuring the row rather than the viewport while the panel is up. Asserted here against
+   * the shared function the host calls, over the board shapes a classroom might have.
    */
-  it("will not show the panel on a board whose room beside the dial cannot hold a card", () => {
+  it("never grants the labels more room than exists beside the panel", () => {
     const percent = Number(/--label-frame:\s*([\d.]+)vmin/.exec(block("#display"))?.[1] ?? NaN);
     expect(percent, "#display declares its frame as a share of the shorter axis").toBeGreaterThan(0);
 
-    // The frame a card paints into, in the dial's units — `dial-frame.test.ts`'s own derivation.
-    const reach = (DIAL_VIEWBOX_SIZE * percent) / (100 - 2 * percent);
-
-    /** The rendered content box of `#board` on a `width × height` viewport. */
+    /** `#board`'s rendered content box on a `width × height` viewport. */
     const boardBox = (width: number, height: number) => {
       const padding = (Math.min(width, height) * percent) / 100;
       return { width: width - 2 * padding, height: height - 2 * padding };
     };
-    const fits = (width: number, height: number) =>
-      panelFitsBoard(boardBox(width, height), DIAL_VIEWBOX_SIZE, PANEL_RESERVE_UNITS, reach);
 
-    // The deployment ADR 0009 targets: both clear it with room to spare.
-    expect(fits(1920, 1080)).toBe(true);
-    expect(fits(1920, 1200)).toBe(true);
-
-    // The board a card was measured intruding on, and a 4:3 projector, which is the same shape.
-    expect(fits(1330, 1000)).toBe(false);
-    expect(fits(1024, 768)).toBe(false);
-
-    // And the property itself: wherever the panel shows, the room per side covers a card's reach.
-    for (const [width, height] of [
+    const boards: [number, number][] = [
       [1920, 1080],
       [1920, 1200],
       [2560, 1440],
       [1600, 900],
-      [1440, 1080],
+      [1410, 1000],
       [1400, 1000],
       [1330, 1000],
       [1024, 768],
       [1000, 1000]
-    ]) {
-      const box = boardBox(width as number, height as number);
-      if (!panelFitsBoard(box, DIAL_VIEWBOX_SIZE, PANEL_RESERVE_UNITS, reach)) continue;
+    ];
 
-      const boardUnits = (box.width * DIAL_VIEWBOX_SIZE) / box.height;
-      const roomPerSide = (boardUnits - DIAL_VIEWBOX_SIZE - PANEL_RESERVE_UNITS) / 2;
+    let shownCount = 0;
 
-      expect(roomPerSide, `${width}×${height} shows the panel with ${roomPerSide.toFixed(1)} units beside the dial`).toBeGreaterThanOrEqual(reach);
+    for (const [width, height] of boards) {
+      const board = boardBox(width, height);
+      const shown = panelFitsBoard(
+        board,
+        DIAL_VIEWBOX_SIZE,
+        PANEL_RESERVE_UNITS,
+        LABEL_MARGIN_KNEE_UNITS
+      );
+      if (!shown) continue;
+      shownCount += 1;
+
+      // The dial's box: the row less the column, at full height because the panel only shows when
+      // that holds.
+      const panelPx = (board.height * PANEL_RESERVE_UNITS) / DIAL_VIEWBOX_SIZE;
+      const dialBox = { width: board.width - panelPx, height: board.height };
+
+      // What the host grants, and the room that actually exists beside the dial.
+      const granted = labelMarginUnits(dialBox, board.width, DIAL_VIEWBOX_SIZE);
+      const boardUnits = (board.width * DIAL_VIEWBOX_SIZE) / board.height;
+      const room = (boardUnits - DIAL_VIEWBOX_SIZE - PANEL_RESERVE_UNITS) / 2;
+
+      expect(granted, `${width}×${height} is measurable`).not.toBeNull();
+      expect(granted as number, `${width}×${height} grants no more than the room beside the panel`)
+        .toBeLessThanOrEqual(room + 1e-9);
+
+      // And the grant stays above the knee, so the panel never costs a card its characters.
+      expect(granted as number, `${width}×${height} keeps the labels saturated`)
+        .toBeGreaterThanOrEqual(LABEL_MARGIN_KNEE_UNITS - 1e-9);
     }
+
+    // 16:9 and 16:10 are ADR 0009's two target boards and both must be in the shown set.
+    expect(shownCount).toBeGreaterThanOrEqual(4);
+    expect(panelFitsBoard(boardBox(1920, 1080), DIAL_VIEWBOX_SIZE, PANEL_RESERVE_UNITS, LABEL_MARGIN_KNEE_UNITS)).toBe(true);
+    expect(panelFitsBoard(boardBox(1920, 1200), DIAL_VIEWBOX_SIZE, PANEL_RESERVE_UNITS, LABEL_MARGIN_KNEE_UNITS)).toBe(true);
+
+    // The boards a card was measured intruding on, and a 4:3 projector.
+    expect(panelFitsBoard(boardBox(1330, 1000), DIAL_VIEWBOX_SIZE, PANEL_RESERVE_UNITS, LABEL_MARGIN_KNEE_UNITS)).toBe(false);
+    expect(panelFitsBoard(boardBox(1410, 1000), DIAL_VIEWBOX_SIZE, PANEL_RESERVE_UNITS, LABEL_MARGIN_KNEE_UNITS)).toBe(false);
+    expect(panelFitsBoard(boardBox(1024, 768), DIAL_VIEWBOX_SIZE, PANEL_RESERVE_UNITS, LABEL_MARGIN_KNEE_UNITS)).toBe(false);
   });
 });
 
@@ -196,17 +230,25 @@ describe("agendaPanel", () => {
     expect(element.querySelector('[data-testid="agenda-card-text-a-1"]')?.textContent).toBe("22 min");
   });
 
-  it("keeps every card inside the column", () => {
+  /**
+   * The rendered cards, borders included. `planAgendaCards` is asserted on the same property in node;
+   * this is the check that the renderer passes the real stroke through rather than the default, so the
+   * inset matches the border the card actually draws.
+   */
+  it("keeps every rendered card’s whole border inside the column", () => {
     const events = Array.from({ length: 9 }, (_unused, index) =>
       event(`e${index}`, `Parent Teacher Conference Planning Committee ${index}`, index * 60, index * 60 + 45)
     );
     const { element } = agendaPanel({ events, time: NOW });
+    const half = cardStrokeWidth(PANEL_CARD_FONT_SIZE) / 2;
+    const ids = cardIds(element);
 
-    for (const id of cardIds(element)) {
+    expect(ids.length).toBeGreaterThan(0);
+    for (const id of ids) {
       const box = rect(element, id);
-      expect(box.y).toBeGreaterThanOrEqual(0);
-      expect(box.y + box.height).toBeLessThanOrEqual(PANEL_VIEWBOX_HEIGHT);
-      expect(box.width).toBe(PANEL_VIEWBOX_WIDTH);
+      expect(box.y - half).toBeGreaterThanOrEqual(0);
+      expect(box.y + box.height + half).toBeLessThanOrEqual(PANEL_VIEWBOX_HEIGHT);
+      expect(box.width).toBe(PANEL_VIEWBOX_WIDTH - cardStrokeWidth(PANEL_CARD_FONT_SIZE));
     }
   });
 
@@ -241,7 +283,7 @@ describe("agendaPanel", () => {
 
     panel.setTime(new Date(NOW.getTime() + 13_000));
     expect(rect(panel.element, "next").y).toBeLessThan(before);
-    expect(rect(panel.element, "next").y).toBe(0);
+    expect(rect(panel.element, "next").y).toBe(PANEL_CARD_STROKE / 2);
   });
 
   /**

@@ -141,10 +141,11 @@
    * Hidden by the client, not by a media query, when the board cannot afford the panel — measured on
    * `#board`, whose size does not depend on whether the panel is in it. Two conditions, and the
    * second was found by rendering: the dial must keep its full height (ADR 0009's absolute), *and*
-   * the room left beside the dial must cover a floating label's reach. On the panel side the frame
-   * above is the panel, so that room has to hold a card on its own — at 1330×1000 it did not, and a
-   * card crossed into the column by 5.9 px. The client reads the reach off this element's own
-   * padding, so the two cannot disagree.
+   * the room left beside the dial must stay above ADR 0009's 75.4-unit knee, below which the panel
+   * and the labels trade width one-for-one. A card cannot land on the column at all, because the
+   * host grants the labels the room that actually exists beside the dial once this column is up --
+   * see `measureLabelMargin`. The frame above is the *vertical* allowance and was the wrong currency
+   * for this: a 1-hour dial's card reaches 138.7 units where the frame is 51.3.
    *
    * The dial then keeps the whole remainder, which is the layout as it was before this column
    * existed. What a narrow board *should* show instead is #39 item 4 and is still open; absent is not

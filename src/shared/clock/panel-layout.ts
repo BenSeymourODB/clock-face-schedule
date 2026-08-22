@@ -36,23 +36,31 @@ export const PANEL_WIDTH_UNITS = PANEL_RESERVE_UNITS;
  */
 export const PANEL_CARD_FONT_SIZE = 26;
 
-/** Gap between cards. See `PANEL_CARD_MAX_TITLE_LINES` for where the number comes from. */
-export const PANEL_CARD_GAP = 6;
+/**
+ * Gap between cards — the largest whole number that keeps ADR 0009's five, floored.
+ *
+ * The column's usable height is `600 − PANEL_CARD_STROKE` rather than 600, because half a border
+ * falls outside each card and the outermost `<svg>` clips it. Five three-line cards leave
+ * `597.92 − 576 = 21.92` for four gaps, so **5.48 is the ceiling and 5 is the value**. Six — the
+ * figure before the stroke was accounted for — holds only four, which gives up the count the whole
+ * 180-unit allocation was justified by.
+ */
+export const PANEL_CARD_GAP = 5;
 
 /**
  * Lines a card's title may wrap to, before its trailing line.
  *
- * Two, so the tall card is three lines — and at 26 units with a 6-unit gap that reproduces ADR
- * 0009's two card counts exactly, which is the check that these are the constants it was written
- * against:
+ * Two, so the tall card is three lines — and at 26 units in a column of 597.92 usable that
+ * reproduces ADR 0009's two card counts exactly, which is the check that these are the constants it
+ * was written against:
  *
  * | | units |
  * | --- | --- |
  * | `labelCardHeight(3, 26, 3)` | 115.2 |
- * | five of them, four gaps | 576 + 24 = **600**, the panel's whole height |
+ * | five of them, four 5-unit gaps | 576 + 20 = **596**, inside the 597.92 |
  * | `labelCardHeight(2, 26, 3)` | 78.8 |
- * | seven of them, six gaps | 551.6 + 36 = 587.6 |
- * | eight | 630.4 + 42 = 672.4 — does not fit |
+ * | seven of them, six gaps | 551.6 + 30 = 581.6 |
+ * | eight | 630.4 + 35 = 665.4 — does not fit |
  *
  * > "The panel holds five cards at 26 units over three lines, seven at two lines." — ADR 0009
  */
@@ -67,6 +75,14 @@ export const PANEL_CARD_MAX_TITLE_LINES = 2;
  */
 export const PANEL_CARD_PADDING = { x: 6, y: 3 };
 
+/**
+ * Card border weight at the panel's body size — `cardStrokeWidth(26)` (#38).
+ *
+ * Restated here for the same reason as the padding, and checked the same way: a border is centred on
+ * the rect's edge, so half of it falls outside the card and the column has to leave room for it.
+ */
+export const PANEL_CARD_STROKE = 2.08;
+
 /** A box in whatever unit the caller measured it in — CSS pixels, at the call sites here. */
 export interface PanelBoard {
   width: number;
@@ -74,24 +90,33 @@ export interface PanelBoard {
 }
 
 /**
- * Whether the board can carry the panel **without the dial paying for it and without a floating
- * label landing on it**.
+ * Whether the board can carry the panel **without the dial paying for it and without the labels
+ * paying either**.
  *
  * The first is ADR 0009's one absolute. The dial is bound by the board's height on any board wide
  * enough that the remainder after the panel is still at least as wide as it is tall, so the board
  * must be `(size + panelUnits) / size` times its own height — **1.3** at ADR 0009's numbers.
  *
- * **1.3 is not enough, and rendering is what said so.** A card paints outside the dial's viewBox by
- * design, and the page reserves `--label-frame` — 51.29 units — for it to paint into. On the panel
- * side that frame is now occupied, so the room between the dial's viewBox and the panel has to cover
- * a card's reach on its own. At 1330×1000 it does not: 25.9 units of room, and `⚫ Assembly`'s card
- * crossed into the column by 5.9 px. A 4:3 board is the same shape — 27.1 units. Passing
- * `labelReachUnits` raises the threshold to **1.4710**, which 16:9 (1.911 of content) and 16:10
- * (1.703) clear by a wide margin, so nothing about the deployment ADR 0009 targets changes.
+ * **1.3 is not enough, and rendering is what said so — twice.** The first attempt required the room
+ * beside the dial to cover `--label-frame` (51.29 units), which fixed a 1330×1000 board where
+ * `⚫ Assembly` crossed into the column by 5.9 px. That figure was still wrong, because **the frame
+ * is the *vertical* allowance and the panel is on the horizontal axis**: on the 1-hour dial a card
+ * reaches **138.7 units** past the viewBox, and at 16:10 — one of ADR 0009's two target boards —
+ * `?scale=1h&now=07:17&freeze=1` put a card **30.7 px** inside the column against 120.8 units of
+ * room.
  *
- * The reach is a *parameter* rather than a constant here because the page's own reserve is the
- * figure that matters and it lives in `Styles.html`. The client reads it off the rendered padding,
- * so the two cannot disagree; `agenda-panel.test.ts` derives it from the stylesheet independently.
+ * So the condition is stated in the currency that actually bounds a card: **the margin the labels
+ * are granted.** `analog-clock.ts` sets `labelAllowance = grantedMargin + EDGE_MARGIN`, so a card's
+ * permitted reach past the viewBox *is* that margin — and once the host grants the room that truly
+ * exists beside the dial (`measureLabelMargin` measures the row, not the viewport, while the panel
+ * is up), a card cannot reach the column at all. That is structural rather than a number to keep
+ * true.
+ *
+ * `minMarginUnits` is then not about collisions but about **cost**: below ADR 0009's 75.4-unit knee
+ * the labels and the panel start trading width one-for-one, which is the trade the ADR says its 180
+ * units must not make. Requiring it puts the threshold at `(600 + 180 + 150.8) / 600` = **1.5513**,
+ * which 16:9 (1.911 of content) and 16:10 (1.703) both clear, and which keeps every board that shows
+ * a panel on the saturated 13 characters a line.
  *
  * Measure this on the **container** the dial and panel share, never on the dial's own box. The
  * container's size does not depend on whether the panel is in it; the dial's does, so testing the
@@ -105,11 +130,11 @@ export function panelFitsBoard(
   board: PanelBoard,
   size: number,
   panelUnits: number = PANEL_WIDTH_UNITS,
-  labelReachUnits = 0
+  minMarginUnits = 0
 ): boolean {
   if (!(board.width > 0) || !(board.height > 0) || !(size > 0)) return false;
 
-  const needed = size + panelUnits + 2 * Math.max(0, labelReachUnits);
+  const needed = size + panelUnits + 2 * Math.max(0, minMarginUnits);
   return board.width >= (board.height * needed) / size;
 }
 
@@ -179,13 +204,25 @@ export interface AgendaCard extends AgendaEntry {
   y: number;
   width: number;
   height: number;
-  /** The title did not fit its two lines and is ellipsized. */
+  /**
+   * The title did not fit its two lines and is ellipsized.
+   *
+   * Carried for the caller's benefit, not the renderer's: the panel draws no overflow affordance, on
+   * the grounds that the ellipsis is already the affordance and a second mark on a 180-unit column
+   * costs a character. Deliberate — do not wire one up without pricing that.
+   */
   didOverflow: boolean;
 }
 
 export interface AgendaCardPlan {
   cards: AgendaCard[];
-  /** Entries that did not fit the column. Zero until #41's modes decide what to do with them. */
+  /**
+   * Entries that did not fit the column.
+   *
+   * Nothing consumes it yet — an overflow affordance is #41's, since what "the rest" means depends
+   * on which display mode is running. Returned rather than discarded so a mode does not have to
+   * re-derive it.
+   */
   dropped: number;
 }
 
@@ -210,6 +247,7 @@ export function planAgendaCards(
     gap?: number;
     maxTitleLines?: number;
     padding?: { x: number; y: number };
+    strokeWidth?: number;
   }
 ): AgendaCardPlan {
   const width = options.width ?? PANEL_WIDTH_UNITS;
@@ -217,21 +255,36 @@ export function planAgendaCards(
   const gap = options.gap ?? PANEL_CARD_GAP;
   const maxTitleLines = options.maxTitleLines ?? PANEL_CARD_MAX_TITLE_LINES;
   const padding = options.padding ?? PANEL_CARD_PADDING;
+  const stroke = Math.max(0, options.strokeWidth ?? PANEL_CARD_STROKE);
 
   const cards: AgendaCard[] = [];
-  let y = 0;
+  /**
+   * Half the border stroke, inset on every side.
+   *
+   * A border is centred on the rect's edge, and an outermost `<svg>` is `overflow: hidden` by UA
+   * default — so a card flush with the column had its left and right borders painted at half weight
+   * against the horizontals' full weight, 1.6 px of stroke clipped at 1920×1080. Found by looking;
+   * no attribute assertion could have caught it, since every attribute was correct.
+   *
+   * `overflow: visible` on the panel's SVG would have been the other fix and is the wrong one: it
+   * lets a card paint over the page's edge and over the dial, which is the whole thing the column is
+   * for. The inset also gives the column the gutter it had none of.
+   */
+  const inset = stroke / 2;
+  const cardWidth = Math.max(0, width - stroke);
+  let y = inset;
 
   for (const entry of entries) {
     const fit = fitLabelToWidth(
       entry.title,
-      width,
+      cardWidth,
       fontSize,
       maxTitleLines,
       padding,
       entry.trailing
     );
 
-    if (y + fit.height > options.height) break;
+    if (y + fit.height + inset > options.height) break;
 
     cards.push({
       ...entry,
@@ -239,9 +292,9 @@ export function planAgendaCards(
       // The card is placed at the column's full width rather than at `fit.width`, which is the
       // widest line: a ragged right edge down a column of five reads as damage, where on a floating
       // label a card no wider than its text is what keeps it off its neighbours.
-      x: 0,
+      x: inset,
       y,
-      width,
+      width: cardWidth,
       height: fit.height,
       didOverflow: fit.didOverflow
     });

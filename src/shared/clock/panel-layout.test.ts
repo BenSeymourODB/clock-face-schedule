@@ -5,12 +5,13 @@ import {
   PANEL_CARD_GAP,
   PANEL_CARD_MAX_TITLE_LINES,
   PANEL_CARD_PADDING,
+  PANEL_CARD_STROKE,
   PANEL_WIDTH_UNITS,
   agendaEntries,
   panelFitsBoard,
   planAgendaCards
 } from './panel-layout';
-import { PANEL_RESERVE_UNITS } from './label-margin';
+import { LABEL_MARGIN_KNEE_UNITS, PANEL_RESERVE_UNITS } from './label-margin';
 import { charBudget } from './pack-lines';
 import type { ClockEventInput } from './types';
 
@@ -79,29 +80,39 @@ describe('panelFitsBoard', () => {
   });
 
   /**
-   * **The case rendering caught and 1,608 tests did not.** The dial keeping its height is not enough:
-   * a card paints outside the viewBox and the page reserves `--label-frame` for it, but on the panel
-   * side that frame is the panel. At 1330×1000 the board clears the 1.3 threshold — the dial is still
-   * full height — and `⚫ Assembly`'s card crossed into the column by 5.9 px, because only 25.9 units
-   * of room were left against a 51.29-unit reach.
+   * **The case rendering caught and 1,608 tests did not**, in its corrected form.
+   *
+   * The dial keeping its height is not enough. At 1330×1000 the board clears the 1.3 threshold — the
+   * dial is still full height — and `⚫ Assembly`'s card crossed into the column by 5.9 px. The first
+   * fix required the room beside the dial to cover `--label-frame`, which was still the wrong
+   * currency: the frame is the *vertical* allowance, and on the 1-hour dial a card reaches 138.7
+   * units, so at 16:10 a card went 30.7 px into the column against 120.8 units of room.
+   *
+   * A card can no longer reach the column at all — the host grants the labels the room that exists
+   * rather than the viewport's share of it — so what this gates is *cost*: below ADR 0009's 75.4-unit
+   * knee the panel and the labels trade width one-for-one. 16:10 is the ADR's binding aspect and must
+   * keep its panel, which is the row that makes this more than "reject narrow boards".
    *
    * The figures below are the rendered content boxes, so they are the numbers the client measures.
    */
   it.each([
     ['16:9', 1762.3, 922.3, true],
-    ['16:10', 1744.8, 1024.8, true],
+    ['16:10 — ADR 0009’s binding aspect, which must keep its panel', 1744.8, 1024.8, true],
     ['the 1330×1000 board a card intruded on', 1184, 854, false],
-    ['4:3, the same shape', 912, 656, false]
-  ])('refuses a board whose room beside the dial cannot hold a card: %s', (_name, width, height, expected) => {
-    expect(panelFitsBoard({ width, height }, DIAL_SIZE, PANEL_RESERVE_UNITS, 51.29)).toBe(expected);
+    ['4:3, the same shape', 912, 656, false],
+    ['1400×1000, above the dial-size threshold but below the knee', 1254, 854, false]
+  ])('shows the panel only where the labels stay saturated: %s', (_name, width, height, expected) => {
+    expect(
+      panelFitsBoard({ width, height }, DIAL_SIZE, PANEL_RESERVE_UNITS, LABEL_MARGIN_KNEE_UNITS)
+    ).toBe(expected);
   });
 
-  /** A reach of zero is the dial-size condition alone, which is what an unmeasurable frame gives. */
-  it('falls back to the dial-size condition when the reach cannot be measured', () => {
+  /** Zero is the dial-size condition alone — the default, and what an unmeasurable page gives. */
+  it('falls back to the dial-size condition with no minimum margin', () => {
     expect(panelFitsBoard({ width: 1300, height: 1000 }, DIAL_SIZE, PANEL_RESERVE_UNITS, 0)).toBe(true);
   });
 
-  it('treats a negative reach as none rather than as credit', () => {
+  it('treats a negative minimum as none rather than as credit', () => {
     expect(panelFitsBoard({ width: 1300, height: 1000 }, DIAL_SIZE, PANEL_RESERVE_UNITS, -500)).toBe(true);
   });
 });
@@ -119,15 +130,31 @@ describe('the card geometry against ADR 0009', () => {
     [2, 7]
   ])('holds %i-line cards, %i of them', (lines, expected) => {
     const height = labelCardHeight(lines, PANEL_CARD_FONT_SIZE, PANEL_CARD_PADDING.y);
+    // Half a border falls outside the card at each end of the column, so the usable height is
+    // `600 − stroke` rather than 600. Getting this wrong is what would silently drop the count.
+    const inset = PANEL_CARD_STROKE / 2;
 
     let count = 0;
-    let used = 0;
-    while (used + (count === 0 ? 0 : PANEL_CARD_GAP) + height <= PANEL_HEIGHT) {
-      used += (count === 0 ? 0 : PANEL_CARD_GAP) + height;
+    let y = inset;
+    while (y + height + inset <= PANEL_HEIGHT) {
+      y += height + PANEL_CARD_GAP;
       count += 1;
     }
 
     expect(count).toBe(expected);
+  });
+
+  /**
+   * The gap is the largest whole number that keeps the five, and being at the ceiling is the point:
+   * six holds only four cards. Derived rather than restated, so raising the stroke or the line height
+   * fails here with the reason rather than quietly costing a card.
+   */
+  it('sets the gap at the ceiling that keeps five tall cards', () => {
+    const tall = labelCardHeight(3, PANEL_CARD_FONT_SIZE, PANEL_CARD_PADDING.y);
+    const ceiling = (PANEL_HEIGHT - PANEL_CARD_STROKE - 5 * tall) / 4;
+
+    expect(PANEL_CARD_GAP).toBeLessThanOrEqual(ceiling);
+    expect(PANEL_CARD_GAP + 1).toBeGreaterThan(ceiling);
   });
 
   /** The tall card is the title's line cap plus the one trailing line. */
@@ -140,9 +167,8 @@ describe('the card geometry against ADR 0009', () => {
    * than something smaller, so the padding must not quietly eat into it.
    */
   it('holds ADR 0009’s ten characters a line', () => {
-    expect(
-      charBudget(PANEL_WIDTH_UNITS - PANEL_CARD_PADDING.x * 2, PANEL_CARD_FONT_SIZE)
-    ).toBe(10);
+    const cardWidth = PANEL_WIDTH_UNITS - PANEL_CARD_STROKE;
+    expect(charBudget(cardWidth - PANEL_CARD_PADDING.x * 2, PANEL_CARD_FONT_SIZE)).toBe(10);
   });
 
   /**
@@ -151,7 +177,8 @@ describe('the card geometry against ADR 0009', () => {
    * eleven, `HH:MM–HH:MM` becomes affordable and this test is the prompt to revisit it.
    */
   it('cannot afford an HH:MM–HH:MM line, which is why the trailing line is a duration', () => {
-    const budget = charBudget(PANEL_WIDTH_UNITS - PANEL_CARD_PADDING.x * 2, PANEL_CARD_FONT_SIZE);
+    const cardWidth = PANEL_WIDTH_UNITS - PANEL_CARD_STROKE;
+    const budget = charBudget(cardWidth - PANEL_CARD_PADDING.x * 2, PANEL_CARD_FONT_SIZE);
     expect('09:00–09:45'.length).toBeGreaterThan(budget);
   });
 });
@@ -228,7 +255,7 @@ describe('planAgendaCards', () => {
       const previous = cards[index - 1];
       expect(cards[index].y).toBeCloseTo(previous.y + previous.height + PANEL_CARD_GAP, 6);
     }
-    expect(cards[0].y).toBe(0);
+    expect(cards[0].y).toBe(PANEL_CARD_STROKE / 2);
   });
 
   /** The ADR's five, arrived at through the planner rather than through the arithmetic above. */
@@ -240,10 +267,23 @@ describe('planAgendaCards', () => {
     expect(plan.cards[0].lines).toHaveLength(3);
   });
 
-  /** No card may hang below the column, which is what would clip it against the page. */
-  it('keeps every card inside the column', () => {
+  /**
+   * Not just the rect — **the border too.** A border is centred on the card's edge and an outermost
+   * `<svg>` is `overflow: hidden` by UA default, so a card flush with the column had its left and
+   * right borders painted at half the weight of its horizontals: 1.6 px of stroke clipped at
+   * 1920×1080. Found by looking, since every attribute was correct.
+   */
+  it('keeps every card’s whole border inside the column', () => {
     const { cards } = planAgendaCards(entries(8), { height: PANEL_HEIGHT });
-    for (const card of cards) expect(card.y + card.height).toBeLessThanOrEqual(PANEL_HEIGHT);
+    const half = PANEL_CARD_STROKE / 2;
+
+    expect(cards.length).toBeGreaterThan(0);
+    for (const card of cards) {
+      expect(card.x - half).toBeGreaterThanOrEqual(0);
+      expect(card.x + card.width + half).toBeLessThanOrEqual(PANEL_WIDTH_UNITS);
+      expect(card.y - half).toBeGreaterThanOrEqual(0);
+      expect(card.y + card.height + half).toBeLessThanOrEqual(PANEL_HEIGHT);
+    }
   });
 
   /**
@@ -259,8 +299,9 @@ describe('planAgendaCards', () => {
       { height: PANEL_HEIGHT }
     );
 
-    expect(cards.map((card) => card.width)).toEqual([PANEL_WIDTH_UNITS, PANEL_WIDTH_UNITS]);
-    expect(cards.map((card) => card.x)).toEqual([0, 0]);
+    const cardWidth = PANEL_WIDTH_UNITS - PANEL_CARD_STROKE;
+    expect(cards.map((card) => card.width)).toEqual([cardWidth, cardWidth]);
+    expect(cards.map((card) => card.x)).toEqual([PANEL_CARD_STROKE / 2, PANEL_CARD_STROKE / 2]);
   });
 
   /** A short title takes a shorter card, so the next one starts sooner and more than five may fit. */
