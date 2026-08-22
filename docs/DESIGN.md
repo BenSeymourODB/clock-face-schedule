@@ -295,7 +295,8 @@ after the panel**, and the panel is **180 units wide, on the right**.
   band-occlusion cost (#98) that the inward optimum carries.
 - **A locus that clears the band outright is available at 3 and 9 o'clock, and on 16:9 it is free.**
   Measured after the fact, prompted by looking at the board (#30, #98): a card clears the band when
-  its locus is `292 + W/2`, which against `m` units of margin resolves to `W = m + 8` — **151.3 units
+  its locus is `292 + W/2` (**a three-o'clock point solution, and not a locus — see the third
+  amendment**), which against `m` units of margin resolves to `W = m + 8` — **151.3 units
   at 16:9's 143.3**, holding the same 13 characters a line as the 155.2 above, so a card that never
   covers an arc carries exactly as much text as one that does. On 16:10 it costs 5 characters a line
   (98.0 units, 8 a line). It is *unavailable* at 12 and 6, where the dial fills the height and a
@@ -312,10 +313,12 @@ after the panel**, and the panel is **180 units wide, on the right**.
   carrying the name the arc cannot.)
 - **16:10 is the binding case and the ceiling is 209 units.** Past that the margin drops below the
   knee and the panel starts taking width from the labels one-for-one. 180 leaves 29 units of
-  headroom; anything wider should be re-measured rather than assumed.
+  headroom; anything wider should be re-measured rather than assumed. (**270.7, not 209** — this
+  figure is pre-#115 for the same reason the margin table below is. See the third amendment.)
 - **The panel holds five cards** at 26 units over three lines, seven at two lines. That confirms the
   agenda brainstorm's estimate from the other direction, and with it that **scrolling is the general
-  display mode and whole-day the special case** (#41).
+  display mode and whole-day the special case** (#41). (**Six cards at the 21.26-unit body** the
+  third amendment adopts. The bound, and so #41's conclusion, is unaffected.)
 - The narrow-display fallback (#39 item 4) is unchanged and still needs designing: as the board
   approaches square the margin falls below the knee and the panel has to collapse or stack.
 
@@ -367,6 +370,58 @@ Nothing downstream changes: both aspects were already past the knee at the under
 labels get the same 13 characters a line either way. The correction matters for the 16:10 penalty the
 ADR reports on a band-clearing locus — at 172.1 rather than 90.0 that penalty disappears — and for
 anyone reading 143.3 as the number the renderer is handed.
+
+**Three figures above are superseded, and one of them is a decision rather than a correction**
+(#174, #138). Taken together after the panel was built (#173) and the fork was scoped:
+
+**1. The ceiling is 270.7 units on 16:10, not 209.** Same cause as the margin table above — 209 was
+computed from `600 × aspect`, i.e. a dial filling the board's height. Against the margin the renderer
+is now handed, the panel may take 395.7 units on 16:9 and **270.7 on 16:10** before the labels fall
+to the 75.4-unit knee. So the headroom past 180 is **90 units, not 29**. This is a correction to a
+number, not licence to spend it: 180 was chosen for the panel's own legibility rather than as the
+most it could take.
+
+**2. The panel's body is 21.26 units, not 26** — the arc-title size, decided on #174. The panel was
+the second-loudest text on the display, above every arc title and above the floating-label cards it
+shares its styling with, which inverts the relationship between a surface and the surface it exists
+to serve. Consequences, all of them gains except the last:
+
+| | at 26 (as decided) | at 21.26 (as amended) |
+| --- | --- | --- |
+| characters a line, 180-unit panel | 10 | **13** |
+| cards that fit | 5 | **6** |
+| `HH:MM–HH:MM` (11 chars, #169) | unaffordable | **affordable** |
+| reading distance, distance/150 | 6.77 m | **5.53 m** |
+
+The cost is 1.24 m of reading distance, and it is real — but the arc titles the panel exists to
+rescue are at 21.26 and below, so a panel at 21.26 is still the most readable statement of an event's
+name anywhere on the display, and #70's argument for the panel survives intact. **Per `CLAUDE.md`
+this is a looking question and the arithmetic does not settle it**: it wants judging at 1× from the
+back of a room before it is believed.
+
+**The width lever is deliberately not taken.** #174 prices a panel up to 270.7 and #177 wants the
+same units to grow a card rather than ellipsize its title — 21 titles a sweep truncate where the
+board has room. Those are one allocation, which is the mistake this ADR exists to prevent making
+three times, and how far a card may grow is #138's fork. **So the type lever ships now and the width
+lever waits on #138.**
+
+**3. `292 + W/2` is a three-o'clock point solution, not a locus.** Away from three o'clock a card's
+*corner* reaches inward, so a circle at that radius re-enters the band — by 1.52 units for a one-line
+card and **16.18 for a four-line one**. The curve that follows from the constraint rather than being
+guessed at it is the card's own radial half-extent, offset from the band:
+
+```
+R(θ) = 292 + (W/2)·|sin θ| + (H/2)·|cos θ| + gap
+```
+
+whose closest approach is exactly 292.000 at every line count, by construction. Two things it does
+**not** do, both recorded because the short version of this got them wrong:
+
+- **It does not reduce to the 367.6 above unless `gap = 0`** — and `gap = 0` is exactly #117's
+  failure, where the card's inner edge lands *on* the band and the connector has nothing to draw. It
+  generalises the ADR figure or it resolves #117, not both. `gap` is an open decision.
+- **It has no term for the board's outer limit.** The furthest card edge measures 444.1 against
+  16:9's 443.3, and `gap` makes that worse unit for unit. `W` wants clamping against the board.
 
 **Revisit when** the pilot board is up (#10) and the panel has been looked at from the back of the
 room, or if a target display falls outside 16:9–16:10.

@@ -1,9 +1,11 @@
 # Brainstorm: where a floating label is allowed to sit
 
 **Status:** the reasoning behind #30's placement decisions and #138's proposal; the issues carry the
-work and record which parts are ready to build. The margin hand-off below is decided and goes first;
-the ring-vs-sides question is deliberately **not** decided here, because nothing about it has been
-rendered.
+work and record which parts are ready to build. The margin hand-off below **shipped** in #148 — which
+closed #30 carrying its item 2, now held in #180. The ring-vs-sides question is still deliberately
+**not** decided here, and as of 2026-08-22 the owner's call is that it is settled by **building the
+comparison spike and looking**, per "Why the fork is being resolved by looking" below. Nothing about
+it has been rendered yet.
 
 ## Why there is a fork at all
 
@@ -190,6 +192,63 @@ Recorded on #30 and costed there; none of it is invalidated by a move to side ar
   cap nothing ties the card to its arcs. So the top of the dial is generous on characters and the most
   constrained on entry count — recording only the character figure inverts #134's finding.
 
+## A third card position: the panel, and what a leader from it can reach
+
+Added 2026-08-22, when the owner decided #172's relief (suppress a redundant card on collision, and
+give a panel card a leader to its arc). The panel is a card position neither branch of the fork
+contemplated, and **the connector arithmetic above does not transfer to it.**
+
+**#172 quotes 289.8 — a 2.19-unit graze crossing nothing — from Branch B's correction below. That is
+a side-card figure.** A side card sits at R ≈ 365; a panel card's left edge sits **540.5 units** from
+the dial centre on 16:9 as shipped (`M + 600 + M + padding` against a centre at `M + 300`). Swept
+over five card slots × 360 bearings, leaders terminating at the band's outer edge:
+
+| arc's mid-bearing | worst approach to the dial centre | |
+| --- | --- | --- |
+| **right half** | **207.64** | inside the band's inner edge (216.08) |
+| **left half** | **0.53** | essentially through the dial centre |
+
+A left-half leader is not grazing the band — it is a line across the whole face, over the hands and
+the numerals. That is #112's defect at much larger scale, and "the right half is elapsed" does not
+excuse it, because the hands and the numerals are neither elapsed nor upcoming.
+
+### The condition that does govern, and it is derivable
+
+A leader terminating on the band edge clears the band **iff the card lies outside the tangent line at
+its termination point** — `(P − B)·n̂ ≥ 0`, where `n̂` is the outward radial at `B`. That resolves to a
+**~115° window of bearings that slides with the card's slot in the column**:
+
+| card slot | bearings whose leader clears |
+| --- | --- |
+| top (y = 62) | 6°–126° |
+| middle (y = 302) | 33°–147° |
+| bottom (y = 542) | 54°–174° |
+
+Two things fall out, and the second is why the owner's stated rule wants amending rather than
+implementing:
+
+- **Every window lies inside the right half**, so "the arc's mid is on the right" is **necessary**.
+- **It is not sufficient**: 316 of the 905 right-half (slot, bearing) pairs still cut the band.
+
+Stable across aspects, so this is not a 16:9 artefact — 32.7% of pairs clear at the ADR's 234.5-unit
+margin, 30.9% and 27.9% at the margins #173 actually grants on 16:9 and 16:10, windows 94°–121°
+throughout.
+
+For comparison, a **side** card on the [45°, 135°] arc at R = 365 clears only **20.3%** of bearings —
+worse, because it sits nearer the band and the tangent condition tightens. The difference is what
+happens when it fails: a side card's leader is short and dips 2.19 units, a panel card's reaches the
+centre.
+
+**So the rule to build is the window test**, which subsumes both of the owner's clauses and is one
+line of arithmetic. What it costs is honesty about coverage: roughly two panel cards in three get no
+leader, which is worth rendering before it is accepted — a leader on a third of the column may read
+as arbitrary rather than as helpful.
+
+**Not measured here, and it is the obvious next question:** whether the leader should terminate on
+the *card's* bearing rather than the arc's (#138's "point rather than join"), which never enters the
+band by construction but points at roughly three o'clock for every card, and so may not distinguish
+arcs at all.
+
 ## The fork itself
 
 ### A. Keep the ring
@@ -262,7 +321,21 @@ it gives **289.8** — a 2.19-unit graze at the rim, crossing nothing. The claim
 reviving the connector halo. The cost of checking was one `node -e`.
 
 Decided 2026-08-21: **build the margin hand-off, then render side placement against the ring and
-decide by looking.** The comparison, from #134's own measurements:
+decide by looking.**
+
+**Confirmed 2026-08-22, and the first half is done.** The margin hand-off shipped in #148, so the
+precondition #138 calls a regression to skip is satisfied and the spike is now the next step: build
+side placement behind a flag, render it against the ring, and decide from the pictures. The owner's
+call, against the alternative of committing to the sides on the argument alone — which this document
+is the record of why not, since two of #138's own load-bearing claims reversed on recomputation.
+
+**The spike's first job is the trade this document names as unpriced**, not a preference between
+pictures: Branch B's headline removals (#121's frame, #135's status line) and Branch B's width gain
+want *different* loci, and the table under Branch B shows the wide locus puts a three-line card past
+the box at y = 604.0 against `#status` at 600. So the spike has to render **both** loci on the sides,
+not one.
+
+The comparison, from #134's own measurements:
 
 - **`?now=11:00&freeze=1`** — 5 cards, and the **three-card pile** (`w`+`d` at 9.83 units).
 - **`?now=13:00&freeze=1`** — 4 cards, and the 29.47-unit pair. **Not** a three-card pile; an earlier
