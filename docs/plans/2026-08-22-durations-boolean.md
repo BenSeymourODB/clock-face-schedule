@@ -1,6 +1,6 @@
 # Whether durations are shown is one setting, not four gates
 
-**Status:** in progress — the switch and its three readers, with the residue when it is on left to #177 and #146, outstanding as [#178](https://github.com/BenSeymourODB/clock-face-schedule/issues/178)
+**Status:** done — shipped in [#191](https://github.com/BenSeymourODB/clock-face-schedule/pull/191)
 **Issue:** [#178](https://github.com/BenSeymourODB/clock-face-schedule/issues/178)
 **Docs:** [`docs/brainstorms/2026-08-22-toggles-and-the-duration-promise.md`](../brainstorms/2026-08-22-toggles-and-the-duration-promise.md)
 (the four candidate meanings and why three of them are dead),
