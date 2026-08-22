@@ -1,6 +1,6 @@
 # The agenda panel's column, and the width it takes
 
-**Status:** in progress — the panel column and its cards, outstanding as [#39](https://github.com/BenSeymourODB/clock-face-schedule/issues/39)
+**Status:** done — shipped in [#173](https://github.com/BenSeymourODB/clock-face-schedule/pull/173)
 **Issue:** [#39](https://github.com/BenSeymourODB/clock-face-schedule/issues/39) — "Panel layout, and allocating the board's spare width"
 **Docs:** ADR 0009 (the allocation this spends), `docs/brainstorms/2026-08-17-agenda-panel.md` (what
 the panel is for), #30 item 1 / `docs/plans/2026-08-21-label-margin-hand-off.md` (the 180 units
@@ -200,6 +200,17 @@ either. Deferred with an issue, and adding the fixture case is part of that work
 - **#40, the playhead** — needs a card set that does not change under it.
 - **#41, the two modes** — this ships neither; "running and next, clipped" is the placeholder they
   replace.
-- **Clock times on a card**, per the measurement above.
-- **All-day events**, per #37.
-- **Item 4's designed collapse** — absent is not collapsed.
+- **Clock times on a card** — #169, with the eleven-against-ten table above.
+- **All-day events** — #170, which carries #37's remainder and the fixture case it needs.
+- **Item 4's designed collapse, and the residual** — #171. Absent is not collapsed.
+
+## One finding that came out of building it — #172
+
+Swept 96 pins, both scales: **66 of 251 floating labels drawn (26.3%) are also named in the panel**,
+worst case three of five on one dial at `?now=03:00`. Every existing proposal for #98 and #135 pays
+for relief with content — drop the card's duration, narrow its title, displace it — and suppressing a
+card whose event the panel already names at 26 units costs nothing, because the information is
+already rendered larger a few hundred units to the right.
+
+Filed rather than built: a card points at its arc and the panel does not, which #117 blunts (the
+connector draws no visible pixel, so the anchor is proximity alone) without settling.
