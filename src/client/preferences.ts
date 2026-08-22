@@ -86,9 +86,9 @@ export interface PreferenceStoreOptions {
 }
 
 /** One templated attribute, read as absent rather than as an error where it is not there. */
-function readWireAttribute(mount: Element | null | undefined, dataset: string): string | null {
+function readWireAttribute(mount: Element | null | undefined, datasetKey: string): string | null {
   if (!(mount instanceof HTMLElement)) return null;
-  const wire = mount.dataset[dataset];
+  const wire = mount.dataset[datasetKey];
   return wire === undefined ? null : wire;
 }
 

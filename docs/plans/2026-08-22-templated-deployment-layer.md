@@ -1,6 +1,6 @@
 # Template the layer under the viewer's, so a reset shows its own result
 
-**Status:** in progress — implementing [#157](https://github.com/BenSeymourODB/clock-face-schedule/issues/157)
+**Status:** done — shipped in [#164](https://github.com/BenSeymourODB/clock-face-schedule/pull/164)
 **Issue:** [#157](https://github.com/BenSeymourODB/clock-face-schedule/issues/157)
 **Docs:** ADR 0006 (the 0.5–2 s round trip this stops waiting on), #31 / #82 (why preferences are
 server-side and templated), #83 (`resetPreferences`, which deferred this), #84 (the single-flight

@@ -307,7 +307,8 @@ function browserTimeZone(): string {
  * other property of these two functions a spec settles; that one it cannot.
  */
 async function checkPreferences(list: Element): Promise<void> {
-  const wire = readPreferenceWire(document.querySelector("#dial"));
+  const dial = document.querySelector("#dial");
+  const wire = readPreferenceWire(dial);
 
   if (wire === null) {
     // The attribute is emitted whatever the conditions are, so its absence means templating broke.
@@ -322,7 +323,7 @@ async function checkPreferences(list: Element): Promise<void> {
    * then silently land on the code default where the deployment has an answer of its own, which is
    * the exact behaviour #157 removed and has no other symptom on screen.
    */
-  const deployment = readDeploymentPreferenceWire(document.querySelector("#dial"));
+  const deployment = readDeploymentPreferenceWire(dial);
 
   if (deployment === null) {
     addRow(list, "deployment preferences", "no data-deployment-preferences on the mount", "fail");
