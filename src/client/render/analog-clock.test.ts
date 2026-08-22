@@ -591,14 +591,13 @@ describe("analogClock", () => {
       });
 
       it("takes a line the title pays for by re-wrapping the same words", () => {
-        // Mid-angle 45° again, on a title short enough that the tighter budget only moves a break.
-        const lines = labelLines(
-          build([input("a", 1.25, 1.75, { title: "Breakfast Club Morning" })]).element,
-          "a"
-        );
+        // The same 45°, on a title whose tighter budget only moves a break: title-only it wraps
+        // `Staff Debrief and` / `Planning`, and it takes the line at `Staff Debrief` /
+        // `and Planning`. The expectation is deliberately not the title-only wrap — a card that
+        // simply kept its layout would be the *untouched* case and would prove nothing here.
+        const lines = labelLines(build([input("a", 1.25, 1.75, { title: PILE_TITLE })]).element, "a");
 
-        expect(lines.slice(-1)).toEqual(["30 min"]);
-        expect(lines.slice(0, -1).join(" ").replace(/\s+/g, " ")).toBe("Breakfast Club Morning");
+        expect(lines).toEqual(["Staff Debrief", "and Planning", "30 min"]);
       });
     });
 
