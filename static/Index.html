@@ -26,13 +26,21 @@
         they appear, HTML comments included, so a fragment written as illustration would be
         evaluated as code and fail the whole page.
       -->
-      <div
-        id="dial"<? if (showDemo) { ?> data-demo="1"<? } ?>
-        data-now="<?= pinnedNow ?>"
-        data-freeze="<?= freezeClock ?>"
-        data-scale="<?= scaleParam ?>"
-        data-preferences="<?= preferences ?>"
-      ></div>
+      <!--
+        The dial and the panel share one row, and it is a flex row rather than two grid columns for
+        the reason Styles.html records: grid sizes columns before rows, so a panel whose width comes
+        from the row's height cannot contribute a column width. ADR 0009, #39.
+      -->
+      <div id="board">
+        <div
+          id="dial"<? if (showDemo) { ?> data-demo="1"<? } ?>
+          data-now="<?= pinnedNow ?>"
+          data-freeze="<?= freezeClock ?>"
+          data-scale="<?= scaleParam ?>"
+          data-preferences="<?= preferences ?>"
+        ></div>
+        <div id="panel" hidden></div>
+      </div>
       <p id="status" role="status" hidden></p>
     </main>
 

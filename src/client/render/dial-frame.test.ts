@@ -258,10 +258,35 @@ describe("the display's sizing rule", () => {
     expect(block("#status")).toMatch(/margin:\s*var\(--label-frame\)/);
   });
 
-  it("sizes the dial from the display and lets the drawing fit the box", () => {
+  /**
+   * The property is unchanged by #39 and the declaration that carries it is not: `#dial` used to be
+   * `width: 100%` of a lone grid column, and is now the remainder of a flex row shared with the
+   * panel. Either way **both axes must be definite from outside the dial**, because resolving
+   * against the SVG's own `width="600"` attribute is exactly what #115 was.
+   *
+   * The zero flex basis is the part worth naming. `flex: 1 1 auto` would take the *content's* size as
+   * the basis, and the dial's content contributes that same 600 px attribute — so an `auto` basis is
+   * #115 reintroduced through a different declaration, on a board where the remainder happens to be
+   * near 600.
+   */
+  it("sizes the dial from the row rather than from its own drawing", () => {
     expect(block("#dial")).toMatch(/height:\s*100%/);
-    expect(block("#dial")).toMatch(/width:\s*100%/);
+    expect(block("#dial")).toMatch(/flex:\s*1\s+1\s+0(?![.\d]*[1-9])/);
+    expect(block("#dial")).toMatch(/min-width:\s*0/);
     expect(block("#dial svg")).toMatch(/width:\s*100%/);
     expect(block("#dial svg")).toMatch(/height:\s*100%/);
+  });
+
+  /**
+   * The row the dial and the panel share has to be definite on both axes for either of them to be:
+   * the panel's width comes from `aspect-ratio` against its height, which is a percentage of this
+   * box, and the dial's width is what is left of this box after it.
+   */
+  it("gives the board the whole grid row, definite on both axes", () => {
+    const board = block("#board");
+
+    expect(board).toMatch(/width:\s*100%/);
+    expect(board).toMatch(/height:\s*100%/);
+    expect(board).toMatch(/display:\s*flex/);
   });
 });

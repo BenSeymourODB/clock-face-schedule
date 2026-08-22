@@ -14,12 +14,14 @@ import {
   getFetchWindow,
   getPeriodBounds,
   labelMarginUnits,
+  panelFitsBoard,
   parseDialScaleId,
 } from "../shared/clock";
 import { decodePreferences, encodePreferences } from "../shared/preferences";
 import { readClockPin } from "./clock-pin";
 import { fixtureRefresher } from "./fixture-refresh";
 import { type PreferenceStore, preferenceStore, readPreferenceWire } from "./preferences";
+import { type AgendaPanelHandle, agendaPanel } from "./render/agenda-panel";
 import { type AnalogClockHandle, DIAL_VIEWBOX_SIZE, analogClock } from "./render/analog-clock";
 import { type ScheduleStatus, describeStatus, nextStatus } from "./schedule-status";
 
@@ -134,23 +136,53 @@ function measureLabelMargin(mount: Element): number | null {
 }
 
 /**
- * Grant the margin now, and again whenever the box the drawing sits in changes size.
+ * Whether the board can carry the panel without the dial paying for it (#39, ADR 0009).
  *
- * Watching the *box* rather than the window is the difference between a live figure and one taken at
+ * Measured on `#board` — the row the dial and the panel share — and never on the dial's own box. The
+ * dial's width depends on whether the panel is in it, so testing the dial would flap: hiding the
+ * panel widens the dial, which re-satisfies the test, which shows the panel again. `#board` is the
+ * whole row either way.
+ *
+ * The absent case is also what an unmeasurable page falls into, which is the safe direction: a panel
+ * sized from a zero would be a sliver of cards nobody can read.
+ */
+function showPanel(board: Element): boolean {
+  return panelFitsBoard(board.getBoundingClientRect(), DIAL_VIEWBOX_SIZE);
+}
+
+/**
+ * Grant the labels' margin and settle the panel's column, now and again whenever the row the two
+ * sit in changes size.
+ *
+ * Watching a *box* rather than the window is the difference between a live figure and one taken at
  * load: a board rotated or a projector re-detected at a different resolution fires `resize`, but the
- * status line appearing does not — and it takes height from the dial, which changes how many viewBox
- * units of the board are spare. Both routes come out as a box resize, so there is one seam.
+ * status line appearing does not — and it takes height from the dial, which changes both how many
+ * viewBox units of the board are spare and whether the panel still fits. Both routes come out as a
+ * box resize, so there is one seam, which is why the panel's test rides along here rather than
+ * bringing its own observer.
+ *
+ * `#board` is what is observed, since it is the element whose size neither answer depends on.
  *
  * `setLabelMargin` ignores an unchanged value, so a resize that does not move the allocation costs
  * no rebuild. Falls back to `resize` where `ResizeObserver` is missing, which loses the status-line
  * case and keeps the rest.
  */
-function trackLabelMargin(mount: Element, clock: AnalogClockHandle): void {
-  const apply = (): void => clock.setLabelMargin(measureLabelMargin(mount));
+function trackBoardLayout(
+  board: Element,
+  mount: Element,
+  panelHost: Element | null,
+  clock: AnalogClockHandle
+): void {
+  const apply = (): void => {
+    // The panel first: it decides the dial's width, so granting the margin from a box measured
+    // before the column settled would hand the renderer the wrong allowance for a frame.
+    panelHost?.toggleAttribute("hidden", !showPanel(board));
+    clock.setLabelMargin(measureLabelMargin(mount));
+  };
 
   apply();
   if (typeof ResizeObserver === "function") {
-    new ResizeObserver(apply).observe(mount);
+    new ResizeObserver(apply).observe(board);
     return;
   }
   window.addEventListener("resize", apply);
@@ -158,6 +190,11 @@ function trackLabelMargin(mount: Element, clock: AnalogClockHandle): void {
 
 function startDisplay(): void {
   const statusLine = document.querySelector("#status");
+  const panelHost = document.querySelector("#panel");
+  // The row the dial and the panel share. Falls back to the mount on a page templated before #39
+  // added it, which is the diagnostics-only case: the measurement is then the dial's own box, so the
+  // panel does not appear rather than appearing at the wrong width.
+  const board = document.querySelector("#board");
   if (!mount) return;
 
   const preferences = displayPreferences(mount);
@@ -184,12 +221,30 @@ function startDisplay(): void {
   });
   mount.append(clock.element);
 
+  /**
+   * The agenda column beside it (#39), built from the same instant the dial's first frame was — the
+   * property #152 is about, extended to the second drawing on the page. Two reads here would put the
+   * panel and the band a few milliseconds apart, which is invisible until an event ends inside the
+   * gap and the card set disagrees with the arcs on the load frame.
+   *
+   * Empty until the first fetch answers, like the dial. Appended before the panel is known to fit,
+   * because `trackBoardLayout` decides that from `#board`'s box and hides the host either way.
+   */
+  const panel: AgendaPanelHandle | null = panelHost
+    ? agendaPanel({ events: [], time: loadedAt })
+    : null;
+  if (panel && panelHost) panelHost.append(panel.element);
+
   // After the append, so the box being measured is the one the drawing is laid out in.
-  trackLabelMargin(mount, clock);
+  trackBoardLayout(board ?? mount, mount, panelHost, clock);
 
   // Hands before data. A google.script.run round trip runs 0.5–2s and the server cache does not
   // help a cold start, so the wall shows a working clock rather than an empty panel.
-  window.setInterval(() => clock.setTime(now()), TICK_INTERVAL_MS);
+  window.setInterval(() => {
+    const at = now();
+    clock.setTime(at);
+    panel?.setTime(at);
+  }, TICK_INTERVAL_MS);
 
   /**
    * Standing notices, ahead of whatever the schedule has to say. A pinned clock has to announce
@@ -221,7 +276,10 @@ function startDisplay(): void {
       pin: clockPin,
       loadedAt,
       now,
-      setEvents: (events) => clock.setEvents(events)
+      setEvents: (events) => {
+        clock.setEvents(events);
+        panel?.setEvents(events);
+      }
     });
 
     refreshFixture();
@@ -238,7 +296,12 @@ function startDisplay(): void {
 
   async function refresh(): Promise<void> {
     try {
-      clock.setEvents(await fetchWindow());
+      const events = await fetchWindow();
+      clock.setEvents(events);
+      // The same set both drawings, so a card and an arc can never name different events. The dial
+      // narrows it to the rolling window itself; the panel keeps the whole fetch, which is what #37
+      // widened the request for.
+      panel?.setEvents(events);
       status = nextStatus(status, { ok: true, at: now() });
     } catch (error) {
       // Deliberately does not touch the dial: whatever it is showing stays up, marked old.
