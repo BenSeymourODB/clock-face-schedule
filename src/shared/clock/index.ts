@@ -124,6 +124,11 @@ export {
   type VerticalBand
 } from './stack-labels';
 export {
+  labelsDischargedByPanel,
+  panelNamedKey,
+  type SuppressibleLabel
+} from './suppress-labels';
+export {
   ONE_HOUR_SCALE,
   TWELVE_HOUR_SCALE,
   dialOrigin,

@@ -123,4 +123,32 @@ describe("main.ts's load path", () => {
     expect((panelTime as string).trim()).toBe((dialTime as string).trim());
     expect((panelTime as string).trim()).toMatch(/^[A-Za-z_$][\w$]*$/);
   });
+
+  /**
+   * **The panel is updated before the dial, on every seam that updates both** (#172).
+   *
+   * The dial's suppression pass reads the panel's card set to decide which floating labels its
+   * events are already named by. Updating the dial first would decide that against the *previous*
+   * column — for exactly one tick after every change, which is precisely the moment a card is
+   * appearing or leaving. The dial's own rebuild key corrects it on the following tick, so the
+   * symptom is a single stale frame rather than a stuck one: harder to catch by looking than by
+   * asserting, which is why this is a test and not a comment.
+   *
+   * Source order rather than behaviour, for this file's usual reason: two calls in either order are
+   * indistinguishable in a test that drives them synchronously, and the defect is entirely about
+   * which one the browser runs first.
+   */
+  it.each([
+    ["the tick", /window\.setInterval\(\(\) => \{[\s\S]*?\n\s*\}, TICK_INTERVAL_MS\)/],
+    ["the fixture refresher", /setEvents:\s*\(events\) => \{[\s\S]*?\n\s*\}/],
+    ["the calendar poll", /const events = await fetchWindow\(\);[\s\S]*?clock\.setEvents\(events\);/]
+  ])("updates the panel before the dial in %s", (_seam, pattern) => {
+    const [seam] = sourceSays(pattern, "that seam no longer looks like this");
+    const panelAt = (seam as string).search(/panel\?\.set(Time|Events)\(/);
+    const clockAt = (seam as string).search(/clock\.set(Time|Events)\(/);
+
+    expect(panelAt).toBeGreaterThanOrEqual(0);
+    expect(clockAt).toBeGreaterThanOrEqual(0);
+    expect(panelAt).toBeLessThan(clockAt);
+  });
 });
