@@ -6,7 +6,7 @@
  * Deliberately style only: geometry (position, wrapping, clamping) and anything layout-specific
  * — a floating label's connector, an agenda card's start/end times — stays with the caller.
  */
-import { labelLineOffsets, roundCoord } from "../../shared/clock";
+import { cardSwatchLayout, labelLineOffsets, roundCoord } from "../../shared/clock";
 import { svg } from "../svg";
 
 /** Font stack shared by every card — the dial has no per-event font, only per-event colour. */
@@ -42,6 +42,9 @@ export function cardStrokeWidth(fontSize: number): number {
   return roundCoord(Math.max(STROKE_MIN, fontSize * STROKE_RATIO));
 }
 
+/** Corner softening on the swatch — the card's own radius would round an 8-unit patch away. */
+const SWATCH_CORNER_RADIUS = 2;
+
 export interface EventCardGeometry {
   x: number;
   y: number;
@@ -74,9 +77,9 @@ function cardRect({ x, y, width, height }: EventCardGeometry) {
 }
 
 /**
- * Build a card's base, colour wash, border and text — three stacked rects sharing one geometry,
- * plus one `<text>` per line, matching how the arc renders its curved lines (no `tspan` baseline
- * arithmetic).
+ * Build a card's base, colour wash, border, colour swatch and text — three stacked rects sharing one
+ * geometry, plus one `<text>` per line, matching how the arc renders its curved lines (no `tspan`
+ * baseline arithmetic).
  *
  * The card deliberately inverts the face tokens — a light chip carrying dark text. NDWC
  * hard-coded white and `#1f2937` for this; using the tokens gives the same result on this
@@ -86,6 +89,23 @@ function cardRect({ x, y, width, height }: EventCardGeometry) {
  * against, and the border wants to sit above the wash so it reads at full strength rather than
  * through it. Sharing one `geometry` object, rather than recomputing it per rect, is what makes
  * it structurally impossible for the three to drift apart.
+ *
+ * The swatch is the card's identity channel (#118), and the caller must take `SWATCH_RESERVE` out of
+ * the width it passes — `floatingLabel` does, before it wraps. A card sized to its text alone has no
+ * room for the patch to be in: its first line's ink lands 2 units over the patch and hard against the
+ * far border, measured at the dial's own font. That is the caller's arithmetic and not something this
+ * function can centre its way out of, so it is a contract rather than a defence, and
+ * `event-card.test.ts` asserts both halves of it.
+ *
+ * **Its outline carries the contrast, not its fill.** Full-opacity paint on the card's own washed
+ * field measures 1.001:1 for ⚪, misses WCAG 1.4.11's 3:1 for a graphical object on **18 of the 21**
+ * colours the dial can be handed, and is under 1.5:1 on six of them (⚪ 1.001, Graphite 1.148, Banana
+ * 1.207, Sage 1.270, Tangerine 1.412, Peacock 1.445) — so a bare patch reproduces the defect it was
+ * chosen to fix rather than merely under-reading. `var(--card)` — the card's own
+ * text token — is 10.93:1 or better against every one of those fields, and outlining rather than
+ * flooring keeps the authored hue, which is what #118 rejected flooring the border to protect. On a
+ * dark fill the outline vanishes into it (⚫ measures 1.21:1 inside) and the patch reads as one
+ * block, which is the intended result rather than a residue of the defect.
  */
 export function eventCardNodes({
   idPrefix,
@@ -99,7 +119,10 @@ export function eventCardNodes({
   fontSize,
 }: EventCardParams): SVGElement[] {
   const geometry = cardRect({ x, y, width, height });
-  const centreX = x + width / 2;
+  const { swatch, textCentreX } = cardSwatchLayout(
+    { x, y, width, height },
+    { x: RECT_PADDING_X, y: RECT_PADDING_Y }
+  );
   const centreY = y + height / 2;
   const offsets = labelLineOffsets(lines.length, fontSize);
 
@@ -123,12 +146,24 @@ export function eventCardNodes({
       "stroke-opacity": RECT_BORDER_OPACITY,
       "stroke-width": cardStrokeWidth(fontSize),
     }),
+    svg("rect", {
+      "data-testid": `${idPrefix}-swatch-${id}`,
+      x: roundCoord(swatch.x),
+      y: roundCoord(swatch.y),
+      width: roundCoord(swatch.width),
+      height: roundCoord(swatch.height),
+      rx: SWATCH_CORNER_RADIUS,
+      ry: SWATCH_CORNER_RADIUS,
+      fill: color,
+      stroke: "var(--card)",
+      "stroke-width": cardStrokeWidth(fontSize),
+    }),
     ...lines.map((text, index) =>
       svg(
         "text",
         {
           "data-testid": `${idPrefix}-text-${id}-${index}`,
-          x: roundCoord(centreX),
+          x: roundCoord(textCentreX),
           y: roundCoord(centreY + offsets[index]),
           "text-anchor": "middle",
           "dominant-baseline": "central",
