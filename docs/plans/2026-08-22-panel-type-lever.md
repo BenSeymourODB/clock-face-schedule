@@ -1,6 +1,6 @@
 # The panel's type lever — the agenda card's body drops to the arc-title size
 
-**Status:** in progress — #174
+**Status:** done — shipped in #190
 **Issue:** #174 (the type half only; the width half stays held for #138)
 **Docs:** `docs/DESIGN.md` ADR 0009, third amendment item 2 — already written, and this is what
 makes it true of the code
