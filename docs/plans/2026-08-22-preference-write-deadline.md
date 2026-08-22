@@ -1,6 +1,6 @@
 # A deadline on a preference write, so one that never settles cannot silence the store
 
-**Status:** in progress — outstanding as [#122](https://github.com/BenSeymourODB/clock-face-schedule/issues/122)
+**Status:** done — shipped in [#168](https://github.com/BenSeymourODB/clock-face-schedule/pull/168)
 **Issue:** [#122 — A preference save that never settles stalls every save after it, where the old
 fire-and-forget could not](https://github.com/BenSeymourODB/clock-face-schedule/issues/122)
 **Docs:** #84 (the single-flight queue this is the cost of), #83 (`resetPreferences`, the second
@@ -125,10 +125,10 @@ would be the only failure in this store with no record anywhere.
 and its spec. No geometry, no colour, no text, and nothing server-side. The preview is checked for the
 one thing that could regress — that the page still loads and the dial still draws.
 
-**Surfacing store health in `?check=1`** is deliberately left out. #122 calls it *"a good idea
-independently"* that *"does not require the store to give up to be worth having"*, and it is a
-different thing from this change: this one keeps the queue moving, that one would tell a human the
-bridge is not answering. Filed separately rather than folded in.
+**Surfacing store health in `?check=1`** is deliberately left out, and filed as #167. #122 calls it
+*"a good idea independently"* that *"does not require the store to give up to be worth having"*, and
+it is a different thing from this change: this one keeps the queue moving, that one would tell a
+human the bridge is not answering.
 
 **No retry of an abandoned write.** The store's existing bargain — a lost write costs the next
 reload's memory of a setting rather than interrupting a lesson — covers a timed-out write for exactly
