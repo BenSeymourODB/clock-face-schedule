@@ -304,7 +304,8 @@ after the panel**, and the panel is **180 units wide, on the right**.
   board. So this removes #98's collisions on the sides by construction and leaves them at the top and
   bottom, which is the mirror image of the ellipse's asymmetry.
 - **180 is the smallest width that serves the panel's own justification.** It holds 10 characters a
-  line at 26 units, and on a 4 ft board 26 units is 53 mm — comfortable reading at 8 m by the
+  line at 26 units (**13 at the 21.2576-unit body the third amendment adopts**, 12 once #160's swatch
+  is paid), and on a 4 ft board 26 units is 53 mm — comfortable reading at 8 m by the
   conventional distance/150 rule. That is the size at which the panel can carry the names of a
   three-deep cluster, whose arc titles render at 6.24 units, 12.7 mm, legible to about 2 m (#70).
   (**5.98 units** for a three-deep title that *wraps*, once the clearance cap binds — #90. Millimetres
@@ -317,8 +318,10 @@ after the panel**, and the panel is **180 units wide, on the right**.
   figure is pre-#115 for the same reason the margin table below is. See the third amendment.)
 - **The panel holds five cards** at 26 units over three lines, seven at two lines. That confirms the
   agenda brainstorm's estimate from the other direction, and with it that **scrolling is the general
-  display mode and whole-day the special case** (#41). (**Six cards at the 21.26-unit body** the
-  third amendment adopts. The bound, and so #41's conclusion, is unaffected.)
+  display mode and whole-day the special case** (#41). (**Six and eight at the 21.2576-unit body** the
+  third amendment adopts and #174 shipped — and 6–7 as the fixture actually renders, since a column of
+  mixed one- and two-line titles packs tighter than either pure case. The bound, and so #41's
+  conclusion, is unaffected.)
 - The narrow-display fallback (#39 item 4) is unchanged and still needs designing: as the board
   approaches square the margin falls below the knee and the panel has to collapse or stack.
 
@@ -381,25 +384,55 @@ to the 75.4-unit knee. So the headroom past 180 is **90 units, not 29**. This is
 number, not licence to spend it: 180 was chosen for the panel's own legibility rather than as the
 most it could take.
 
-**2. The panel's body becomes 21.26 units rather than 26** — the arc-title size, decided on #174 and
-**not yet built**: #173 shipped the column at the 26 this ADR specified, and #174 is where the
-constant moves. Treat 26 as what renders and 21.26 as what was decided until that lands. The panel was
-the second-loudest text on the display, above every arc title and above the floating-label cards it
-shares its styling with, which inverts the relationship between a surface and the surface it exists
-to serve. Consequences, all of them gains except the last:
+**2. The panel's body is 21.2576 units rather than 26** — the arc-title size, decided on #174 and
+**shipped there**. The panel was the second-loudest text on the display, above every arc title and
+above the floating-label cards it shares its styling with, which inverts the relationship between a
+surface and the surface it exists to serve.
 
-| | at 26 (as decided) | at 21.26 (as amended) |
+**21.2576, not the 21.26 this amendment first wrote.** A lone arc's title is
+`roundCoord(75.92 × 0.28)` and `roundCoord` keeps four decimals, so 21.26 is a two-decimal shorthand
+that is 0.0024 units *above* the arc title — the one relationship the change exists to invert. The
+constant is now derived from `TITLE_FONT_SIZE_RATIO` rather than typed, and `agenda-panel.test.ts`
+asserts it against the size `computeArcTitleLayout` returns for the ring the dial actually draws.
+
+Consequences, all of them gains except the last:
+
+| | at 26 | at 21.2576 |
 | --- | --- | --- |
-| characters a line, 180-unit panel | 10 | **13** |
-| cards that fit | 5 | **6** |
+| characters a line, before #160's swatch | 10 | **13** |
+| characters a line, **as it ships** | 9 | **12** |
+| three-line cards that fit | 5 | **6** |
+| two-line cards that fit | 7 | **8** |
 | `HH:MM–HH:MM` (11 chars, #169) | unaffordable | **affordable** |
 | reading distance, distance/150 | 6.77 m | **5.53 m** |
 
 The cost is 1.24 m of reading distance, and it is real — but the arc titles the panel exists to
-rescue are at 21.26 and below, so a panel at 21.26 is still the most readable statement of an event's
-name anywhere on the display, and #70's argument for the panel survives intact. **Per `CLAUDE.md`
-this is a looking question and the arithmetic does not settle it**: it wants judging at 1× from the
-back of a room before it is believed.
+rescue are at 21.2576 and below, so a panel at the arc-title size is still the most readable
+statement of an event's name anywhere on the display, and #70's argument for the panel survives
+intact.
+
+**Measured on the rendered page, not just derived** (#174) — 96 pins per board, both scales,
+`#status` hidden:
+
+| | at 26 | at 21.2576 |
+| --- | --- | --- |
+| cards drawn | 489 | **593** |
+| of those, ellipsized | 161 (**32.9%**) | 156 (**26.3%**) |
+| cards per dial | 5–6 | **6–7** |
+| worst card bottom, against the 600-unit column | 571.64 | 578.78 |
+
+**104 more events named, and fewer titles cut even in absolute terms.** 16:9 and 16:10 render
+identically, which follows from the panel being a fixed 180 units — the boards differ in the *labels'*
+margin, not the panel's.
+
+`?scale=1h&now=04:15&freeze=1` is the pin that settles the looking question the arithmetic could not:
+the four-deep cluster's titles are illegible smudges on the band at 6.24 units and the panel names
+all four. The panel remains obviously the more readable of the two surfaces, which is the property
+#70 depends on.
+
+**What it does not fix, and the width lever is the answer:** titles still ellipsize at 26.3%. Two
+cards at `?now=03:00&freeze=1` cut mid-word (`Staff Debrief a...`), and `Reading Circle an...` at the
+1-hour pin. The type lever cannot reach those — the column is 180 units wide.
 
 **The width lever is deliberately not taken.** #174 prices a panel up to 270.7 and #177 wants the
 same units to grow a card rather than ellipsize its title — 21 titles a sweep truncate where the
