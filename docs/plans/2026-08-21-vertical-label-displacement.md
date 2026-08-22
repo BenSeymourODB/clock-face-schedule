@@ -1,7 +1,9 @@
 # Floating labels that get out of each other's way
 
-**Status:** in progress — the merge fallback outstanding as [#30](https://github.com/BenSeymourODB/clock-face-schedule/issues/30)
-**Issue:** [#30](https://github.com/BenSeymourODB/clock-face-schedule/issues/30) item 2
+**Status:** in progress — the merge fallback outstanding as [#180](https://github.com/BenSeymourODB/clock-face-schedule/issues/180)
+**Issue:** [#30](https://github.com/BenSeymourODB/clock-face-schedule/issues/30) item 2 — closed by
+[#148](https://github.com/BenSeymourODB/clock-face-schedule/pull/148), which shipped item 1 alone, so
+the merge fallback this plan describes carries on in #180
 **Docs:** ADR 0009 (the margin this spends), #98 (cards over the band's content), #117 (the connector
 that never draws), #121 (the frame the stack pushes against), #118 (the card's absent colour
 channel), #68 (the duration line this pass makes cheaper), #70 (why the panel carries the name the
