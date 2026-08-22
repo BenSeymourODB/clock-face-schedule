@@ -137,7 +137,40 @@ Filter:
 3. Every "Blocked by" issue is `CLOSED`.
 4. No open PR already closes it:
    `gh pr list --state open --search "in:body Closes #<n>"`.
-5. No claim comment from `implement-issue` newer than 6 hours.
+5. **No live claim.** A claim comment opens with
+   `🤖 implement-issue claiming this for the next session.` and names the branch
+   it will push to. It is live if it is newer than 6 hours, or if that branch
+   exists on the remote:
+
+   ```bash
+   git ls-remote --heads origin "<the branch the claim named>"
+   ```
+
+A claim inside the window is live either way — leave it alone. Past it, the
+branch is what separates the two states the timeout cannot: **a stale claim whose
+branch exists is not a dead claim, it is a resume.** The branch says that run got
+as far as pushing, which is evidence rather than an inference from the clock (and
+step 4 has already ruled out its having opened a PR). Fetch it and continue the
+work that is on it rather than starting again. If your driver has pinned you to a
+branch of its own, merge the stale one in so its commits are not lost, and say so
+on the issue.
+
+A stale claim with **no** branch is the dead case, and the only one that releases.
+Say so before starting, so the original run can stand down when it returns
+(step 7):
+
+```
+🤖 implement-issue taking this over from a claim that has gone quiet.
+Branch: <the branch you will push to>
+```
+
+**Why the window stays at 6 hours.** It is too short — the run that produced
+#131 took 7h56m from claim to PR — but lengthening it without a liveness signal
+leaves every genuinely dead claim blocking its issue for the rest of it, and
+this repo's pool of ready issues is thin enough that one wrongly-held claim can
+idle a whole session. The branch check above is what shortens the guesswork
+instead, and step 7's return check is what makes the remaining ambiguity cheap.
+Do not tune the number (#133).
 
 **Resume case:** a worktree under `.claude/worktrees/issue-<n>-…` with no open PR
 is a crashed run. Pick that issue back up and reuse the worktree
@@ -146,8 +179,13 @@ is a crashed run. Pick that issue back up and reuse the worktree
 **Nothing eligible?** Pick the highest-priority blocked / decision-bound item,
 post a comment summarising exactly which decision would unblock it, and exit.
 
-Once selected, comment:
-`🤖 implement-issue claiming this for the next session.`
+Once selected, comment — the branch line is not optional, because it is the only
+liveness signal a later run has:
+
+```
+🤖 implement-issue claiming this for the next session.
+Branch: <the branch you will push to>
+```
 
 ## 3. Worktree
 
@@ -163,6 +201,17 @@ cd "$worktree" && npm ci
 If the branch exists from a crashed run, reuse it: `git worktree add "$worktree"
 "$branch"` (no `-b`). `.claude/worktrees/` is gitignored — leave it intact on
 exit.
+
+**That name is a default, not a rule, and the claim is what makes it findable.**
+A scheduled driver may hand this session a branch of its own — `claude/funny-curie-…`,
+`claude/focused-cray-…` — together with an instruction not to push anywhere else.
+Measured over the 54 branches on this remote: 12 of the 15 pushed before
+2026-08-19 match the pattern above, and **1 of the 39 pushed since** does — the
+date the runs became scheduled ones. So a later run cannot
+derive your branch from the issue number, and must not try — it reads the name
+out of your claim comment, which is why step 2 requires it there. Use the
+driver's name when you are given one; use the pattern above when the choice is
+yours.
 
 ## 4. Read the plan and the brainstorm
 
@@ -215,6 +264,30 @@ Then commit and push. Standard footer:
 ```
 Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>
 ```
+
+### Before you open a PR
+
+Time has passed since you claimed this, and **a run that has done the work is
+exactly the run that has forgotten to look.** #114 ended up with two complete, green,
+mutually-conflicting PRs — #129 and #131 — because the second run never re-read
+the issue: #129 had been open and closing it for 99 minutes by then. Both had to
+be reviewed, and whichever merged first left the other conflicting in two files.
+
+So re-read the issue and the open PRs before creating one:
+
+```bash
+gh issue view <n> --comments
+gh pr list --state open --search "in:body Closes #<n>"
+```
+
+If either turns up an open PR closing the issue, or a take-over comment —
+`🤖 implement-issue taking this over from a claim that has gone quiet.` — then
+**do not open a second PR.** Comment on the issue naming both branches and what
+each carries, so the maintainer can take anything yours has that the other lacks,
+and stop there. Leave your branch pushed and your worktree intact.
+
+This costs one session. Opening the duplicate costs two, plus a conflict resolved
+by hand (#133).
 
 On the first push, open a draft PR:
 

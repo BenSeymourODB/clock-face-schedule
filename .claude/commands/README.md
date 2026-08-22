@@ -22,9 +22,16 @@ decisions** — treat that line as authoritative when triaging.
 
 ## Automation
 
-These commands are **manual today**. Wiring them to a schedule would need an
-`ANTHROPIC_API_KEY` secret and an opt-in repo variable, and should only ever open
-draft PRs for a human to merge.
+**`/implement-issue` runs on a schedule as well as by hand**, and has since
+2026-08-19. It still only ever opens draft PRs for a human to merge.
+
+One consequence is worth knowing before reading either command: a scheduled run
+does not choose its own branch. The driver hands it one — `claude/funny-curie-…`,
+`claude/focused-cray-…` — with an instruction not to push anywhere else, so 1 of
+the 39 branches pushed since that date matches the `claude/issue-<n>-<slug>`
+pattern the workflow documents, against 12 of the 15 before it. Anything that
+wants to find a run's branch reads it from the run's claim comment; nothing
+derives it from the issue number (#133).
 
 Ported from the `yuvomi-kiosk` command set, which in turn came from
 [`rbcministries/clickup-todo-cli`](https://github.com/rbcministries/clickup-todo-cli/tree/main/.claude/commands),
