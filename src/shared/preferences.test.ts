@@ -11,13 +11,15 @@ import {
   defaultPreferences,
   encodePreferenceKeys,
   encodePreferences,
+  resolveOverride,
   resolvePreferences
 } from "./preferences";
 
 const DEFAULTS: Preferences = {
   showSeconds: true,
   timerMuted: false,
-  timerDurationSeconds: 300
+  timerDurationSeconds: 300,
+  showEventDurations: true
 };
 
 describe("defaults", () => {
@@ -133,7 +135,9 @@ describe("layering sources", () => {
 
 describe("encoding", () => {
   it("writes every key in registry order", () => {
-    expect(encodePreferences(DEFAULTS)).toBe("showSeconds=1;timerMuted=0;timerDurationSeconds=300");
+    expect(encodePreferences(DEFAULTS)).toBe(
+      "showSeconds=1;timerMuted=0;timerDurationSeconds=300;showEventDurations=1"
+    );
   });
 
   it("writes only the keys it is given", () => {
@@ -159,7 +163,8 @@ describe("encoding", () => {
   const SAMPLES: { [K in PreferenceKey]: Array<Preferences[K]> } = {
     showSeconds: [true, false],
     timerMuted: [true, false],
-    timerDurationSeconds: [60, 300, 43200]
+    timerDurationSeconds: [60, 300, 43200],
+    showEventDurations: [true, false]
   };
 
   it.each(PREFERENCE_KEYS)("keeps %s in an attribute-safe alphabet, for every value", (key) => {
@@ -183,10 +188,62 @@ describe("encoding", () => {
 
   it.each([
     ["the defaults", DEFAULTS],
-    ["everything switched", { showSeconds: false, timerMuted: true, timerDurationSeconds: 1800 }],
-    ["the range's ends", { showSeconds: true, timerMuted: true, timerDurationSeconds: 60 }]
+    [
+      "everything switched",
+      {
+        showSeconds: false,
+        timerMuted: true,
+        timerDurationSeconds: 1800,
+        showEventDurations: false
+      }
+    ],
+    [
+      "the range's ends",
+      { showSeconds: true, timerMuted: true, timerDurationSeconds: 60, showEventDurations: true }
+    ]
   ])("round-trips %s through a wire string", (_case, values) => {
     expect(decodePreferences(encodePreferences(values))).toEqual(values);
+  });
+});
+
+/**
+ * #178's `?durations=` override: a URL layer beats the stored value where it parses, and falls
+ * through where it does not. The precedence is the inverse of `chosenScale`'s, which is the one
+ * thing a reader is likely to get backwards — so it is asserted here, in node, rather than only
+ * inside `main.ts` where `window.location` cannot be reached.
+ */
+describe("resolveOverride", () => {
+  const flagDef = PREFERENCES.showEventDurations;
+
+  it("takes the first layer that parses, ahead of the stored value", () => {
+    // Stored true, the URL says 0 — the override wins, which is the whole reason it exists.
+    expect(resolveOverride(flagDef, ["0"], true)).toBe(false);
+    expect(resolveOverride(flagDef, ["1"], false)).toBe(true);
+  });
+
+  it("prefers an earlier layer to a later one", () => {
+    // The templated attribute (what doGet saw) ahead of the page's own query string.
+    expect(resolveOverride(flagDef, ["1", "0"], false)).toBe(true);
+  });
+
+  it.each([
+    ["empty", ""],
+    ["absent (null)", null],
+    ["absent (undefined)", undefined],
+    ["unparseable", "yes"]
+  ])("falls through a %s layer to the stored value", (_case, layer) => {
+    // The stored value is what a stripped preview attribute, an omitted parameter, and a garbled one
+    // all land on — never the registry default, and never a repair.
+    expect(resolveOverride(flagDef, [layer], true)).toBe(true);
+    expect(resolveOverride(flagDef, [layer], false)).toBe(false);
+  });
+
+  it("skips an unparseable layer to reach a valid one behind it", () => {
+    expect(resolveOverride(flagDef, ["yes", "0"], true)).toBe(false);
+  });
+
+  it("returns the stored value when no layer resolves", () => {
+    expect(resolveOverride(flagDef, ["", null, undefined], true)).toBe(true);
   });
 });
 
