@@ -458,7 +458,7 @@ export function analogClock({
     const baseRects = titleOnly.map((params) => floatingLabelGeometry(params).rect);
 
     // #172, and it runs *before* the resolver below rather than after it. Measured after the
-    // resolver only 6 of 251 cards still overlap, because it has already paid for the rest in
+    // resolver only 2 of 251 cards still overlap, because it has already paid for the rest in
     // declined duration lines and displacement — so suppressing first is what makes this relief free
     // instead of retrospective. Every card the panel has already named and that is landing on
     // another card goes, and the ones sitting clear keep their position, which is the only channel

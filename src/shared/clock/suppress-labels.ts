@@ -1,9 +1,11 @@
 /**
  * Dropping a floating label whose event the agenda panel already names (#172).
  *
- * 26.3% of the floating labels the dial draws — 66 of 251 over a 96-pin sweep, and 3 of 5 at
- * `?now=03:00&freeze=1` — carry a name that is already on screen in the panel, larger, on a plain
- * ground, off the band entirely. Every other proposal for #98 and #135 pays for relief with content:
+ * 39.4% of the floating labels the dial draws — 99 of 251 over a 96-pin sweep on `main` after #190,
+ * and 3 of 5 at `?now=03:00&freeze=1` — carry a name that is already on screen in the panel, larger,
+ * on a plain ground, off the band entirely. (Pre-#190 the same sweep measured 66 of 251, 26.3%; the
+ * smaller panel body fits more cards in the column, so more labels are discharged. The plan doc
+ * records both columns.) Every other proposal for #98 and #135 pays for relief with content:
  * drop the card's duration line, narrow its title, or move it away from its arc. This one pays with
  * nothing, because the information is not lost, moved or shrunk.
  *
@@ -17,8 +19,9 @@
  * suppress *on collision* rather than unconditionally, which keeps the angular anchor — the card's
  * position, which says *which arc* the name belongs to, and which the panel has no channel for.
  * Measured, that costs nothing: the two rules clear the same 20 band covers, because a card in no
- * collision is by definition covering nothing, and suppressing on collision keeps 41 of the 66
- * anchors that suppressing unconditionally throws away.
+ * collision is by definition covering nothing, and suppressing on collision keeps 86 of the 99
+ * anchors that suppressing unconditionally throws away. (The cover count is on the pre-#190 base,
+ * where the mechanisms were priced against each other; the anchor count is as shipped, on `main`.)
  *
  * Pure arithmetic over rects — no host types, so `src/shared/` compiles without the DOM lib
  * (ADR 0003) and every figure here is checkable in node.
@@ -33,9 +36,10 @@ export interface SuppressibleLabel {
    * The card's box at its **natural** position — before `planOptionalLines` offers a duration line
    * and before `stackLabels` displaces anything.
    *
-   * Measuring after the resolver would be measuring the wrong thing: only 6 of 251 cards still
-   * overlap once it has run, because it has already paid for the rest in declined duration lines and
-   * vertical displacement. Suppressing first is what makes this relief free rather than retrospective.
+   * Measuring after the resolver would be measuring the wrong thing: only 2 of 251 cards still
+   * overlap once it has run — `rectsOverlap` over the rendered rects, on either base — because it has
+   * already paid for the rest in declined duration lines and vertical displacement. Suppressing first
+   * is what makes this relief free rather than retrospective.
    */
   rect: Rect;
 }

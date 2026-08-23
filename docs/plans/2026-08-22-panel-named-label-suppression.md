@@ -37,9 +37,12 @@ the information is not lost, moved, or shrunk"*) without noticing it also dissol
 
 **Ships: a card overlapping another card**, measured at its natural position — before
 `planOptionalLines` offers a duration line and before `stackLabels` displaces anything. That ordering
-is the point rather than an implementation detail: measured *after* the resolver, only 6 of 251 cards
-still overlap, because the resolver has already paid for the rest in declined duration lines and
-displacement. Suppressing first is what makes the relief free instead of retrospective.
+is the point rather than an implementation detail: measured *after* the resolver, only 2 of 251 cards
+still overlap — `rectsOverlap` over the rendered rects, the same strict predicate the rule itself
+uses, and 2 on the pre-#190 base and on `main` alike — because the resolver has already paid for the
+rest in declined duration lines and displacement. Suppressing first is what makes the relief free
+instead of retrospective. (The flush-stacked pairs the resolver produces are the reason a *touching
+counts* predicate would report 49 here instead; `rectsOverlap` is strict, so they do not count.)
 
 **Excluded, with the measured cost of excluding it:**
 
