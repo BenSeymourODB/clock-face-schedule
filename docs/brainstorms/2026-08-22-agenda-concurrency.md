@@ -132,6 +132,112 @@ different question — but the panel now has exactly one trailing-line slot and 
 it. If the times line lands under the switch, a board with durations off says nothing about when
 anything happens, which is the gap #169 exists to close.
 
+**Answered by the owner, 2026-08-23: beside it. Two switches, and times are not optional the way a
+duration is.**
+
+> the start-and-end times text that agenda cards *must* carry in order to be useful as more than an
+> ordered list of events. Those aren't essential on arcs or floating labels, though
+
+So the channel's necessity is **per surface**, which no version of this document had said: a times
+line is what makes a panel card a schedule entry rather than a name in a queue, and the same line on
+an arc or a floating card is redundant against the arc's own angular position. That settles #169's
+direction — the panel states times — and it means the trailing-line slot is not one slot with one
+switch but **two channels the teacher controls separately**.
+
+### Why the switches exist, which is not what this document assumed
+
+The owner's second note reframes the premise, and it is worth stating before anything is built on the
+old one:
+
+> The reason for providing controls for teachers to enable or disable durations, and potentially start
+> and end times, has less to do with accessibility and more to do with whether the teacher is
+> attempting to show the class how to use a clock face with fewer visual aids. For uncrowded event
+> dials, the teacher may choose to disable both if they are having the class practice the kind of
+> dial-reading and arithmetic that a mature user of an analog clock would do.
+
+**The purpose is pedagogical, not accessibility.** #178's body argues the duration line is
+*"load-bearing for exactly the people the README names"* and treats the switch as something that takes
+an aid away; #144's counter-argument rests on the same premise. Under the owner's framing the switch
+is not a concession — **turning the aids off is a lesson**, and the dial with no durations and no
+times is the intended end state of a class learning to read a clock, not a degraded one.
+
+Three things follow that the accessibility framing gets backwards:
+
+- **"Both off" is a first-class state, not a fallback.** A panel of titles alone is exactly the
+  ordered list the note describes, and that is correct when the teacher wants the class reading the
+  *dial* for timing. It does not need apologising for in the docstring or defending in a promise.
+- **The default is a teaching default.** `flag(true)` for both remains right — a board nobody has
+  configured should show the aids — but the reason is that an unconfigured board is not in a lesson,
+  not that the aids are owed to the viewer.
+- **It weakens the case for shrinking either line (#144).** If the lines exist to be *read* while the
+  class is still learning, making them the smallest text on the dial works against the lesson. #144's
+  measured objection — that 0.8× makes the duration the smallest text on the display, below the AM/PM
+  indicator — gets stronger under this framing, not weaker.
+
+### The shared line, measured — it is the binding width requirement
+
+The owner's design note:
+
+> start and end times could share a line with duration on any given card if both are enabled for
+> display. That combination may become the minimum character width to accommodate
+
+**It does, and it is the first concrete reason the panel's width lever has a target number.** Measured
+against the shipped constants (`PANEL_WIDTH_UNITS` 180, body 21.2576, `PANEL_CARD_PADDING.x` 6,
+`PANEL_CARD_STROKE` 1.7006, `SWATCH_RESERVE` 12 — text width 154.30, budget 12 characters):
+
+| trailing line | width needed | at 180 |
+| --- | --- | --- |
+| `09:00–09:45` alone (11 ch) | 140.3 | **fits**, one character spare |
+| `45 min` alone (6 ch) | 76.5 | fits |
+| **`09:00–09:45 45 min` shared (18 ch)** | **229.6** | **overruns by 75.3** |
+| `09:00–09:45 · 45 min`, separator (20 ch) | 255.1 | overruns by 100.8 |
+
+So the shared line cannot be drawn at the shipped width at all. What it would take:
+
+| duration face on the shared line | panel width needed | vs #174's 270.7 ceiling |
+| --- | --- | --- |
+| 1.0× (21.26) | **255.3** | inside, 15.4 to spare |
+| **0.8× (17.01)** | **240.0** | inside, 30.7 to spare |
+| 0.7× (14.88) | 232.3 | inside, 38.4 to spare |
+
+**This reverses #144's finding on this surface, and that is worth flagging because #144 says the
+opposite.** #144 measured a smaller duration face as buying *zero characters* on floating labels,
+because the budget floors to an integer and the gain lands inside one character. On the panel's shared
+line it is not buying characters against a fixed width — it is setting the width the panel must have,
+and 0.8× buys **15.3 units of panel** against 1.0×. #144's "built for the vertical saving and the
+visual distinction, not for width" conclusion holds for labels and does not hold here.
+
+### The alternative, priced: separate lines cost height instead
+
+If the two channels get a line each rather than sharing one, the panel keeps its 180 units and pays in
+cards. Card height is `lines × 21.2576 × 1.4 + 2 × 3`, against a usable column of 598.30 with 5-unit
+gaps:
+
+| card | height | cards that fit |
+| --- | --- | --- |
+| two-line title only | 65.5 | 8 |
+| + one trailing line | 95.3 | **6** |
+| **+ two trailing lines** | **125.0** | **4** |
+| + two trailing, duration at 0.8× | 119.1 | 4 |
+| + two trailing, duration at 0.7× | 116.1 | 4 |
+
+**Showing both channels on separate lines costs a third of the column — 6 cards to 4 — and a smaller
+duration face recovers none of it** (4 either way, the same integer-flooring that defeats it on
+labels). So the trade is stark and neither side of it is free:
+
+- **Shared line:** keeps 6 cards, requires the panel at **232–255 units**.
+- **Separate lines:** keeps the panel at 180, drops to **4 cards**.
+
+Both stay inside #174's ceiling, and per that issue's knee analysis a panel up to 270.7 does not cost
+the labels their guaranteed 13 characters — only the widest 12-and-6 cards, already clamped on 16:10.
+**That materially weakens the earlier "hold the width lever for #138" position**: between 180 and
+270.7 the panel's growth is close to free, and the shared line is a reason to spend it that the width
+lever did not previously have.
+
+Unmeasured and the obvious next question: whether `09:00–09:45 45 min` reads as one line or as two
+crammed together at 1×, and whether the duration at 0.8× beside times at 1.0× reads as deliberate
+hierarchy or as a rendering fault. That is a looking question and neither table settles it.
+
 **The times line costs four of the eleven remaining events at 21.26.** A smaller face for the times
 only (the #144 shape) saves 8.76 units a card at 15, 11.56 at 13, 14.36 at 11 — and buys a seventh
 card only at an 11-unit times face.
@@ -317,9 +423,14 @@ line. That is the shape worth rendering first.
    it is new. Indents, rails and group cards are all paid for out of it.
 4. **What the times line displaces.** It costs four of eleven events at 21.26, and a countdown (B4)
    wants the same line.
-5. **Whether a times line sits under #178's durations switch or beside it** (#191). One slot, one
-   switch, two channels that answer different questions — and under the switch, a durations-off board
-   states no time anywhere in the panel.
+5. ~~**Whether a times line sits under #178's durations switch or beside it**~~ — **answered
+   2026-08-23: beside it.** Two switches; times are what make a panel card a schedule entry rather
+   than a name in a queue, and are not essential on arcs or floating labels. See "Answered by the
+   owner" above, which also reframes *why* the switches exist (pedagogical, not accessibility) and
+   prices the shared line at **232–255 units of panel** against separate lines' **6 cards → 4**.
+   What remains open from it is narrower: **whether the two channels share a line or take one
+   each** — a width cost against a card cost, both inside #174's ceiling, and a looking question at
+   1× either way.
 6. **#41's highlight slot**, if it must hold a group rather than a card.
 
 ## What would settle it
