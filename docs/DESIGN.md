@@ -136,7 +136,11 @@ runtime.
   either React or Svelte components.
 - Updates are manual and must be deliberate. The strategy: build the full tree once per data
   refresh, keep references to the three hand elements, and mutate only their `transform` on the
-  per-second tick. A period rollover (AM→PM) triggers a rebuild.
+  per-second tick. ~~A period rollover (AM→PM) triggers a rebuild.~~ **#25 removed that trigger
+  deliberately**: the window now moves continuously, so there is no rollover to key on. Arcs rebuild
+  on a calendar-minute change plus three finer triggers — a change in the elapsed count, a change in
+  which events the panel has named, and anything currently in progress (so a drain animates). See
+  `analog-clock.ts`, which carries the replacement and the reason.
 - Loses JSX's readability for nested markup. Mitigated by a small `svg(tag, attrs, children)`
   helper so builders read close to the TSX they replace.
 
@@ -176,7 +180,8 @@ for correctness.
 quota, and `google.script.run` round trips are slow enough (typically 0.5–2 s) to be worth
 avoiding on a hot path.
 
-**Decision.** The client polls `getEvents` every 5 minutes and on period rollover. The server
+**Decision.** The client polls `getEvents` every 5 minutes ~~and on period rollover~~ (**the rollover
+trigger went with #25, as in ADR 0004 — the poll is the interval alone**). The server
 memoises the response in `CacheService.getUserCache()` for 60 seconds, so a reload storm or a
 second open tab does not multiply calendar reads.
 
@@ -184,8 +189,14 @@ second open tab does not multiply calendar reads.
 - ~288 calendar reads per day. Comfortably inside quota.
 - Up to 5 minutes of staleness after an event is edited elsewhere. Acceptable for a wall
   display; a manual refresh affordance is cheap to add if it grates.
-- Failure states need designing — a stale-but-rendered dial is better than a blank one, so the
-  client should keep the last good payload and mark it visibly stale rather than clearing.
+- ~~Failure states need designing~~ — **shipped, in `src/client/schedule-status.ts`, and with a
+  distinction this ADR did not ask for.** A stale-but-rendered dial is better than a blank one, so
+  the client keeps the last good payload and marks it visibly stale rather than clearing. The state
+  is a four-way type — `loading | live | stale | unavailable` — whose central split is **never
+  loaded** versus **loaded and now failing**: the first has nothing to show and says so, the second
+  has a dial worth leaving up. On a repeated failure the status keeps the **original** failure time
+  rather than advancing it, so "stale since" answers *how long has this been wrong* rather than
+  *when did we last retry*, which is the question someone standing at the board is asking.
 
 ## ADR 0007 — Keep NDWC's CSS custom-property names
 
@@ -203,8 +214,19 @@ This project ships no Tailwind and no shadcn. `yuvomi-kiosk` chose to rename the
   removes a whole class of transcription error from the port.
 - The names read oddly outside shadcn — `--destructive` for the second hand is inherited
   vocabulary, not a description. Documented at the definition site rather than renamed.
-- A dark wall-display palette is the default; the token indirection leaves a light variant
-  available without touching the builders.
+- A dark wall-display palette is the default; ~~the token indirection leaves a light variant
+  available without touching the builders.~~ **No longer true, and #81 should not be planned on it.**
+  The indirection still carries *painting* — every colour reference in the ported markup is a
+  `var()`. But every contrast floor added since #27 measures against a **spelled-out hex**, because a
+  floor has to know the ground it is measured on and CSS variables are not readable from the geometry
+  (`src/shared/` compiles without the DOM lib, per ADR 0003). There are three: `BAND_BACKGROUND`,
+  `BAND_FOREGROUND` and `BLACK_TEXT` in `event-arc.ts`. A light variant therefore *does* touch the
+  builders — it has to re-derive those floors against the light ground, which is most of #81's work
+  and the reason it is not a stylesheet change.
+- **Six colour tokens ship, not the five this ADR names.** `--page: #0c0e12` was added beside the
+  shadcn five and is the ground the band is drawn on — the same value `BAND_BACKGROUND` hard-codes,
+  which is exactly the duplication the bullet above is about. (`--label-frame` is a seventh custom
+  property but a layout one, not a colour; it belongs to ADR 0009's frame.)
 
 ---
 
@@ -255,6 +277,23 @@ timer is the clear case: the timer is evidently present or absent, nothing else 
 reinterpreted, and no viewer can be misled by its appearance. Live controls of that kind are fine,
 and the timer's start, pause and stop are all of that kind.
 
+**Two buckets are not enough, and a shipped control already falls between them.** Applied cold, the
+test above puts `showEventDurations` (#178, shipped in #191) in the safe bucket — it removes text,
+and text is evidently there or not. That is the opposite of the truth, and the counter-example is
+already stated in the source that ships it: **an absent duration is indistinguishable from one that
+did not fit**, which is the display's own failure mode rather than a legible setting. The element is
+not self-describing, because its absence has two possible causes and the viewer cannot tell which.
+
+So the discriminator is not *added-or-removed* versus *reinterpreted*. It is whether **the absence is
+one a viewer can account for from the picture**:
+
+- An arc too small to hold text visibly has no room — the absence explains itself.
+- A card with room that simply lacks a duration reads as arbitrary, because to the viewer it *is*.
+
+Where a channel cannot be given to every element, prefer a setting that applies to all of them over a
+per-element negotiation that varies for reasons only the renderer knows — which is the rule #175 was
+reverted to establish, and #178 is its first application.
+
 **Revisit when** the pilot has real users, or as soon as anyone the top bar excludes is among them —
 whichever comes first.
 
@@ -303,9 +342,17 @@ after the panel**, and the panel is **180 units wide, on the right**.
   band-clearing card would sit 22.5 units (one line) to 96.1 units (four) above the frame — off the
   board. So this removes #98's collisions on the sides by construction and leaves them at the top and
   bottom, which is the mirror image of the ellipse's asymmetry.
+
+  **Three claims in that bullet are wrong, and the fourth amendment corrects them together**: the
+  16:10 penalty is 2 characters and not 5, "12 and 6 are unavailable" measures against the viewBox
+  rather than the frame that exists there, and the collisions on the sides are removed by the
+  *locus*, which is unbuilt — not by the margin, which shipped.
 - **180 is the smallest width that serves the panel's own justification.** It holds 10 characters a
   line at 26 units (**13 at the 21.2576-unit body the third amendment adopts**, 12 once #160's swatch
-  is paid), and on a 4 ft board 26 units is 53 mm — comfortable reading at 8 m by the
+  is paid — but see `card-swatch.ts`: one character *a line* is the per-line cost and not the whole
+  cost, because a title sitting on a wrap boundary buys a whole extra **line**, and over 251 cards
+  the shipped 8 + 4 reserve costs 37 wrapped lines against a narrower 4 + 3's 14), and on a 4 ft
+  board 26 units is 53 mm — comfortable reading at 8 m by the
   conventional distance/150 rule. That is the size at which the panel can carry the names of a
   three-deep cluster, whose arc titles render at 6.24 units, 12.7 mm, legible to about 2 m (#70).
   (**5.98 units** for a three-deep title that *wraps*, once the clearance cap binds — #90. Millimetres
@@ -324,6 +371,12 @@ after the panel**, and the panel is **180 units wide, on the right**.
   conclusion, is unaffected.)
 - The narrow-display fallback (#39 item 4) is unchanged and still needs designing: as the board
   approaches square the margin falls below the knee and the panel has to collapse or stack.
+  **Still true of the *designed* answer, and no longer true of the tree, which now has an
+  undesigned one**: below a measured threshold of **1.5513** content aspect the panel is *hidden
+  outright* — neither collapsed nor stacked — so a narrow board draws no agenda at all and #70's
+  names have nowhere to go there. That is a shipped behaviour nobody chose; #171 owns picking
+  between it, a collapse and a stack. Read "still needs designing" as "the tree took the third
+  option by default", not as "nothing happens yet".
 
 **Measured, not argued** — with one exception. Everything above is arithmetic over the dial's own
 constants, and per `CLAUDE.md` none of it is evidence of *legibility* until it is rendered at board
@@ -391,9 +444,15 @@ surface and the surface it exists to serve.
 
 **21.2576, not the 21.26 this amendment first wrote.** A lone arc's title is
 `roundCoord(75.92 × 0.28)` and `roundCoord` keeps four decimals, so 21.26 is a two-decimal shorthand
-that is 0.0024 units *above* the arc title — the one relationship the change exists to invert. The
-constant is now derived from `TITLE_FONT_SIZE_RATIO` rather than typed, and `agenda-panel.test.ts`
-asserts it against the size `computeArcTitleLayout` returns for the ring the dial actually draws.
+that is 0.0024 units *above* the arc title — the one relationship the change exists to invert.
+
+**The constant is a literal, and deliberately so — #194 reversed the derivation this amendment first
+described.** Written as `roundCoord(bandHeight * TITLE_FONT_SIZE_RATIO)` the expression is not
+elidable by esbuild, and it drags dial geometry plus `roundCoord` into the **server** bundle through
+`map-event.ts`'s barrel import — measured at +322 bytes of `Code.gs` for a value the server never
+reads. So `panel-layout.ts` types `21.2576` and `agenda-panel.test.ts` asserts it against the size
+`computeArcTitleLayout` returns for the ring the dial actually draws: the guard keeps the two in step
+without the expression crossing the bundle boundary. See Platform constraints for the general rule.
 
 Consequences, all of them gains except the last:
 
@@ -465,6 +524,47 @@ whose closest approach is exactly 292.000 at every line count, by construction. 
   generalises the ADR figure or it resolves #117, not both. `gap` is an open decision.
 - **It has no term for the board's outer limit.** The furthest card edge measures 444.1 against
   16:9's 443.3, and `gap` makes that worse unit for unit. `W` wants clamping against the board.
+
+**Fourth amendment — the margin the renderer is handed is smaller than every table above says,
+once the panel is drawn.** This is the correction with the most downstream reach in the document, and
+it is the one a reader is most likely to act on without noticing.
+
+The margin table above gives 234.5 on 16:9 and 172.1 on 16:10, and closes by saying the correction
+matters "for anyone reading 143.3 as the number the renderer is handed". Since #173 the host divides
+the **board row** rather than the viewport whenever the panel is up, because the frame on that side
+*is* the panel and granting more would grant a card permission to paint over the agenda:
+
+| | margin per side, no panel | **as handed, panel drawn** |
+| --- | --- | --- |
+| 16:9 | 234.5 | **183.2** |
+| 16:10 | 172.1 | **120.8** |
+
+`src/client/main.ts`'s own docstring states the transition — *"16:9 goes 234.5 → 183.2 and 16:10
+172.1 → 120.8, both still saturated"*. Both rows are correct about different boards: 234.5 / 172.1
+are the allocation, and are what a board below the panel threshold actually grants. **Neither is what
+the labels receive on a board that draws a panel, which is every board above 1.5513.**
+
+Nothing about guaranteed card width moves — 120.8 is still past the 75.4 knee, so labels keep their
+13 characters a line either way, which is why this shipped without anyone noticing. What moves is
+every figure *derived* from the margin:
+
+- **The 16:10 penalty on a band-clearing locus is 2 characters, not the 5 this ADR states and not the
+  0 the placement-fork brainstorm concluded.** At 120.8, `W = m + 8 = 128.8` gives 11 characters a
+  line against the circle's saturated 13. On 16:9 at 183.2 it is 17 — still a gain, still not free.
+  Both prior figures were computed at a no-panel grant.
+- **A band-clearing locus is not "unavailable" at 12 and 6.** Those 22.5-to-96.1-unit figures measure
+  how far the card sits past the **600-unit viewBox**, not above the frame — and `Styles.html` grants
+  `--label-frame: 7.3vmin`, **51.3 dial units**, precisely so a card may paint there. One- and
+  two-line cards (22.5, 47.1) fit inside it; three- and four-line ones (71.6, 96.1) do not. The
+  boundary is a line count, not a hard no.
+- **The margin alone does not remove #98's collisions on the sides.** That is true of the
+  band-clearing *locus* this ADR pairs with the margin, and the locus is unbuilt — `analog-clock.ts`
+  still draws the plain circle at 1.02 of the outer radius, and `gap` is still an open term (#117,
+  #138). The margin shipped; the clearance did not.
+
+**Any table computed from 234.5 or 172.1 for a board that draws a panel is stale**, including the
+band-clearing radii and the panel-leader geometry in `docs/brainstorms/2026-08-21-label-placement-fork.md`.
+Re-run them at 183.2 and 120.8 before briefing #138's spike.
 
 **Revisit when** the pilot board is up (#10) and the panel has been looked at from the back of the
 room, or if a target display falls outside 16:9–16:10.
@@ -632,15 +732,33 @@ not need. `ring-layout.ts`'s docstring describes itself as "greedy rather than o
 not minimise ring count"; that self-assessment is too modest, and the comment should be
 corrected on the way across rather than copied.
 
-Two real gaps remain, and both get **worse** in this project than in either predecessor —
-because the MVP targets a single calendar, and a single busy calendar is exactly the input that
-produces deep overlap:
+**Both "remaining gaps" below are closed, and the paragraph above is stale in a third way** — this
+section is the oldest text in the document and describes the port's starting point, not the tree.
+Kept because the reasoning is still the best statement of *why* the design is what it is; read the
+three corrections first:
+
+- **`AnalogClock` does not split the band into `ringCount` equal rings.** It splits into
+  `min(clusterDepth, maxRings)`, per *cluster* rather than dial-wide, and `maxRings` is derived from
+  `MIN_RING_THICKNESS_RATIO` so a ring can never be thinner than it can carry. A lone arc gets the
+  whole band; a four-deep cluster elsewhere on the dial does not thin it.
+- **Gap 1 is closed.** The cap exists, and events past it share the innermost ring — see below.
+- **Gap 2 is closed.** Ring assignment is fed true angles; only drawing uses the widened ones.
+
+The two gaps as originally written, with what actually happened:
 
 **1. Ring count is unbounded, and thin rings cannot carry their content.** With `arcThickness`
 at 48 px and five mutually-overlapping events, each ring is about 7 px. The emoji alone wants
 ~26 px and the title another ~18 px. NDWC never hit this because its dial aggregated sparse
 calendars. Nothing in the current code caps ring count or degrades gracefully when a ring is too
 thin to render what it is holding. Needs a cap plus an overflow affordance — see the plan.
+
+  **Half shipped.** The cap is `Math.min(assigned.clusterDepth, maxRings)`, with `maxRings` derived
+  from `MIN_RING_THICKNESS_RATIO` so no ring is opened that cannot carry its content. **The overflow
+  affordance was never built**, and the shipped behaviour is a different answer: events past the cap
+  **share the innermost ring and are drawn overlapping each other**. That is defensible — a count or
+  a collapsed marker costs the ring the very text it is trying to preserve — but it is a decision,
+  not the affordance this paragraph asks for, and it is recorded only as a source comment. Whether it
+  stands is the unfinished half of W9 item 2.
 
 **2. `MIN_ARC_DEGREES` manufactures overlaps that do not exist.** `calculateArcAngles()` widens
 any arc narrower than 7.5° (≈15 minutes) so short events stay visible. Ring assignment then runs
@@ -651,8 +769,13 @@ all. Short back-to-back events are common on a single personal calendar. The fix
 rings from true event times and use widened angles only for drawing, which decouples the two
 concerns cleanly.
 
-Neither is a design flaw in the inherited algorithm; both are consequences of pointing it at a
-denser input than it was built for.
+  **Shipped, exactly as proposed.** `assignRings` is handed true angles and the widened ones are used
+  for drawing alone, so a 09:00–09:05 event no longer pushes a 09:06 one inward. The decoupling is
+  the reason the cluster-depth cap above can be trusted: depth is a fact about the calendar rather
+  than an artefact of `MIN_ARC_DEGREES`.
+
+Neither is a design flaw in the inherited algorithm; both were consequences of pointing it at a
+denser input than it was built for, and both have since been answered.
 
 ---
 
@@ -693,15 +816,30 @@ elements get created changes.
   ordinal (`"1"`–`"11"`) or `""` when the event inherits the calendar default, so the adapter
   needs a Google-palette ordinal→hex table plus `Calendar.getColor()` as the final fallback.
   NDWC resolved this from a Tailwind enum that does not exist here.
-- Web app deployment mode. "Execute as me / access limited to me" is the safe option, but it
-  requires the display to hold a logged-in Google session; "execute as me / anyone with the link"
-  avoids that and leaks the calendar to anyone holding the URL. The classroom setting raises the
-  stakes on the second option considerably — a school calendar may carry student names, which
-  makes a shared URL a different class of problem than it would be in a kitchen.
+- ~~Web app deployment mode.~~ **Closed — and by an option this list never weighed.** Left here
+  rather than deleted, because the reasoning below was the live question for long enough that a
+  reader may remember it, and because acting on it now would change whose calendar the board shows.
 
-  Narrowed, not yet closed: the smart boards at the intended pilot school appear to be Android TV
-  or ChromeOS based, so a persistent per-device session is plausible rather than out of the
-  question. That points at the safe option. **Needs verifying against the actual hardware** before
-  it is treated as settled.
+  The question was posed as a choice between *"execute as me / access limited to me"* — called the
+  safe option, at the cost of the display holding a logged-in Google session — and *"execute as me
+  / anyone with the link"*, which avoids that and leaks the calendar to anyone holding the URL. In
+  a classroom that second option is a different class of problem than in a kitchen, since a school
+  calendar may carry student names.
+
+  **What ships is neither.** `static/appsscript.json` declares `"executeAs": "USER_ACCESSING"` with
+  `"access": "ANYONE"`, and the server reads `CalendarApp.getDefaultCalendar()` — so the app runs as
+  **whoever is looking, and shows that person their own calendar**. `src/server/calendar.ts` states
+  the consequence: *"each visitor's own calendar and needs no configuration — nothing to share,
+  nothing to set, and no way for one visitor to read another's."*
+
+  That dominates both options rather than compromising between them. There is no shared URL to leak,
+  because the URL grants a viewer nothing but their own data; the "student names" hazard cannot
+  arise. It keeps option 1's one real cost — `ANYONE` means any *signed-in* Google account, so the
+  wall device still needs a persistent session, and the board shows whichever account is signed in
+  on it. That is the requirement #10 has to satisfy on the pilot hardware, and the only part of the
+  paragraph above that survives.
+
+  **Do not "fix" the manifest toward the safe option.** Setting `executeAs` to the owner would
+  silently swap every viewer's calendar for the owner's — a behaviour change, not a hardening.
 - Whether the all-day aside (NDWC never built it; yuvomi-kiosk#58) belongs in the MVP or
   immediately after.
