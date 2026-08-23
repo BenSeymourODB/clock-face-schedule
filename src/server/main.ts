@@ -23,13 +23,18 @@ export { resetPreferences, savePreferences } from "./preferences";
  * itself on screen so a display left in one cannot be mistaken for a real one.
  *
  * All of them need to be checkable on the device rather than on a workstation, which is why they
- * are URL parameters and not a build flag. `?scale=1h` selects the 1-hour dial (#34) the same way.
+ * are URL parameters and not a build flag. `?scale=1h` selects the 1-hour dial (#34) the same way,
+ * and `?durations=0` turns off every duration on the display (#178) — the one parameter here that
+ * overrides a *stored* preference, which is what makes a teacher's setting checkable on the wall it
+ * runs on rather than only on a workstation.
  *
- * `now` and `scale` are both passed through **as authored**: the browser is authoritative for time
- * (ADR 0005) and the client owns the geometry (ADR 0003), so the server decides neither what
- * "04:15" means nor what "1h" means. Templated with `<?= ?>` rather than `<?!= ?>`, since they
- * arrive from the URL. Leaving `scale` unparsed here also keeps the geometry layer's emoji tables
- * out of the server bundle, which is the trap `shared/clock/index.ts` records.
+ * `now`, `scale` and `durations` are all passed through **as authored**: the browser is
+ * authoritative for time (ADR 0005) and the client owns the geometry (ADR 0003), so the server
+ * decides neither what "04:15" means nor what "1h" means. Templated with `<?= ?>` rather than
+ * `<?!= ?>`, since they arrive from the URL. Leaving `scale` unparsed here also keeps the geometry
+ * layer's emoji tables out of the server bundle, which is the trap `shared/clock/index.ts` records;
+ * `durations` is left to the client so the URL form and the stored form share one parser and cannot
+ * drift.
  *
  * The viewer's stored preferences ride along in the same template (#31). Reading them here costs
  * nothing — `doGet` is already running server-side — where fetching them over `google.script.run`
@@ -47,6 +52,7 @@ export function doGet(event?: GoogleAppsScript.Events.DoGet): GoogleAppsScript.H
   template["pinnedNow"] = event?.parameter?.["now"] ?? "";
   template["freezeClock"] = event?.parameter?.["freeze"] === "1" ? "1" : "";
   template["scaleParam"] = event?.parameter?.["scale"] ?? "";
+  template["durationsParam"] = event?.parameter?.["durations"] ?? "";
   template["preferences"] = preferencesWire();
   template["deploymentPreferences"] = deploymentPreferencesWire();
 

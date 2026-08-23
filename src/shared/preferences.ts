@@ -95,8 +95,55 @@ export const PREFERENCES = {
    * one band per minute, and a ceiling of twelve hours because that is the dial's own period. The
    * class-timer brainstorm's presets (1/2/5/10/20 minutes) all sit inside it.
    */
-  timerDurationSeconds: wholeNumber(5 * MINUTE_SECONDS, MINUTE_SECONDS, TWELVE_HOURS_SECONDS)
+  timerDurationSeconds: wholeNumber(5 * MINUTE_SECONDS, MINUTE_SECONDS, TWELVE_HOURS_SECONDS),
+
+  /**
+   * Whether any surface states how long an event is (#178).
+   *
+   * One setting rather than four gates. Today an arc states a length when `fitDurationLine` clears
+   * it, a floating card when the collision pass can afford the line and the panel card always — so
+   * 16.6% of arcs state one on the band, 36.6% state one *anywhere on the dial* once their cards are
+   * counted, and **every one of 192 pinned states is mixed**. A viewer cannot recover that rule,
+   * because there is no rule: there are four pieces of geometry running out of room.
+   *
+   * `true`, so an unconfigured board changes nothing but the consistency. That direction matters
+   * here more than for any other key: ADR 0008's hazard is a mode nobody knows was changed, and an
+   * absent duration is indistinguishable from one that did not fit — which is the display's own
+   * defect seen from the other side. The visible switch waits on the top bar (#85, #47); until then
+   * `?durations=` is the control, and it speaks this definition's own alphabet rather than a second
+   * one.
+   */
+  showEventDurations: flag(true)
 };
+
+/**
+ * Resolve a preference the way a URL parameter overrides a stored value (#178): the first `layer`
+ * that parses wins, and if none does the `stored` value stands.
+ *
+ * This is the inverse of how `chosenScale` treats `?scale=`, and deliberately. There the parameter
+ * *is* the setting, so a stored/templated value winning stops a deployed URL being overridden by the
+ * sandbox iframe's own query string. Here the setting is the stored preference and the parameter is
+ * a teacher checking an override on the device — so the parameter has to win, but only where it is
+ * present and valid. An empty or unrecognised layer falls *through* to `stored` rather than being
+ * repaired, which is `resolvePreferences`' own rule applied to one preference across raw layers.
+ *
+ * Pure and shared so the precedence is asserted once, in node, rather than inside the entry file
+ * that reads `window.location` — the one place it cannot be unit-tested.
+ */
+export function resolveOverride<T>(
+  definition: PreferenceDefinition<T>,
+  layers: readonly (string | null | undefined)[],
+  stored: T
+): T {
+  for (const raw of layers) {
+    // Empty is absent: a stripped `data-durations="<?= durationsParam ?>"` leaves the attribute.
+    if (raw === undefined || raw === null || raw === "") continue;
+
+    const parsed = definition.parse(raw);
+    if (parsed !== undefined) return parsed;
+  }
+  return stored;
+}
 
 type PreferenceValue<D> = D extends PreferenceDefinition<infer T> ? T : never;
 

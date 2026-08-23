@@ -213,8 +213,16 @@ export interface AgendaEntry {
  *
  * Ties break on id so the order is total: two events starting in the same minute must not swap
  * places between renders on a wall left up for weeks.
+ *
+ * `showDurations` is the panel's link of #178's chain: with it off no card carries a trailing line,
+ * so the column is one line shorter per card and consistent with a dial that is also stating none.
+ * Defaulted on, so a caller with no opinion — every existing spec — keeps the shipped column.
  */
-export function agendaEntries(events: ClockEventInput[], now: Date): AgendaEntry[] {
+export function agendaEntries(
+  events: ClockEventInput[],
+  now: Date,
+  showDurations = true
+): AgendaEntry[] {
   const nowMs = now.getTime();
 
   return events
@@ -235,7 +243,8 @@ export function agendaEntries(events: ClockEventInput[], now: Date): AgendaEntry
         color: parsed.color,
         // Empty under a minute, which `fitLabelToWidth` would treat as a zero-width line rather
         // than as absent — the same guard `analog-clock.ts` applies to a floating label's duration.
-        trailing: formatEventDuration(minutes) || undefined
+        // Absent for the whole panel when durations are off (#178).
+        trailing: showDurations ? formatEventDuration(minutes) || undefined : undefined
       };
     });
 }

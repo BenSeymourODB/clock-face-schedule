@@ -96,6 +96,28 @@ describe("the page template", () => {
     expect(new Set(values).size).toBe(2);
   });
 
+  it("templates the durations parameter onto the mount element", () => {
+    // #178's switch, checkable on the device. `chosenDurations` reads this attribute and nothing
+    // else, so the hyphenated name is what has to match across the boundary.
+    expect(TEMPLATE).toContain('data-durations="<?= durationsParam ?>"');
+  });
+
+  it("emits the durations attribute whatever the conditions evaluate to", () => {
+    expect(withoutGuardedRegions(TEMPLATE)).toContain("data-durations=");
+  });
+
+  it("leaves the durations attribute empty once scriptlets are stripped", () => {
+    // Worse here than for the other templated values: this attribute overrides a stored preference,
+    // so a stripped value the client read as anything but "the URL said nothing" would make every
+    // preview — and every real load with no `?durations=` — show a dial the viewer did not ask for.
+    expect(TEMPLATE.replace(SCRIPTLET, "")).toContain('data-durations=""');
+  });
+
+  it("escapes the durations value rather than printing it raw", () => {
+    // It arrives from the URL, which is the same reason `now` and `scale` are escaped.
+    expect(TEMPLATE).not.toContain("<?!= durationsParam");
+  });
+
   it("keeps scriptlet delimiters out of its comments", () => {
     // HtmlService compiles `<? … ?>` wherever it appears: it does not parse HTML, so a comment is
     // not a comment to it. A delimiter written inside one as illustration is compiled as code —

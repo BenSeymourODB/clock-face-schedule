@@ -122,13 +122,13 @@ describe("reading", () => {
 describe("the wire form doGet templates", () => {
   it("is the encoded resolved set", () => {
     expect(preferencesWire(from(stores({ "pref.showSeconds": "0" })))).toBe(
-      "showSeconds=0;timerMuted=0;timerDurationSeconds=300"
+      "showSeconds=0;timerMuted=0;timerDurationSeconds=300;showEventDurations=1"
     );
   });
 
   it("is the encoded defaults when nothing is stored", () => {
     expect(preferencesWire(from(stores()))).toBe(
-      "showSeconds=1;timerMuted=0;timerDurationSeconds=300"
+      "showSeconds=1;timerMuted=0;timerDurationSeconds=300;showEventDurations=1"
     );
   });
 });
@@ -141,13 +141,13 @@ describe("the wire form doGet templates", () => {
 describe("the deployment's own wire form", () => {
   it("is the encoded defaults when nothing is stored anywhere", () => {
     expect(deploymentPreferencesWire(from(stores()))).toBe(
-      "showSeconds=1;timerMuted=0;timerDurationSeconds=300"
+      "showSeconds=1;timerMuted=0;timerDurationSeconds=300;showEventDurations=1"
     );
   });
 
   it("takes the deployment's value from the script store", () => {
     expect(deploymentPreferencesWire(from(stores({}, { "pref.showSeconds": "0" })))).toBe(
-      "showSeconds=0;timerMuted=0;timerDurationSeconds=300"
+      "showSeconds=0;timerMuted=0;timerDurationSeconds=300;showEventDurations=1"
     );
   });
 
@@ -286,7 +286,9 @@ describe("saving", () => {
     const live = stores({ "pref.showSeconds": "0" });
     const batched = vi.spyOn(live.user, "setProperties");
 
-    expect(savePreferences("", from(live))).toBe("showSeconds=0;timerMuted=0;timerDurationSeconds=300");
+    expect(savePreferences("", from(live))).toBe(
+      "showSeconds=0;timerMuted=0;timerDurationSeconds=300;showEventDurations=1"
+    );
     expect(batched).not.toHaveBeenCalled();
   });
 
