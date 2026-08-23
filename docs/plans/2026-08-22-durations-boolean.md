@@ -47,7 +47,16 @@ Off also buys room rather than merely removing text, which is worth measuring ra
 - every floating card is cleared against one line fewer, because `fitLabelToClearedWidth` starts at
   `maxLines + 1` whenever a trailing line is on offer, so a card that offers a duration is charged
   for it whether or not it draws one (#183's mechanism, arriving here as a benefit);
-- the panel card drops its trailing line, freeing a line of the column's 26-unit body.
+- the panel card drops its trailing line, freeing a line of the column's body — 21.2576 units since
+  #190 derived it from the arc-title size, not the literal 26 this plan was first measured against.
+
+Freed room is not the same as another card, and which one you get depends on what the column has
+left to admit. Measured at 1920×1080 on this branch's head: at `?now=23:30&freeze=1` off takes the
+column from 6 cards to 10, leaving 17.98 units of tail; at `?now=05:00&freeze=1` it takes it from 7
+to 7 and leaves **229.54 units empty**, because the fixture supplies only 7 entries that have not
+ended and the column already holds all of them. #190's smaller body had already bought that pin's
+room, so the switch has none left to buy there — the benefit is real where supply exceeds the
+column, and invisible where it does not.
 
 ## The shape
 
