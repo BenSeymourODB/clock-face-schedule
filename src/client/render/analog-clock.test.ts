@@ -766,6 +766,127 @@ describe("analogClock", () => {
     });
   });
 
+  /**
+   * #172 — a card whose event the panel already names, and which is landing on another card, is
+   * dropped rather than resolved. The name is not lost: it is in the column at 21.2576 units on a
+   * plain ground, against the 17.52 the card would have given it on the band.
+   *
+   * The pure rule is tested at `labelsDischargedByPanel`; these assert the dial calls it, that it
+   * calls it at the right *moment*, and the one property no unit test of the rule can see — that a
+   * suppressed card comes back when the panel stops naming its event.
+   */
+  describe("labels the agenda panel already names", () => {
+    const cardIds = (element: SVGSVGElement) =>
+      [...element.querySelectorAll('[data-testid^="floating-label-rect-"]')]
+        .map((node) => node.getAttribute("data-testid")?.replace("floating-label-rect-", "") ?? "")
+        .sort();
+
+    it("drops a colliding card the panel names, and keeps the rest of the pile", () => {
+      const named = new Set(["early"]);
+      const clock = build(pile, { namedElsewhere: () => named });
+
+      expect(cardIds(clock.element)).toEqual(["late", "middle"]);
+    });
+
+    it("keeps every card when no panel is up", () => {
+      // The safe direction, and a real board: #171 has the panel vanishing as the display approaches
+      // square, and there the card is the only thing naming its arc.
+      expect(cardIds(build(pile, { namedElsewhere: () => new Set() }).element)).toEqual([
+        "early",
+        "late",
+        "middle",
+      ]);
+      expect(cardIds(build(pile).element)).toEqual(["early", "late", "middle"]);
+    });
+
+    it("keeps a card the panel names when it is colliding with nothing", () => {
+      // Suppressing unconditionally would take this one too. Measured over 96 pins it would take 66
+      // cards against this rule's 25 and clear exactly the same 20 band covers — the 41 it keeps
+      // were contributing none of them, because a card in no collision covers nothing.
+      const spread = [
+        input("morning", 2, 3, { title: LONG_TITLE }),
+        input("evening", 8, 9, { title: LONG_TITLE }),
+      ];
+      const clock = build(spread, { namedElsewhere: () => new Set(["morning", "evening"]) });
+
+      expect(cardIds(clock.element)).toEqual(["evening", "morning"]);
+    });
+
+    /**
+     * **The race the rule would otherwise open, and the reason the panel's set is a rebuild
+     * trigger.** The dial rebuilds on a calendar minute, on an event ending, and every tick while
+     * anything is in progress. The panel rebuilds when its *column* changes — a trigger none of
+     * those cover, since the column holds only what fits and an event entering the top of it can
+     * push the last one out with nothing on the band changing at all.
+     *
+     * Without this, a card suppressed because the panel named its event would stay suppressed after
+     * the panel dropped the row, and the event would be named **nowhere** — #146's defect arriving
+     * as a race rather than as a policy. The tick below is inside the same calendar minute and after
+     * every event in the pile has ended, so the set is the *only* thing that has changed.
+     */
+    it("brings a suppressed card back when the panel stops naming its event", () => {
+      let named = new Set(["early"]);
+      const clock = build(pile, { namedElsewhere: () => named });
+      expect(cardIds(clock.element)).toEqual(["late", "middle"]);
+
+      named = new Set();
+      clock.setTime(new Date(MORNING.getTime() + 30_000));
+
+      expect(cardIds(clock.element)).toEqual(["early", "late", "middle"]);
+    });
+
+    /**
+     * The mirror of the above, and the reason the key is about membership rather than order: a tick
+     * that changes neither the minute nor the column must still not rebuild, or the dial is
+     * reconstructing its whole tree every second on a device meant to run for weeks.
+     */
+    it("does not rebuild for a tick where the panel's set is unchanged", () => {
+      const named = new Set(["early"]);
+      const clock = build([input("a", 2, 4)], { namedElsewhere: () => named });
+      const arc = clock.element.querySelector('path[data-testid="event-arc-a"]');
+
+      clock.setTime(new Date(MORNING.getTime() + 30_000));
+
+      expect(clock.element.querySelector('path[data-testid="event-arc-a"]')).toBe(arc);
+    });
+
+    /**
+     * Suppression runs on the cards' *natural* rects, before `planOptionalLines` decides duration
+     * lines — which is what makes the relief free rather than retrospective. Measured after the
+     * resolver only 6 of 251 cards still overlap, because it has already paid for the rest.
+     *
+     * Asserted through the resolver's own output: with the pile's third card gone the survivors are
+     * far enough apart to afford the duration lines the full pile makes them decline.
+     */
+    it("hands the duration pass a dial the suppressed card is already out of", () => {
+      // Which cards kept their duration line, by id — read off the rendered text rather than
+      // counted, because a count cannot tell "three cards, one silent" from "two cards, both
+      // speaking" and those are the two states this is about.
+      const withDuration = (element: SVGSVGElement) =>
+        [...element.querySelectorAll('[data-testid^="floating-label-text-"]')]
+          .filter((node) => node.textContent === "24 min")
+          .map(
+            (node) =>
+              node
+                .getAttribute("data-testid")
+                ?.replace("floating-label-text-", "")
+                .replace(/-\d+$/, "") ?? ""
+          )
+          .sort();
+
+      const full = build(pile, { namedElsewhere: () => new Set() }).element;
+      const relieved = build(pile, { namedElsewhere: () => new Set(["early"]) }).element;
+
+      // Three piled cards cannot all afford the line — `planOptionalLines` makes one go without,
+      // and on this fixture it is `late`, whose title then wraps 2 → 2 at a different width.
+      expect(withDuration(full)).toEqual(["early", "middle"]);
+
+      // With the panel-named card out before the pass runs, both survivors keep theirs. That is the
+      // relief being free: no card gave up an event's length to buy another card room.
+      expect(withDuration(relieved)).toEqual(["late", "middle"]);
+    });
+  });
+
   describe("ticking", () => {
     it("re-points the hands on every tick", () => {
       const clock = build([], { showSeconds: true });
