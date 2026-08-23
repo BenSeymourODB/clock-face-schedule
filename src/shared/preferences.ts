@@ -102,8 +102,9 @@ export const PREFERENCES = {
    *
    * One setting rather than four gates. Today an arc states a length when `fitDurationLine` clears
    * it, a floating card when the collision pass can afford the line and the panel card always — so
-   * 36.6% of arcs state one and **every one of 192 pinned states is mixed**. A viewer cannot recover
-   * that rule, because there is no rule: there are four pieces of geometry running out of room.
+   * 16.6% of arcs state one on the band, 36.6% state one *anywhere on the dial* once their cards are
+   * counted, and **every one of 192 pinned states is mixed**. A viewer cannot recover that rule,
+   * because there is no rule: there are four pieces of geometry running out of room.
    *
    * `true`, so an unconfigured board changes nothing but the consistency. That direction matters
    * here more than for any other key: ADR 0008's hazard is a mode nobody knows was changed, and an
