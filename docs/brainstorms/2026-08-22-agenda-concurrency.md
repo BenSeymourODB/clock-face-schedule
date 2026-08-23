@@ -121,6 +121,17 @@ fixture at the unpinned pin, with a real times line in place of the duration:
 | 17.52 | 8 | 8 of 8 | 11 |
 | 15.00 | 9 | 9 of 9 | 11 |
 
+**The last column stopped being hypothetical while this was open.** #191 shipped #178's one
+durations setting across every surface, and `agendaEntries` now takes `showDurations` — with it off,
+no panel card carries a trailing line and the column draws all eleven. So both ends of that table are
+states the app can actually be in today.
+
+That raises a question neither issue owns: **is a times line under the durations toggle, or beside
+it?** #178's chain is about *durations*, and a start-and-end time is a different channel answering a
+different question — but the panel now has exactly one trailing-line slot and one switch that empties
+it. If the times line lands under the switch, a board with durations off says nothing about when
+anything happens, which is the gap #169 exists to close.
+
 **The times line costs four of the eleven remaining events at 21.26.** A smaller face for the times
 only (the #144 shape) saves 8.76 units a card at 15, 11.56 at 13, 14.36 at 11 — and buys a seventh
 card only at an 11-unit times face.
@@ -306,7 +317,10 @@ line. That is the shape worth rendering first.
    it is new. Indents, rails and group cards are all paid for out of it.
 4. **What the times line displaces.** It costs four of eleven events at 21.26, and a countdown (B4)
    wants the same line.
-5. **#41's highlight slot**, if it must hold a group rather than a card.
+5. **Whether a times line sits under #178's durations switch or beside it** (#191). One slot, one
+   switch, two channels that answer different questions — and under the switch, a durations-off board
+   states no time anywhere in the panel.
+6. **#41's highlight slot**, if it must hold a group rather than a card.
 
 ## What would settle it
 
