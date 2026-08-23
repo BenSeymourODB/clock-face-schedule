@@ -279,6 +279,28 @@ describe('agendaEntries', () => {
     const [entry] = agendaEntries([event('a', 'Bell', 0, 0.4)], NOW);
     expect(entry.trailing).toBeUndefined();
   });
+
+  /**
+   * #178's panel link. With durations off no card states a length — the same absence a sub-minute
+   * event already produces, so the column is one line shorter per card rather than showing a mixed
+   * set. Asserted on an event that plainly *would* carry one (50 min), so this cannot pass by the
+   * duration being empty for another reason.
+   */
+  it('states no duration on any card when durations are off', () => {
+    const events = [event('a', 'Yoga', 0, 50), event('b', 'Assembly', 10, 55)];
+
+    for (const entry of agendaEntries(events, NOW, false)) {
+      expect(entry.trailing).toBeUndefined();
+    }
+  });
+
+  it('states the duration when durations are on, which is the default', () => {
+    const [byDefault] = agendaEntries([event('a', 'Yoga', 0, 50)], NOW);
+    const [explicit] = agendaEntries([event('a', 'Yoga', 0, 50)], NOW, true);
+
+    expect(byDefault.trailing).toBe('50 min');
+    expect(explicit.trailing).toBe('50 min');
+  });
 });
 
 describe('planAgendaCards', () => {
