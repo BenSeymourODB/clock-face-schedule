@@ -1,9 +1,13 @@
 # The panel's type lever — the agenda card's body drops to the arc-title size
 
-**Status:** done — shipped in #190
+**Status:** done — shipped in #190, with its review corrections in #194
 **Issue:** #174 (the type half only; the width half stays held for #138)
 **Docs:** `docs/DESIGN.md` ADR 0009, third amendment item 2 — already written, and this is what
 makes it true of the code
+
+> #190 merged before its review response landed, so the reversal recorded below — the constant being a
+> literal rather than a derived expression — describes #194 rather than #190. On `main` between the two,
+> `build/Code.gs` carries 322 bytes of dial geometry that ADR 0003 forbids.
 
 ## What ships
 
@@ -36,22 +40,44 @@ At 21.26 the panel is 0.0024 units **larger** than the lone arc title, which is 
 the change exists to invert. Setting the constant to the shorthand would be writing down the
 description of the thing instead of the thing, and leaving a `>` where a `≤` was asked for.
 
-So the constant is **derived rather than typed**: `roundCoord(PANEL_CARD_BAND_HEIGHT *
-TITLE_FONT_SIZE_RATIO)`, with `TITLE_FONT_SIZE_RATIO` imported from `arc-title-layout.ts` and only
-the band height restated. If the ratio ever moves, the panel follows it instead of drifting.
+### A literal, guarded by a test — not the expression
 
-### The band height is restated, and checked rather than trusted
+**This reversed under review, and the reason is worth keeping.** The first version wrote the constant
+as `roundCoord(LONE_ARC_BAND_HEIGHT * TITLE_FONT_SIZE_RATIO)`, on the reasoning that deriving it makes
+the panel follow the ratio instead of drifting from it. That is true and it is not worth what it costs:
+a call expression is **unshakeable by esbuild**, so it dragged `TITLE_FONT_SIZE_RATIO` — a pure
+dial-geometry ratio — plus `roundCoord` and the band height into the **server** bundle, by way of
+`map-event.ts` importing the `shared/clock` barrel. `build/Code.gs` went 13,845 → **14,167 bytes** of
+geometry the server has no business carrying, which is precisely what ADR 0003's split exists to
+prevent — the same split invoked two paragraphs up to justify restating the band height at all.
+`index.ts` already records this trap, from a top-level `new RegExp` that would not tree-shake.
 
-`75.92` is `(600/2 − EDGE_MARGIN) × ARC_BAND_RATIO` = `292 × 0.26`, and both of those constants live
-in `src/client/render/analog-clock.ts`. `src/shared/` may not reach `src/client/` — that split is the
-enforcement mechanism for ADR 0003 and is not to be relaxed for a convenience import.
+`/* @__PURE__ */` does not help; esbuild still emits it. So the constant is the literal **21.2576**,
+and `Code.gs` is byte-identical with base.
 
-This is the same situation `PANEL_CARD_PADDING` and `PANEL_CARD_STROKE` are already in, and it takes
-the same answer their comments describe: restate the number in `src/shared/`, and assert the
-restatement against the real thing in a client-side test. The assertion here is stronger than an
-equality against a re-derivation — it drives `computeArcTitleLayout` over the real lone-arc ring and
-asserts `PANEL_CARD_FONT_SIZE` equals the `titleFontSize` it returns. That is the *rendered* size, so
-a change to the ratio, the band, the edge margin or the clearance cap fails here.
+**Nothing is lost, because the guard was never the expression.** `agenda-panel.test.ts` drives
+`computeArcTitleLayout` over the real lone-arc ring and asserts `PANEL_CARD_FONT_SIZE` equals the
+`titleFontSize` it returns — the *rendered* size, so a change to the ratio, the band, the edge margin
+or the clearance cap fails there. That is strictly stronger than an expression, which can only stay
+consistent with itself. And it is the shape `PANEL_CARD_STROKE` in this same file has always used:
+literal `1.7006`, asserted against `cardStrokeWidth(...)`. Treating the two constants differently was
+the tell.
+
+### On the band height being restated
+
+`75.92` is `(600/2 − EDGE_MARGIN) × ARC_BAND_RATIO` = `292 × 0.26`, and both constants live in
+`src/client/render/analog-clock.ts`, which `src/shared/` may not import — verified rather than assumed:
+adding the import fails `tsc -p tsconfig.server.json` with 13 `Cannot find name 'SVGSVGElement' /
+'document'` errors, because the server config has no DOM lib.
+
+Calling that *unavoidable* would be too strong, though, and the untaken alternative should be named:
+the three numbers involved (`DIAL_VIEWBOX_SIZE`, `EDGE_MARGIN`, `ARC_BAND_RATIO`) are pure viewBox
+constants with no host types, and there is precedent for moving them — `PANEL_RESERVE_UNITS = 180`
+already lives in `src/shared/`. That is a larger refactor than a font size warrants, and it would
+touch the dial's own module, so it is deferred rather than rejected — **filed as #193**, which also
+carries the constraint any answer has to keep (a module-scope computation from those constants is what
+put geometry in the server bundle in the first place). With the literal it no longer buys anything
+here anyway.
 
 ## Every figure that moves
 
@@ -78,10 +104,12 @@ Two of those deserve calling out because they are not in #174's table:
   character at both sizes, so the shipped pairing is **9 → 12**. Both belong in the assertion, for
   the reason the existing test gives: so the *reason* the shipped figure is lower stays visible
   rather than the larger number drifting down unremarked.
-- **`PANEL_CARD_GAP` stays 5, and stays exactly at its ceiling** — but the count it is at the ceiling
-  *of* goes 5 → 6. At 21.2576 the ceiling keeping six tall cards is 5.3216, so 5 fits and 6 does not.
-  That is a lucky landing rather than a designed one, and the test should derive the count instead of
-  hard-coding the new 6 the way it hard-coded the old 5.
+- **`PANEL_CARD_GAP` stays 5, and stays exactly at its maximum** — but the count it is the maximum
+  *for* goes 5 → 6. At 21.2576 the ceiling keeping six tall cards is 5.3216, so 5 fits and 6 does not.
+  That is a lucky landing rather than a designed one. The test states it as the two counts
+  (`cardCount(3, gap) === 6` and `cardCount(3, gap + 1) < 6`) rather than against a computed ceiling:
+  deriving the count *from* the gap and then comparing the gap to that count's ceiling is circular —
+  the inequality is the same one twice, so the `gap <= ceiling` half could not fail for any gap at all.
 
 ## #169 flips from a constraint to a choice, and is not taken here
 
@@ -114,12 +142,18 @@ Per the decision comment and `CLAUDE.md`: **the table above is not evidence that
 the back of a room.** The type size is the one thing about this change that a screenshot can judge and
 a number cannot.
 
-- `?scale=1h&now=04:15&freeze=1` — #173's own argument for the panel: the four-deep cluster's titles
-  render at 6.24 units on the band and the panel names them. If the panel at 21.2576 stops being
-  obviously the more readable of the two surfaces, the type lever has gone too far and the width
-  lever is the fallback rather than a supplement.
-- `?now=03:00&freeze=1` — 6 panel cards, the fullest column, and the pin #172 measures as the worst
-  overlap with the floating labels. This is where the sixth card the change buys shows up.
+- `?scale=1h&now=04:15&freeze=1` — #173's own argument for the panel: a **three-deep** cluster whose
+  titles render at **6.2356** units on the band (5.9821 for the one that wraps) and the panel names all
+  three. If the panel at 21.2576 stops being obviously the more readable of the two surfaces, the type
+  lever has gone too far and the width lever is the fallback rather than a supplement.
+  **Not the four-deep cluster** — that one is on the 12-hour scale, where `?now=04:15` renders its
+  titles at 4.3578. Both pins make the point; conflating them is how "the panel names all four" got
+  written about a cluster of three.
+- `?now=03:00&freeze=1` — **7** panel cards, the fullest column, and the pin #172 measures as the worst
+  overlap with the floating labels. This is where the extra card the change buys shows up. (6 at
+  `08:30` and at the 1-hour pin; the *pure* three-line capacity is six, but a column of mixed one- and
+  two-line titles packs tighter than either pure case, which is why the rendered range is 6–7 and not
+  a flat 6.)
 - `?now=04:15&freeze=1` — the ordinary case.
 - Unpinned, which is what a board renders.
 

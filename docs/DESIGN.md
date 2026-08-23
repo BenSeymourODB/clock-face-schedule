@@ -411,8 +411,12 @@ rescue are at 21.2576 and below, so a panel at the arc-title size is still the m
 statement of an event's name anywhere on the display, and #70's argument for the panel survives
 intact.
 
-**Measured on the rendered page, not just derived** (#174) — 96 pins per board, both scales,
-`#status` hidden:
+**Measured on the rendered page, not just derived** (#174). Method, so it can be rerun: 48 pins
+(every half hour across 24 hours) × 2 scales = **96 rendered states per board**, `#status` hidden, at
+1920×1080 and 1920×1200. A card counts as ellipsized when any of its title lines ends in an ellipsis,
+counted per *card* rather than per line. The `at 26` column is a rebuilt bundle with both
+`PANEL_CARD_FONT_SIZE` and `PANEL_CARD_STROKE` at their old values — reverting the font size alone
+leaves the new 1.7006 stroke in place and does not reproduce the 571.64:
 
 | | at 26 | at 21.2576 |
 | --- | --- | --- |
@@ -426,13 +430,17 @@ identically, which follows from the panel being a fixed 180 units — the boards
 margin, not the panel's.
 
 `?scale=1h&now=04:15&freeze=1` is the pin that settles the looking question the arithmetic could not:
-the four-deep cluster's titles are illegible smudges on the band at 6.24 units and the panel names
-all four. The panel remains obviously the more readable of the two surfaces, which is the property
-#70 depends on.
+a **three-deep** cluster whose titles render at **6.2356 units** — 5.9821 for the one that wraps —
+against a panel that names all three. The panel remains obviously the more readable of the two
+surfaces, which is the property #70 depends on. (The fixture's **four-deep** cluster is on the 12-hour
+scale, where the same `?now=04:15` renders its titles at **4.3578**, and its worst arc — the wrapping
+`Swimming Group B Kit Check and Coach Handover` — at 3.2996. Both pins make the point; they are
+different clusters at different depths, and an earlier draft of this amendment conflated them.)
 
-**What it does not fix, and the width lever is the answer:** titles still ellipsize at 26.3%. Two
-cards at `?now=03:00&freeze=1` cut mid-word (`Staff Debrief a...`), and `Reading Circle an...` at the
-1-hour pin. The type lever cannot reach those — the column is 180 units wide.
+**What it does not fix, and the width lever is the answer:** titles still ellipsize at 26.3%. One card
+at `?now=03:00&freeze=1` cuts mid-word (`Staff Debrief a...`) and **two** do at the 1-hour pin
+(`Reading Circle an...` and `Assembly Notes and...`). The type lever cannot reach those — the column is
+180 units wide.
 
 **The width lever is deliberately not taken.** #174 prices a panel up to 270.7 and #177 wants the
 same units to grow a card rather than ellipsize its title — 21 titles a sweep truncate where the
