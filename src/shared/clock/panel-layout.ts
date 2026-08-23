@@ -9,11 +9,10 @@
  * Pure arithmetic over numbers the caller reads off the DOM — no host types, so `src/shared/`
  * compiles without the DOM lib (ADR 0003) and every figure here is checkable in node.
  */
-import { TITLE_FONT_SIZE_RATIO } from './arc-title-layout';
 import { SWATCH_RESERVE } from './card-swatch';
 import { formatEventDuration } from './duration';
 import { fitLabelToWidth } from './fit-label';
-import { combineTitleWithEmoji, parseEventTitle, roundCoord } from './clock-utils';
+import { combineTitleWithEmoji, parseEventTitle } from './clock-utils';
 import { PANEL_RESERVE_UNITS } from './label-margin';
 import type { ClockEventInput } from './types';
 
@@ -28,45 +27,40 @@ import type { ClockEventInput } from './types';
 export const PANEL_WIDTH_UNITS = PANEL_RESERVE_UNITS;
 
 /**
- * The band a lone arc gets — `(600 / 2 − EDGE_MARGIN) × ARC_BAND_RATIO` = `292 × 0.26`.
- *
- * Restated here for the same reason as the padding and the stroke below: both of those constants live
- * in `src/client/render/analog-clock.ts`, and `src/shared/` may not reach `src/client/` — that split
- * is the enforcement mechanism for ADR 0003 and is not to be relaxed for a convenience import.
- *
- * `agenda-panel.test.ts` asserts the size this derives against the one `computeArcTitleLayout`
- * actually returns for a lone arc, so the restatement is checked rather than trusted.
- */
-const LONE_ARC_BAND_HEIGHT = 75.92;
-
-/**
- * Card body size: **the size a lone arc's title renders at** (#174, ADR 0009's third amendment).
+ * Card body size: **the size a lone arc's title renders at** — `roundCoord(75.92 × 0.28)`, where
+ * 75.92 is `(600 / 2 − EDGE_MARGIN) × ARC_BAND_RATIO` (#174, ADR 0009's third amendment).
  *
  * ADR 0009 specified 26, and the panel that shipped at it was the *second-loudest text on the
  * display* — above every arc title and above the floating-label cards it shares its styling with,
  * which inverts the relationship between a surface and the surface it exists to serve. The owner's
  * constraint is a `never`: the panel's type may not exceed the type on a non-stacked arc.
  *
- * Derived rather than typed, and that is not fussiness. Every document in this repo writes the lone
- * arc title size as the two-decimal **21.26** — this ADR amendment, `arc-title-layout.ts`'s own
- * comment, #174's tables — but `roundCoord` keeps four decimals, so what the dial renders is
- * **21.2576**. Typing the shorthand would put the panel 0.0024 units *above* the arc title, which is
- * the one relationship this change exists to invert. Deriving it also means a change to the ratio
- * moves the panel with it instead of leaving the two to drift.
+ * **21.2576 and not the 21.26 every document here writes.** The ADR amendment, `arc-title-layout.ts`'s
+ * own comment and #174's tables all use the two-decimal shorthand, but `roundCoord` keeps four, so
+ * 21.26 sits 0.0024 units *above* the arc title — the one relationship this change exists to invert.
  *
- * What it costs, and it is the only entry in the table that is a cost: reading distance goes from
- * 6.77 m to **5.53 m** by the distance/150 convention. #70's argument for the panel existing survives
- * it — the arc titles the panel rescues are 6.24 units in a three-deep cluster, about 1.1 m, so the
- * panel is still by a wide margin the most readable statement of an event's name anywhere on the
- * display. What it buys, at the shipped 180-unit column: **13 characters a line before #160's swatch
- * and 12 after it** (from 10 and 9), **six three-line cards** (from five) and eight two-line ones
- * (from seven), and it takes `HH:MM–HH:MM` from unaffordable to affordable — which is #169's choice
- * to make, not this constant's.
+ * **A literal rather than the expression, and that is not laziness.** Writing it as
+ * `roundCoord(bandHeight * TITLE_FONT_SIZE_RATIO)` is unshakeable by esbuild, so it drags
+ * `TITLE_FONT_SIZE_RATIO` — a pure dial-geometry ratio — plus `roundCoord` into the **server** bundle
+ * through `map-event.ts`'s import of the barrel, growing `Code.gs` by 322 bytes of geometry the
+ * server has no business carrying (ADR 0003). `index.ts` records the same trap from a regex that
+ * would not tree-shake. So this takes the shape `PANEL_CARD_STROKE` below already uses: a literal,
+ * with `agenda-panel.test.ts` asserting it against the size `computeArcTitleLayout` returns for the
+ * ring the dial actually draws. The guard is the test, not the expression.
+ *
+ * What it costs, and it is the only entry that is a cost: reading distance goes from 6.77 m to
+ * **5.53 m** by the distance/150 convention. #70's argument for the panel survives it — a three-deep
+ * cluster's titles are 6.24 units, about 1.1 m, so the panel is still by a wide margin the most
+ * readable statement of an event's name anywhere on the display. What it buys, at the shipped
+ * 180-unit column: **13 characters a line before #160's swatch and 12 after it** (from 10 and 9),
+ * **six three-line cards** (from five) and eight two-line ones (from seven), and it takes
+ * `HH:MM–HH:MM` from unaffordable to affordable — which is #169's choice to make, not this
+ * constant's.
  *
  * Per `CLAUDE.md` the arithmetic above is not evidence that it reads from the back of a room, which is
  * why the type lever was rendered and looked at before it landed rather than adopted from the table.
  */
-export const PANEL_CARD_FONT_SIZE = roundCoord(LONE_ARC_BAND_HEIGHT * TITLE_FONT_SIZE_RATIO);
+export const PANEL_CARD_FONT_SIZE = 21.2576;
 
 /**
  * Gap between cards — the largest whole number that keeps the tall-card count, floored.
@@ -76,9 +70,9 @@ export const PANEL_CARD_FONT_SIZE = roundCoord(LONE_ARC_BAND_HEIGHT * TITLE_FONT
  * units, so six of them leave `598.2994 − 571.6915 = 26.61` for five gaps: **5.3216 is the ceiling
  * and 5 is the value**. Six would hold only five cards.
  *
- * **5 survived #174's type lever by luck rather than design** — at 26 it was the ceiling that kept
+ * **5 survived #174's type lever by luck rather than design** — at 26 it was the maximum that kept
  * *five* cards, where the ceiling was 5.48. The count moved and the gap did not, so
- * `panel-layout.test.ts` derives the count it is at the ceiling of instead of restating it.
+ * `panel-layout.test.ts` asserts both counts directly rather than against a computed ceiling.
  */
 export const PANEL_CARD_GAP = 5;
 
@@ -275,8 +269,8 @@ export interface AgendaCardPlan {
  *
  * A card spans the panel's full width so the character budget is the one ADR 0009 costed — the
  * column sits inside `#display`'s frame, so there is no page edge for it to crowd. Height is the
- * card's own, so a one-line title takes a two-line card and the next one starts sooner: the five in
- * the ADR is the count of the *tall* case, not a fixed slot count.
+ * card's own, so a one-line title takes a two-line card and the next one starts sooner: the six in the
+ * amendment is the count of the *tall* case, not a fixed slot count.
  *
  * Stops at the first card that does not fit rather than skipping it for a shorter one behind. The
  * column is in time order and a panel that showed 14:00 above 15:30 above 14:30 would be worse than
@@ -343,12 +337,12 @@ export function planAgendaCards(
       ...entry,
       lines: fit.lines,
       // The card is placed at the column's full width rather than at `fit.width`, which is the
-      // widest line: a ragged right edge down a column of five reads as damage, where on a floating
+      // widest line: a ragged right edge down a column of six reads as damage, where on a floating
       // label a card no wider than its text is what keeps it off its neighbours.
       x: inset,
       y,
       // The column's width, not `fit.width`: the text was fitted inside the swatch's reserve, and a
-      // ragged right edge down a column of five reads as damage anyway.
+      // ragged right edge down a column of six reads as damage anyway.
       width: cardWidth,
       height: fit.height,
       didOverflow: fit.didOverflow

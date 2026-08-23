@@ -13,6 +13,7 @@ import {
 } from './panel-layout';
 import { SWATCH_RESERVE } from './card-swatch';
 import { LABEL_MARGIN_KNEE_UNITS, PANEL_RESERVE_UNITS } from './label-margin';
+import { visualWidth } from './emoji';
 import { charBudget } from './pack-lines';
 import type { ClockEventInput } from './types';
 
@@ -157,24 +158,21 @@ describe('the card geometry against ADR 0009', () => {
   });
 
   /**
-   * The gap is the largest whole number that keeps the count above, and being *at* the ceiling is the
-   * point rather than the value 5 being right: one more would cost a card.
+   * The gap is the largest whole number that keeps the tall-card count, and being *at* that maximum is
+   * the property — not the value 5 being right. One more unit costs a card.
    *
-   * **The count is derived, not typed.** The old form hard-coded the five this asserted the ceiling
-   * for, so when #174 took the body to 21.2576 it failed with an arithmetic mismatch rather than by
-   * naming what had changed — the ceiling for five became 30.47 and any gap under it passes, which
-   * says nothing. The count the gap actually holds is what the ceiling has to be measured against.
+   * **Stated as the two counts rather than against a computed ceiling**, because the ceiling form had a
+   * dead half. `cardCount(3, g) === n` is algebraically the same inequality as `g <= ceiling(n)`, so
+   * once the count was derived from the gap, asserting `gap <= ceiling` could not fail for any gap at
+   * all — the work was being done entirely by the `gap + 1` bound beside it. The pair below says the
+   * same thing with nothing vacuous in it, and it does not need the ceiling arithmetic to be right.
    *
-   * That 5 survived the change is luck, not design: at 21.2576 the ceiling keeping six is 5.3216.
+   * That 5 survived #174's type lever is luck, not design: at 26 it was the maximum that kept *five*
+   * cards, and at 21.2576 it is the maximum that keeps *six* (the ceiling being 5.3216).
    */
-  it('sets the gap at the ceiling for the tall-card count it holds', () => {
-    const tall = labelCardHeight(3, PANEL_CARD_FONT_SIZE, PANEL_CARD_PADDING.y);
-    const held = cardCount(3, PANEL_CARD_GAP);
-    const ceiling = (PANEL_HEIGHT - PANEL_CARD_STROKE - held * tall) / (held - 1);
-
-    expect(held).toBe(6);
-    expect(PANEL_CARD_GAP).toBeLessThanOrEqual(ceiling);
-    expect(PANEL_CARD_GAP + 1).toBeGreaterThan(ceiling);
+  it('sets the gap at the maximum that still keeps six tall cards', () => {
+    expect(cardCount(3, PANEL_CARD_GAP)).toBe(6);
+    expect(cardCount(3, PANEL_CARD_GAP + 1)).toBeLessThan(6);
   });
 
   /** The tall card is the title's line cap plus the one trailing line. */
@@ -221,8 +219,10 @@ describe('the card geometry against ADR 0009', () => {
     const cardWidth = PANEL_WIDTH_UNITS - PANEL_CARD_STROKE - SWATCH_RESERVE;
     const budget = charBudget(cardWidth - PANEL_CARD_PADDING.x * 2, PANEL_CARD_FONT_SIZE);
 
-    expect('09:00–09:45'.length).toBe(11);
-    expect(budget).toBeGreaterThanOrEqual('09:00–09:45'.length);
+    // `visualWidth`, not `.length` — that is what `fitLabelToWidth` gates the trailing line on, and
+    // the two part company the moment a glyph counts double.
+    expect(visualWidth('09:00–09:45')).toBe(11);
+    expect(budget).toBeGreaterThanOrEqual(visualWidth('09:00–09:45'));
   });
 });
 
@@ -330,7 +330,7 @@ describe('planAgendaCards', () => {
   });
 
   /**
-   * A ragged right edge down a column of five reads as damage. The floating label wants a card no
+   * A ragged right edge down a column of six reads as damage. The floating label wants a card no
    * wider than its text — to stay off its neighbours — and the panel wants the opposite.
    */
   it('gives every card the column’s full width, not its own text width', () => {

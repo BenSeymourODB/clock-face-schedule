@@ -196,7 +196,7 @@ export function computeArcTitleLayout(params: {
  *
  * **Legibility.** The arc must have the whole band to itself. Title text is `TITLE_FONT_SIZE_RATIO`
  * of the *ring*, so any division of the band by overlap depth takes it below the size the dial uses
- * for text it means a room to read: on the 600-unit dial a lone arc's title is 21.26 units against
+ * for text it means a room to read: on the 600-unit dial a lone arc's title is 21.2576 units against
  * the floating label's deliberately-chosen 17.52, but two deep it is 9.99 and three deep 6.24. The
  * title is drawn at that size regardless, because a name is worth having small — a *redundant*
  * channel is not, and rendering the fixture's three-deep cluster showed 6.24-unit text to be a
