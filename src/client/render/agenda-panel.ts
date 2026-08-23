@@ -61,6 +61,15 @@ export interface AgendaPanelHandle {
    * leave a stale card up for the rest of the minute.
    */
   setTime(time: Date): void;
+  /**
+   * The event ids the column is currently naming (#172).
+   *
+   * The dial drops a floating label whose event is in here *and* in collision, on the grounds that
+   * the name is already on screen at 21.2576 units on a plain ground. Read from the panel rather
+   * than re-derived by the dial so the set has **one** derivation: the column holds only what fits,
+   * so two answers computed from the same events would agree until the moment the panel overflowed.
+   */
+  namedIds(): Set<string>;
 }
 
 /**
@@ -95,6 +104,8 @@ export function agendaPanel({
   // actually showing rather than the one it loaded at.
   let currentTime = time;
   let renderedKey: string | null = null;
+  /** What the column is naming, for the dial's suppression rule (#172). */
+  let namedIds = new Set<string>();
 
   function render(): void {
     const { cards } = planAgendaCards(agendaEntries(currentEvents, currentTime, showDurations), {
@@ -108,6 +119,10 @@ export function agendaPanel({
       padding: { x: RECT_PADDING_X, y: RECT_PADDING_Y },
       strokeWidth: cardStrokeWidth(PANEL_CARD_FONT_SIZE),
     });
+
+    // Set before the early return, not after it: the ids are what the column is naming whether or
+    // not this call had to repaint, and the dial reads them on its own schedule.
+    namedIds = new Set(cards.map((card) => card.id));
 
     const key = cardKey(cards);
     if (key === renderedKey) return;
@@ -146,6 +161,10 @@ export function agendaPanel({
     setTime(next: Date): void {
       currentTime = next;
       render();
+    },
+    namedIds(): Set<string> {
+      // A copy, so a caller holding it cannot mutate what the panel believes it is showing.
+      return new Set(namedIds);
     },
   };
 }
