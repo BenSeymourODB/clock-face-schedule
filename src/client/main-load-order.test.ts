@@ -138,6 +138,42 @@ describe("main.ts's load path", () => {
    * indistinguishable in a test that drives them synchronously, and the defect is entirely about
    * which one the browser runs first.
    */
+  /**
+   * **The suppression source is gated on the column being *drawn*, not merely built** (#172).
+   *
+   * `main` ticks the panel on every board, including one too narrow to show it — `trackBoardLayout`
+   * hides the host and the panel goes on keeping its card set current behind it. So `namedIds()` is
+   * populated on a board that displays no column at all (#171), and suppressing against it would
+   * drop the label of an arc nothing else names: #146's defect, on the boards least able to spare
+   * the information.
+   *
+   * Rendered at 1000×1000, 1080×1920 and 1299×1000 the gate holds — the label set is identical to
+   * `main`'s at `?now=17:00&freeze=1` and `?now=14:30&freeze=1`, five and three labels, none
+   * dropped. That is a screenshot, and this is the assertion that keeps it true: the whole rule is
+   * one `&&` term away from silently inverting on exactly the configuration no reviewer pins.
+   *
+   * Source shape, for this file's usual reason — the gate is a closure inside `startDisplay`, so
+   * there is no seam to drive it from.
+   */
+  it("gates the suppression source on the panel host being visible", () => {
+    const [, source_] = sourceSays(
+      /namedElsewhere:\s*([A-Za-z_$][\w$]*)/,
+      "`analogClock` is no longer given a `namedElsewhere`, or it is no longer a bare identifier"
+    );
+    const name = (source_ as string).trim();
+    const [declaration] = sourceSays(
+      new RegExp(`const ${name}\\s*=[\\s\\S]*?;`),
+      `\`${name}\` is no longer declared as a const with a single-statement body`
+    );
+
+    // The host's own `hidden` attribute, which `trackBoardLayout` owns — not a second copy of
+    // `panelFitsBoard`'s arithmetic, which would be two answers to "is the panel up".
+    expect(declaration).toMatch(/hasAttribute\(\s*["']hidden["']\s*\)/);
+    expect(declaration).toMatch(/panel\??\.namedIds\(\)/);
+    // The empty set is the fallback, so an unmeasurable or hidden panel suppresses nothing.
+    expect(declaration).toMatch(/new Set<string>\(\)/);
+  });
+
   it.each([
     ["the tick", /window\.setInterval\(\(\) => \{[\s\S]*?\n\s*\}, TICK_INTERVAL_MS\)/],
     ["the fixture refresher", /setEvents:\s*\(events\) => \{[\s\S]*?\n\s*\}/],

@@ -54,13 +54,15 @@ displacement. Suppressing first is what makes the relief free instead of retrosp
 96 pinned states (every half hour × both scales), 1920×1080 and 1920×1200, `#status` hidden, both
 surfaces read off the rendered DOM.
 
-| | |
-| --- | --- |
-| floating labels drawn | **251** |
-| also named in the panel | **66 (26.3%)** |
-| worst single dial | 3 of 5, at `?now=03:00&freeze=1` |
+| | pre-#190 base | on `main` after #190 |
+| --- | --- | --- |
+| floating labels drawn | **251** | **251** |
+| also named in the panel | **66 (26.3%)** | **99 (39.4%)** |
+| worst single dial | 3 of 5, at `?now=03:00&freeze=1` | 3 of 5, same pin |
 
-Those three reproduce #172's headline figures exactly, independently of its sweep. **16:9 and 16:10
+The left column reproduces #172's headline figures exactly, independently of its sweep. The right one
+is the same sweep after #190 shrank the panel's body size, which fits more cards in the column and so
+raises the redundancy the rule is drawn from; see the measured section below. **16:9 and 16:10
 render identically** — same cards, same wraps — which is #138's finding on this surface too: both
 margins are above ADR 0009's 75.4-unit knee, so the face binds and card width saturates.
 
@@ -86,6 +88,11 @@ only, and #98's decision is not advanced by it.
 
 ### The owner's option 2 is strictly better than option 1, and that was not obvious
 
+Measured on the **pre-#190 base**, which is where the three mechanisms were priced against each other.
+Only the first and last rows have been re-measured since (66 → 99 and 8 → 13); the middle row's
+every-predicate variant and the cover counts were not rebuilt, so the table is kept on its original
+base rather than mixed:
+
 | | cards dropped | covers cleared | anchors kept |
 | --- | --- | --- | --- |
 | **option 1** — suppress unconditionally | 66 (26.3%) | 20 | 0 of 66 |
@@ -96,31 +103,46 @@ The first two clear the **same 20 covers**, because a card in no collision is by
 nothing and crowding nothing — so the 41 that option 2 keeps were contributing none of the 20. Option
 2 buys back two-thirds of the angular anchors this issue's counter-argument is about, for nothing.
 Worth recording, since the issue prices option 1 as the headline and option 2 as "the cautious one".
+The comparison is structural — a card in no collision covers nothing on any base — so #190 moves the
+magnitudes without touching the ranking.
 
 ### What the shipped predicate actually fires on — measured, not projected
 
-Both builds swept over the same 96 pins and the label sets diffed:
+Both builds swept over the same 96 pins and the label sets diffed. **Every figure here moved when
+#190 merged, and the column below records both** — #190 took the panel's body size from 26 to
+21.2576, so the column fits more cards, so more floating labels are panel-named and the rule reaches
+more of them. The direction is favourable and the mechanism is unchanged, but a reader holding the
+pre-#190 numbers would be reading a different dial:
 
-| | |
-| --- | --- |
-| labels drawn | 251 |
-| named by the panel | 66 (26.3%) |
-| **dropped by this rule** | **8 (3.2%)**, across **5 pins** |
-| card text lines across the sweep | 578 → 572 |
+| | pre-#190 base | on `main` after #190 |
+| --- | --- | --- |
+| labels drawn | 251 | **251** |
+| named by the panel | 66 (26.3%) | **99 (39.4%)** |
+| **dropped by this rule** | 8 (3.2%), across 5 pins | **13 (5.2%)**, across **9 pins** |
+| card text lines across the sweep | 578 → 572 | **578 → 570** |
+| panel card text lines | 1292 (unchanged by the rule) | **1508** (unchanged by the rule) |
 
-**This is far below the 26.3% the issue's title leads with, and the reason is worth having.** On this
-fixture the panel-named cards and the *colliding* cards are largely disjoint populations: at
-`?now=11:00&freeze=1`, where #134 measured the three-card pile, the panel names **none** of the five
-labels drawn; at `?now=03:00&freeze=1`, where 3 of 5 labels are panel-named, none of the three
-collides with another card. The overlap is one run of pins, `16:30`–`18:30` on the 12-hour scale.
+16:9 and 16:10 are identical on all 96 states, before and after — the face binds on both, so card
+width saturates (#138 on this surface).
 
-That the net text falls by only 6 lines while 8 cards' worth of text is removed is the relief showing
-up: the survivors re-wrap wider and keep duration lines the pile had made them decline.
+**The rule still fires far below the redundancy it is drawn from, and the reason is the finding.** On
+this fixture the panel-named cards and the *colliding* cards are largely disjoint populations: at
+`?now=11:00&freeze=1`, where #134 measured the three-card pile, the three colliding labels are
+`x@1`, `w@1` and `d@1` and the panel names **none of those three** (post-#190 it names one of the
+five drawn, `k@1`, which sits clear); at `?now=03:00&freeze=1`, where 3 of 5 labels are panel-named,
+none of the three collides. The overlap is one run of pins on the 12-hour scale — `16:30`–`18:30`
+pre-#190, widening to **`14:30`–`18:30`** on `main`.
 
-**So the ceiling on this mechanism is set by the collision predicate, not by the redundancy.** The
-26.3% is real and the relief available from it is real; reaching more of it needs the predicates this
-PR leaves out — which is a decision for #98 and #135 rather than a tuning knob here. The numbers for
-each are in the exclusions table above.
+That the net text falls by 8 lines while 13 cards' worth is removed is the relief showing up: the
+survivors re-wrap wider and keep duration lines the pile had made them decline. `?now=14:30` is the
+clearest single instance — `⚫ Assembly` goes and `⚫ Staff Debrief and Planning`, which had declined
+its duration line to the pile, gets its `30 min` back.
+
+**So the ceiling on this mechanism is set by the collision predicate, not by the redundancy** — and
+#190 is the evidence, since it raised the redundancy by half again (26.3% → 39.4%) and the rule still
+only reaches an eighth of it. The redundancy is real and the relief available from it is real;
+reaching more of it needs the predicates this PR leaves out — which is a decision for #98 and #135
+rather than a tuning knob here. The numbers for each are in the exclusions table above.
 
 ## Phases
 
@@ -156,15 +178,29 @@ than guessed — the pins #172 nominates turn out to be exactly the ones where t
   which on `main` stack at six o'clock with the second hanging below the dial's own box. Both are in
   the column. This is the case to judge: the band's bottom edge is clean afterwards, and the question
   is whether the two grey arcs there read as anonymous.
-- `?now=17:30&freeze=1` — the same pair; `16:30` and `18:30` drop one each.
+- `?now=17:30&freeze=1` — the same pair; `16:30` and `18:00` drop the same two, and `14:30`–`16:00`
+  and `18:30` drop one each.
+- `?now=14:30&freeze=1` — **the relief, in one frame.** `⚫ Assembly`, which on `main` hangs off the
+  bottom of `⚫ Staff Debrief and Planning` at the very edge of the board, goes; the survivor gets its
+  `30 min` line back. This pin only entered the drop set with #190, which is why it is named here.
 - `?now=03:00&freeze=1` — 3 of 5 labels panel-named and **nothing dropped**, because none of them
   collides. The check that the rule keeps the anchor in the common case.
-- `?now=11:00&freeze=1` — #134's three-card pile, where the panel names none of them and the
-  displacement pass is left to do exactly what it did before.
+- `?now=11:00&freeze=1` — #134's three-card pile, where the panel names none of the three that
+  collide and the displacement pass is left to do exactly what it did before.
+- `?now=04:15&freeze=1`, both scales — the control. The PNGs are **byte-identical** to `main`'s,
+  which is the cheapest proof the rule is inert where it should be.
 - Unpinned, which is what a board renders.
 
 At 16:9 **and** 16:10, `#status` hidden per `CLAUDE.md`. The two boards render identically here, as
 they do everywhere the face binds.
+
+**And on a board with no column at all.** `trackBoardLayout` hides the panel host below ADR 0009's
+threshold, but `main` goes on ticking the panel behind it, so `namedIds()` is populated on a board
+that shows nothing — and suppressing against an invisible surface names the arc **nowhere**, which is
+#146 arriving on the boards least able to spare the information. Rendered at 1000×1000, 1080×1920 and
+1299×1000 the label set is identical to `main`'s, and `main-load-order.test.ts` asserts the gate:
+deleting the `hidden` term drops 2 of 5 labels at `17:00` and 1 of 3 at `14:30` on those boards, with
+no column naming them.
 
 ## Deliberately not here
 
