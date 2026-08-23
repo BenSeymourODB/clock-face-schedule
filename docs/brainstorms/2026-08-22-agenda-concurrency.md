@@ -95,9 +95,9 @@ intuitively rather than decoding it, that is the risk #40 names, and 14.5× is w
 ## What the owner's two inputs change
 
 **Smaller type.** ADR 0009's third amendment took the body to 21.26, and **#190 has since shipped
-it** — `PANEL_CARD_FONT_SIZE` is now derived from the lone arc title rather than written down, so it
-renders at **21.2576**. The owner's note here says smaller still is legible, so the exchange rate is
-worth having in one place. The rows below 21.26 are the ones that would be new:
+it**: `PANEL_CARD_FONT_SIZE` is **21.2576**, the lone arc title's size, kept as a literal by #194 so
+no geometry reaches the server. The owner's note here says smaller still is legible, so the exchange
+rate is worth having in one place. The rows below 21.26 are the ones that would be new:
 
 | body | mm, 4 ft board | distance/150 | chars a line at 180 | 3-line cards fitting |
 | --- | --- | --- | --- | --- |
