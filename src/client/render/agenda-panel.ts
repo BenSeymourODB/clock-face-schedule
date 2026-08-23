@@ -5,7 +5,8 @@
  * **Why the panel exists rather than being more dial.** #70's decision: a three-deep cluster's arc
  * titles render at 6.24 units, which is 7.0 mm on a 4 ft board and legible to about a metre. The
  * band keeps those titles — dropping an event's name outright is worse — and the panel becomes the
- * surface that answers *"what is that arc"* from the back of the room, at 26 units.
+ * surface that answers *"what is that arc"* from the back of the room, at 21.2576 units — the size a
+ * lone arc's own title renders at, so the panel never out-shouts the band it serves (#174).
  *
  * Drawn as its own SVG rather than inside the dial's. Its viewBox is `180 × 600` against the dial's
  * `600 × 600` and the stylesheet gives it exactly `0.3` of the dial's box, so **a unit is the same
@@ -53,6 +54,15 @@ export interface AgendaPanelHandle {
    * leave a stale card up for the rest of the minute.
    */
   setTime(time: Date): void;
+  /**
+   * The event ids the column is currently naming (#172).
+   *
+   * The dial drops a floating label whose event is in here *and* in collision, on the grounds that
+   * the name is already on screen at 21.2576 units on a plain ground. Read from the panel rather
+   * than re-derived by the dial so the set has **one** derivation: the column holds only what fits,
+   * so two answers computed from the same events would agree until the moment the panel overflowed.
+   */
+  namedIds(): Set<string>;
 }
 
 /**
@@ -83,6 +93,8 @@ export function agendaPanel({ events, time }: AgendaPanelParams): AgendaPanelHan
   // actually showing rather than the one it loaded at.
   let currentTime = time;
   let renderedKey: string | null = null;
+  /** What the column is naming, for the dial's suppression rule (#172). */
+  let namedIds = new Set<string>();
 
   function render(): void {
     const { cards } = planAgendaCards(agendaEntries(currentEvents, currentTime), {
@@ -96,6 +108,10 @@ export function agendaPanel({ events, time }: AgendaPanelParams): AgendaPanelHan
       padding: { x: RECT_PADDING_X, y: RECT_PADDING_Y },
       strokeWidth: cardStrokeWidth(PANEL_CARD_FONT_SIZE),
     });
+
+    // Set before the early return, not after it: the ids are what the column is naming whether or
+    // not this call had to repaint, and the dial reads them on its own schedule.
+    namedIds = new Set(cards.map((card) => card.id));
 
     const key = cardKey(cards);
     if (key === renderedKey) return;
@@ -134,6 +150,10 @@ export function agendaPanel({ events, time }: AgendaPanelParams): AgendaPanelHan
     setTime(next: Date): void {
       currentTime = next;
       render();
+    },
+    namedIds(): Set<string> {
+      // A copy, so a caller holding it cannot mutate what the panel believes it is showing.
+      return new Set(namedIds);
     },
   };
 }

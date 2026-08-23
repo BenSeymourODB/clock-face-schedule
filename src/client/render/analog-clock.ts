@@ -20,6 +20,8 @@ import {
   formatEventDuration,
   hasEventInProgress,
   labelVerticalBand,
+  labelsDischargedByPanel,
+  panelNamedKey,
   planOptionalLines,
   roundCoord,
 } from "../../shared/clock";
@@ -40,8 +42,15 @@ import { windowTrack } from "./window-track";
  */
 export const DIAL_VIEWBOX_SIZE = 600;
 
-/** Clearance between the outermost arc and the nominal SVG edge. */
-const EDGE_MARGIN = 8;
+/**
+ * Clearance between the outermost arc and the nominal SVG edge.
+ *
+ * Exported for the same reason `ARC_BAND_RATIO` is, and for one more caller (#174): the agenda
+ * panel's body size *is* a lone arc's title size, so `agenda-panel.test.ts` has to build the ring
+ * this dial actually draws to check that. A suite carrying its own copy of the band would stay green
+ * while the panel drifted above the arc titles it exists to serve.
+ */
+export const EDGE_MARGIN = 8;
 
 /**
  * The radial budget, as fractions of the dial's radius. The face takes whatever is left.
@@ -152,6 +161,18 @@ export interface AnalogClockParams {
    * allowance in place. The geometry never spends less than that either way.
    */
   labelMargin?: number | null;
+  /**
+   * The event ids some other surface is already naming — in practice the agenda panel's column
+   * (#172). Read at render time rather than captured, because the panel's card set changes on its
+   * own schedule.
+   *
+   * A floating label whose event is in here **and** whose card is in collision is dropped: the name
+   * is on the panel at 21.2576 units on a plain ground, where the card would have carried it at
+   * 17.52 on the band. Omitted, or returning an empty set, suppresses nothing — which is what a
+   * board too narrow for the panel (#171) and a page without one must both get, since there the card
+   * is the only thing naming that arc.
+   */
+  namedElsewhere?: () => ReadonlySet<string>;
 }
 
 export interface AnalogClockHandle {
@@ -180,6 +201,7 @@ export function analogClock({
   time,
   scale: scaleId = "12h",
   labelMargin = null,
+  namedElsewhere,
 }: AnalogClockParams): AnalogClockHandle {
   const scale = dialScale(scaleId);
   const cx = size / 2;
@@ -244,6 +266,18 @@ export function analogClock({
   let elapsedCount = 0;
   /** The rolling window moves continuously, so the change detector is the calendar minute. */
   let renderedMinute = minuteKey(time);
+  /**
+   * The panel's card set as of the last render, and the dial's fourth rebuild trigger (#172).
+   *
+   * The panel rebuilds when its column changes, which is a trigger none of the dial's three cover:
+   * the column holds only what fits, so an event entering the top of it can push the last one out
+   * with nothing on the band changing at all. Without this, a label suppressed because the panel
+   * named its event would stay suppressed after the panel dropped the row — and the event would be
+   * named **nowhere**, which is #146's defect arriving as a race rather than as a policy.
+   */
+  let renderedNamesKey = "";
+  /** Read once per render, so the suppression pass and the rebuild key cannot disagree (#152). */
+  let renderedNames: ReadonlySet<string> = new Set<string>();
 
   function describe(): void {
     const plural = renderedCount === 1 ? "event" : "events";
@@ -256,6 +290,13 @@ export function analogClock({
   function renderEvents(): void {
     arcsLayer.textContent = "";
     labelsLayer.textContent = "";
+
+    // One read per render, feeding both the suppression pass and the rebuild key. Two reads is
+    // #152's bug in a new place: the panel could change between them, and the dial would then
+    // suppress against one set while recording that it had rendered another — leaving it convinced
+    // it was up to date.
+    renderedNames = namedElsewhere?.() ?? new Set<string>();
+    renderedNamesKey = panelNamedKey(renderedNames);
 
     const clockBox = layoutBox();
 
@@ -414,22 +455,39 @@ export function analogClock({
       ...params,
       duration: undefined,
     }));
+    const baseRects = titleOnly.map((params) => floatingLabelGeometry(params).rect);
+
+    // #172, and it runs *before* the resolver below rather than after it. Measured after the
+    // resolver only 2 of 251 cards still overlap, because it has already paid for the rest in
+    // declined duration lines and displacement — so suppressing first is what makes this relief free
+    // instead of retrospective. Every card the panel has already named and that is landing on
+    // another card goes, and the ones sitting clear keep their position, which is the only channel
+    // saying *which arc* the name belongs to.
+    const dropped = labelsDischargedByPanel(
+      overflowing.map(({ params }, index) => ({ id: params.id, rect: baseRects[index] })),
+      renderedNames
+    );
+    const kept = overflowing
+      .map((_entry, index) => index)
+      .filter((index) => !dropped.has(index));
 
     const { accepted, nudges } = planOptionalLines(
-      overflowing.map(({ params }, index) => ({
-        base: floatingLabelGeometry(titleOnly[index]).rect,
+      kept.map((index) => ({
+        base: baseRects[index],
         grown:
-          params.duration === undefined ? null : floatingLabelGeometry(params).rect,
+          overflowing[index].params.duration === undefined
+            ? null
+            : floatingLabelGeometry(overflowing[index].params).rect,
       })),
       cy,
       labelVerticalBand(clockBox)
     );
 
     labelsLayer.append(
-      ...overflowing.map(({ params }, index) => {
-        const chosen = accepted[index] ? params : titleOnly[index];
+      ...kept.map((index, position) => {
+        const chosen = accepted[position] ? overflowing[index].params : titleOnly[index];
         return floatingLabel(
-          nudges[index] === 0 ? chosen : { ...chosen, verticalNudge: nudges[index] }
+          nudges[position] === 0 ? chosen : { ...chosen, verticalNudge: nudges[position] }
         );
       })
     );
@@ -456,9 +514,17 @@ export function analogClock({
       // (#26), so an event finishing has to rebuild immediately rather than waiting up to a
       // minute; and a still-running event drains continuously (#28), so rebuild every tick for as
       // long as anything is actually in progress.
+      // A fourth trigger since #172: the panel's column changes on its own schedule, and a label
+      // suppressed because the panel named its event has to come back the moment it stops.
       const minuteChanged = minuteKey(next) !== renderedMinute;
       const elapsedChanged = elapsedEventIds(currentEvents, next).size !== elapsedCount;
-      if (minuteChanged || elapsedChanged || hasEventInProgress(currentEvents, next)) {
+      const namesChanged = panelNamedKey(namedElsewhere?.() ?? new Set<string>()) !== renderedNamesKey;
+      if (
+        minuteChanged ||
+        elapsedChanged ||
+        namesChanged ||
+        hasEventInProgress(currentEvents, next)
+      ) {
         renderEvents();
       }
       describe();

@@ -20,6 +20,7 @@ import {
   PANEL_CARD_PADDING,
   PANEL_CARD_STROKE,
   PANEL_RESERVE_UNITS,
+  computeArcTitleLayout,
   labelMarginUnits,
   panelFitsBoard,
 } from "../../shared/clock";
@@ -28,7 +29,7 @@ import {
   PANEL_VIEWBOX_WIDTH,
   agendaPanel,
 } from "./agenda-panel";
-import { DIAL_VIEWBOX_SIZE } from "./analog-clock";
+import { ARC_BAND_RATIO, DIAL_VIEWBOX_SIZE, EDGE_MARGIN } from "./analog-clock";
 import { RECT_PADDING_X, RECT_PADDING_Y, cardStrokeWidth } from "./event-card";
 
 const NOW = new Date(2026, 7, 22, 9, 0, 0);
@@ -113,6 +114,40 @@ describe("the panel's column, against the width reserved for it", () => {
    */
   it("keeps the planner's border weight equal to the card's own", () => {
     expect(PANEL_CARD_STROKE).toBe(cardStrokeWidth(PANEL_CARD_FONT_SIZE));
+  });
+
+  /**
+   * **The guard #174 is about, and there was nothing like it before.** The panel shipped at ADR
+   * 0009's 26 units, which made it the second-loudest text on the display — above every arc title
+   * and above the floating-label cards it shares its styling with. The owner's constraint is a
+   * `never`: a surface that exists to serve the band may not out-shout it.
+   *
+   * So the body size is not a number to keep in step by hand, it is *the arc-title size*, and this
+   * asserts that against what `computeArcTitleLayout` returns for the ring the dial actually draws —
+   * built from `DIAL_VIEWBOX_SIZE`, `EDGE_MARGIN` and `ARC_BAND_RATIO` rather than from a restated
+   * 75.92. Exact equality, not `toBeCloseTo`: the whole reason `PANEL_CARD_FONT_SIZE` derives
+   * 21.2576 instead of typing the 21.26 every document in this repo writes is that the shorthand is
+   * 0.0024 units *above* the arc title, which is the relationship being forbidden.
+   *
+   * A lone arc, because that is the largest a title ever gets — stacking divides the band and takes
+   * it to 9.99 two deep and 6.24 three deep (#70). Getting the panel under the *smallest* arc title
+   * would be a different and much harsher rule.
+   */
+  it("sets the card body to the size a lone arc's title actually renders at", () => {
+    const outerRadius = DIAL_VIEWBOX_SIZE / 2 - EDGE_MARGIN;
+    const bandHeight = outerRadius * ARC_BAND_RATIO;
+
+    const layout = computeArcTitleLayout({
+      title: "Yoga",
+      // Wide enough that neither the two-line threshold nor the angular fit is what is being
+      // measured here: the font size is a function of the ring's height alone.
+      arcSpan: 90,
+      innerRadius: outerRadius - bandHeight,
+      outerRadius,
+    });
+
+    expect(layout.fit.lines).toHaveLength(1);
+    expect(PANEL_CARD_FONT_SIZE).toBe(layout.titleFontSize);
   });
 
   /** Absent, not collapsed — #39 item 4 is still open, and `hidden` needs a rule to obey. */
@@ -255,6 +290,56 @@ describe("agendaPanel", () => {
   it("draws nothing at all with no events", () => {
     const { element } = agendaPanel({ events: [], time: NOW });
     expect(cardIds(element)).toEqual([]);
+  });
+
+  /**
+   * `namedIds` is what the dial suppresses floating labels against (#172), so it has to be **what
+   * the column is actually showing** rather than what it was asked to show. The two differ whenever
+   * the panel overflows, which is the common case: the column holds six three-line cards and the
+   * fixture routinely hands it more.
+   *
+   * Asserted against the rendered card ids rather than against the input, because a set derived from
+   * the events would suppress the label of an event whose card was dropped for want of room — naming
+   * it nowhere, which is #146's defect.
+   */
+  describe("the ids the column is naming", () => {
+    it("reports exactly the cards it drew, not the events it was given", () => {
+      const events = Array.from({ length: 9 }, (_unused, index) =>
+        event(
+          `e${index}`,
+          `Parent Teacher Conference Planning Committee ${index}`,
+          index * 60,
+          index * 60 + 45
+        )
+      );
+      const panel = agendaPanel({ events, time: NOW });
+
+      expect(events.length).toBeGreaterThan(cardIds(panel.element).length);
+      expect([...panel.namedIds()].sort()).toEqual([...cardIds(panel.element)].sort());
+    });
+
+    it("is empty before any event arrives", () => {
+      expect(agendaPanel({ events: [], time: NOW }).namedIds().size).toBe(0);
+    });
+
+    it("follows a new event set", () => {
+      const panel = agendaPanel({ events: [], time: NOW });
+      panel.setEvents([event("a", "Yoga", 0, 22)]);
+
+      expect([...panel.namedIds()]).toEqual(["a"]);
+    });
+
+    /**
+     * The set is read on the dial's schedule, not the panel's, so a caller holds it across ticks.
+     * Handing out the panel's own set would let the dial mutate what the column believes it is
+     * showing — and the failure would be a label suppressed against a name nothing is drawing.
+     */
+    it("hands out a copy rather than its own set", () => {
+      const panel = agendaPanel({ events: [event("a", "Yoga", 0, 22)], time: NOW });
+      panel.namedIds().add("not-a-card");
+
+      expect([...panel.namedIds()]).toEqual(["a"]);
+    });
   });
 
   /**
