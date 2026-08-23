@@ -70,8 +70,10 @@ Calling that *unavoidable* would be too strong, though, and the untaken alternat
 the three numbers involved (`DIAL_VIEWBOX_SIZE`, `EDGE_MARGIN`, `ARC_BAND_RATIO`) are pure viewBox
 constants with no host types, and there is precedent for moving them — `PANEL_RESERVE_UNITS = 180`
 already lives in `src/shared/`. That is a larger refactor than a font size warrants, and it would
-touch the dial's own module, so it is deferred rather than rejected. With the literal it no longer
-buys anything here anyway.
+touch the dial's own module, so it is deferred rather than rejected — **filed as #193**, which also
+carries the constraint any answer has to keep (a module-scope computation from those constants is what
+put geometry in the server bundle in the first place). With the literal it no longer buys anything
+here anyway.
 
 ## Every figure that moves
 
