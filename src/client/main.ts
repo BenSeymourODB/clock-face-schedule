@@ -19,7 +19,12 @@ import {
   panelFitsBoard,
   parseDialScaleId,
 } from "../shared/clock";
-import { decodePreferences, encodePreferences } from "../shared/preferences";
+import {
+  PREFERENCES,
+  decodePreferences,
+  encodePreferences,
+  resolveOverride
+} from "../shared/preferences";
 import { readClockPin } from "./clock-pin";
 import { fixtureRefresher } from "./fixture-refresh";
 import {
@@ -93,6 +98,35 @@ function chosenScale(mount: Element): DialScaleId {
   if (templated) return parseDialScaleId(templated);
 
   return parseDialScaleId(new URLSearchParams(window.location.search).get("scale"));
+}
+
+/**
+ * Whether any surface states an event's length (#178) — the URL first, then what the teacher stored.
+ *
+ * Four layers, most specific first: the templated attribute (what `doGet` saw in the URL), the
+ * page's own query string (the preview, which has no server), the viewer's stored preference, and
+ * the registry default. The parameter beating the store is the point of having one: #178 asks for
+ * *"a URL parameter for checking it on the device"*, and a setting a wall display cannot be pointed
+ * at is one that can only be checked from a workstation.
+ *
+ * Which inverts `chosenScale`'s precedence, and deliberately: `?scale=` **is** the setting there, so
+ * a templated value winning keeps a deployed URL from being overridden by whatever the sandbox
+ * iframe carries. Here the setting is the stored preference and the parameter is an override of it.
+ *
+ * The parameter's alphabet is the preference definition's own — `1` and `0` — because it is parsed
+ * by that definition. One parser for both forms, so a value the store accepts and one the URL
+ * accepts cannot come apart. Anything else falls *through* to the store rather than being repaired,
+ * which is `resolvePreferences`' rule applied to one more layer.
+ */
+function chosenDurations(mount: Element, preferences: PreferenceStore): boolean {
+  const templated = mount instanceof HTMLElement ? mount.dataset["durations"] : undefined;
+  const query = new URLSearchParams(window.location.search).get("durations");
+
+  return resolveOverride(
+    PREFERENCES.showEventDurations,
+    [templated, query],
+    preferences.get().showEventDurations
+  );
 }
 
 /**
@@ -241,6 +275,12 @@ function startDisplay(): void {
 
   const preferences = displayPreferences(mount);
   const scale = chosenScale(mount);
+  /**
+   * Read once for the load, and handed to both drawings so they cannot disagree about it — the same
+   * property `loadedAt` has below. A dial stating lengths beside a panel that is not is the mixed
+   * picture #178 exists to remove, arriving from the plumbing instead of from the geometry.
+   */
+  const showDurations = chosenDurations(mount, preferences);
 
   /**
    * One read for the whole of the load, so everything the first frame is built from agrees about
@@ -279,6 +319,7 @@ function startDisplay(): void {
     showSeconds: preferences.get().showSeconds,
     time: loadedAt,
     scale,
+    showDurations,
     namedElsewhere: panelNames
   });
   mount.append(clock.element);
@@ -292,7 +333,7 @@ function startDisplay(): void {
    * Empty until the first fetch answers, like the dial. Appended before the panel is known to fit,
    * because `trackBoardLayout` decides that from `#board`'s box and hides the host either way.
    */
-  panel = panelHost ? agendaPanel({ events: [], time: loadedAt }) : null;
+  panel = panelHost ? agendaPanel({ events: [], time: loadedAt, showDurations }) : null;
   if (panel && panelHost) panelHost.append(panel.element);
 
   // After the append, so the box being measured is the one the drawing is laid out in.

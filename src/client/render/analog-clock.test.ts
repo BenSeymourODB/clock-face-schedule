@@ -495,6 +495,43 @@ describe("analogClock", () => {
     });
 
     /**
+     * #178's switch reaches both dial surfaces from one flag. The arc that states "3 hr" and the
+     * card that states "30 min" with the default each go silent when `showDurations` is off — and
+     * the card that would have ended on a duration line now ends on its title, so the switch removes
+     * the number rather than blanking the card.
+     */
+    describe("switched off across the board (#178)", () => {
+      it("draws no duration on an arc that would carry one", () => {
+        const { element } = build([input("a", 2, 5)], { showDurations: false });
+
+        expect(element.querySelector('[data-testid="event-duration-a"]')).toBeNull();
+      });
+
+      it("draws no duration on a card whose title overflowed", () => {
+        const { element } = build([input("a", 2, 2.5, { title: LONG_TITLE })], {
+          showDurations: false,
+        });
+
+        expect(element.querySelector('[data-testid="event-duration-a"]')).toBeNull();
+        // The card's last line is its title, not a duration — the line is gone, the card is not.
+        expect(labelLines(element, "a").slice(-1)).not.toEqual(["30 min"]);
+        expect(labelLines(element, "a").length).toBeGreaterThan(0);
+      });
+
+      it("still draws them with the default on", () => {
+        // The guard against a flipped default: the same two inputs carry their durations unless the
+        // caller asks otherwise.
+        const arc = build([input("a", 2, 5)]).element;
+        const card = build([input("a", 2, 2.5, { title: LONG_TITLE })]).element;
+
+        expect(arc.querySelector('[data-testid="event-duration-a"] textPath')?.textContent).toBe(
+          "3 hr"
+        );
+        expect(labelLines(card, "a").slice(-1)).toEqual(["30 min"]);
+      });
+    });
+
+    /**
      * A duration line makes a card 40% taller, and two cards landing on each other hides a title
      * that is on a card *because* it did not fit its arc. The line is optional, so it goes rather
      * than the title — but only where displacement (#30 item 2) cannot make room for it first,

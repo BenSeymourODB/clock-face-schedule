@@ -595,6 +595,26 @@ describe("eventArc", () => {
       it.each([[0], [0.2]])('is absent for a %s-minute event', (durationMinutes) => {
         expect(durationOf(render({ startAngle: 0, endAngle: 60, durationMinutes }))).toBeNull();
       });
+
+      // #178's teacher switch. The same arc that carries "2 hr 25" with the default draws no
+      // duration line at all when `showDuration` is off — and the title keeps its one line rather
+      // than being displaced onto a second radius, so off costs the arc nothing but the number.
+      it("is absent when durations are switched off, though the arc could carry one", () => {
+        const on = render({ startAngle: 0, endAngle: 60, durationMinutes: 145 });
+        expect(durationOf(on)?.querySelector("textPath")?.textContent).toBe("2 hr 25");
+
+        const off = eventArc({
+          event: makeEvent({ startAngle: 0, endAngle: 60, durationMinutes: 145 }),
+          cx: CX,
+          cy: CY,
+          innerRadius: INNER,
+          outerRadius: OUTER,
+          showDuration: false,
+        });
+
+        expect(durationOf(off)).toBeNull();
+        expect(off.querySelectorAll("defs path")).toHaveLength(1);
+      });
     });
 
     it.each([
