@@ -255,26 +255,44 @@ function startDisplay(): void {
    */
   const loadedAt = now();
 
+  /**
+   * The agenda column beside the dial (#39). Declared before the dial because the dial reads it, and
+   * assigned after because it is built from the same instant — so the binding is what carries the
+   * dependency and the closure below is what defers it.
+   */
+  let panel: AgendaPanelHandle | null = null;
+
+  /**
+   * What the panel is naming, for the dial's suppression rule (#172).
+   *
+   * **Gated on the column being drawn, not merely built.** `main` ticks the panel even where the
+   * board is too narrow to show it, so `panel.namedIds()` is populated on a board that displays no
+   * column at all (#171) — and suppressing a card against an invisible surface would leave the arc
+   * named nowhere. `trackBoardLayout` owns the `hidden` attribute, so reading it here keeps one
+   * answer to "is the panel up" rather than a second copy of `panelFitsBoard`'s arithmetic.
+   */
+  const panelNames = (): ReadonlySet<string> =>
+    panel && panelHost && !panelHost.hasAttribute("hidden") ? panel.namedIds() : new Set<string>();
+
   const clock = analogClock({
     events: [],
     showSeconds: preferences.get().showSeconds,
     time: loadedAt,
-    scale
+    scale,
+    namedElsewhere: panelNames
   });
   mount.append(clock.element);
 
   /**
-   * The agenda column beside it (#39), built from the same instant the dial's first frame was — the
-   * property #152 is about, extended to the second drawing on the page. Two reads here would put the
-   * panel and the band a few milliseconds apart, which is invisible until an event ends inside the
-   * gap and the card set disagrees with the arcs on the load frame.
+   * Built from the same instant the dial's first frame was — the property #152 is about, extended to
+   * the second drawing on the page. Two reads here would put the panel and the band a few
+   * milliseconds apart, which is invisible until an event ends inside the gap and the card set
+   * disagrees with the arcs on the load frame.
    *
    * Empty until the first fetch answers, like the dial. Appended before the panel is known to fit,
    * because `trackBoardLayout` decides that from `#board`'s box and hides the host either way.
    */
-  const panel: AgendaPanelHandle | null = panelHost
-    ? agendaPanel({ events: [], time: loadedAt })
-    : null;
+  panel = panelHost ? agendaPanel({ events: [], time: loadedAt }) : null;
   if (panel && panelHost) panelHost.append(panel.element);
 
   // After the append, so the box being measured is the one the drawing is laid out in.
@@ -287,10 +305,16 @@ function startDisplay(): void {
   // and touches no DOM — and gating it on visibility would need a "bring it current on re-show" path
   // that reads the clock a second time, which is the defect #152 was. Same call #57 makes about the
   // drain rebuild: cheap on any modern device, and no measurement says otherwise.
+  //
+  // **The panel goes first, and the order is load-bearing since #172.** The dial's suppression pass
+  // reads the column's card set, so ticking the dial first would decide which labels to drop against
+  // the *previous* tick's column — for one tick after every change, which is exactly the moment a
+  // card is appearing or leaving. The dial's own rebuild key would correct it on the following tick,
+  // so the symptom is a single stale frame rather than a stuck one, which is worse to find.
   window.setInterval(() => {
     const at = now();
-    clock.setTime(at);
     panel?.setTime(at);
+    clock.setTime(at);
   }, TICK_INTERVAL_MS);
 
   /**
@@ -323,9 +347,10 @@ function startDisplay(): void {
       pin: clockPin,
       loadedAt,
       now,
+      // Panel first, for the reason the tick is: the dial's suppression pass reads the column.
       setEvents: (events) => {
-        clock.setEvents(events);
         panel?.setEvents(events);
+        clock.setEvents(events);
       }
     });
 
@@ -344,11 +369,14 @@ function startDisplay(): void {
   async function refresh(): Promise<void> {
     try {
       const events = await fetchWindow();
-      clock.setEvents(events);
       // The same set both drawings, so a card and an arc can never name different events. The dial
       // narrows it to the rolling window itself; the panel keeps the whole fetch, which is what #37
       // widened the request for.
+      //
+      // Panel first, for the reason the tick is: the dial's suppression pass reads the column, so a
+      // dial rebuilt before it would drop labels against the *previous* fetch's card set (#172).
       panel?.setEvents(events);
+      clock.setEvents(events);
       status = nextStatus(status, { ok: true, at: now() });
     } catch (error) {
       // Deliberately does not touch the dial: whatever it is showing stays up, marked old.

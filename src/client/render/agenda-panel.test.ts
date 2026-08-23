@@ -293,6 +293,56 @@ describe("agendaPanel", () => {
   });
 
   /**
+   * `namedIds` is what the dial suppresses floating labels against (#172), so it has to be **what
+   * the column is actually showing** rather than what it was asked to show. The two differ whenever
+   * the panel overflows, which is the common case: the column holds six three-line cards and the
+   * fixture routinely hands it more.
+   *
+   * Asserted against the rendered card ids rather than against the input, because a set derived from
+   * the events would suppress the label of an event whose card was dropped for want of room — naming
+   * it nowhere, which is #146's defect.
+   */
+  describe("the ids the column is naming", () => {
+    it("reports exactly the cards it drew, not the events it was given", () => {
+      const events = Array.from({ length: 9 }, (_unused, index) =>
+        event(
+          `e${index}`,
+          `Parent Teacher Conference Planning Committee ${index}`,
+          index * 60,
+          index * 60 + 45
+        )
+      );
+      const panel = agendaPanel({ events, time: NOW });
+
+      expect(events.length).toBeGreaterThan(cardIds(panel.element).length);
+      expect([...panel.namedIds()].sort()).toEqual([...cardIds(panel.element)].sort());
+    });
+
+    it("is empty before any event arrives", () => {
+      expect(agendaPanel({ events: [], time: NOW }).namedIds().size).toBe(0);
+    });
+
+    it("follows a new event set", () => {
+      const panel = agendaPanel({ events: [], time: NOW });
+      panel.setEvents([event("a", "Yoga", 0, 22)]);
+
+      expect([...panel.namedIds()]).toEqual(["a"]);
+    });
+
+    /**
+     * The set is read on the dial's schedule, not the panel's, so a caller holds it across ticks.
+     * Handing out the panel's own set would let the dial mutate what the column believes it is
+     * showing — and the failure would be a label suppressed against a name nothing is drawing.
+     */
+    it("hands out a copy rather than its own set", () => {
+      const panel = agendaPanel({ events: [event("a", "Yoga", 0, 22)], time: NOW });
+      panel.namedIds().add("not-a-card");
+
+      expect([...panel.namedIds()]).toEqual(["a"]);
+    });
+  });
+
+  /**
    * The panel's rebuild trigger is the card set, not the calendar minute the arcs use. An event that
    * ended at 14:00:12 must not leave a card up for the rest of the minute — a card is either in the
    * column or it is not, so there is no intermediate state a coarser grain would be showing.
