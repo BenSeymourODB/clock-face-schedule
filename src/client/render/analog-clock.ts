@@ -42,8 +42,15 @@ import { windowTrack } from "./window-track";
  */
 export const DIAL_VIEWBOX_SIZE = 600;
 
-/** Clearance between the outermost arc and the nominal SVG edge. */
-const EDGE_MARGIN = 8;
+/**
+ * Clearance between the outermost arc and the nominal SVG edge.
+ *
+ * Exported for the same reason `ARC_BAND_RATIO` is, and for one more caller (#174): the agenda
+ * panel's body size *is* a lone arc's title size, so `agenda-panel.test.ts` has to build the ring
+ * this dial actually draws to check that. A suite carrying its own copy of the band would stay green
+ * while the panel drifted above the arc titles it exists to serve.
+ */
+export const EDGE_MARGIN = 8;
 
 /**
  * The radial budget, as fractions of the dial's radius. The face takes whatever is left.

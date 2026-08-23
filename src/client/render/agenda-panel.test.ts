@@ -20,6 +20,7 @@ import {
   PANEL_CARD_PADDING,
   PANEL_CARD_STROKE,
   PANEL_RESERVE_UNITS,
+  computeArcTitleLayout,
   labelMarginUnits,
   panelFitsBoard,
 } from "../../shared/clock";
@@ -28,7 +29,7 @@ import {
   PANEL_VIEWBOX_WIDTH,
   agendaPanel,
 } from "./agenda-panel";
-import { DIAL_VIEWBOX_SIZE } from "./analog-clock";
+import { ARC_BAND_RATIO, DIAL_VIEWBOX_SIZE, EDGE_MARGIN } from "./analog-clock";
 import { RECT_PADDING_X, RECT_PADDING_Y, cardStrokeWidth } from "./event-card";
 
 const NOW = new Date(2026, 7, 22, 9, 0, 0);
@@ -113,6 +114,40 @@ describe("the panel's column, against the width reserved for it", () => {
    */
   it("keeps the planner's border weight equal to the card's own", () => {
     expect(PANEL_CARD_STROKE).toBe(cardStrokeWidth(PANEL_CARD_FONT_SIZE));
+  });
+
+  /**
+   * **The guard #174 is about, and there was nothing like it before.** The panel shipped at ADR
+   * 0009's 26 units, which made it the second-loudest text on the display — above every arc title
+   * and above the floating-label cards it shares its styling with. The owner's constraint is a
+   * `never`: a surface that exists to serve the band may not out-shout it.
+   *
+   * So the body size is not a number to keep in step by hand, it is *the arc-title size*, and this
+   * asserts that against what `computeArcTitleLayout` returns for the ring the dial actually draws —
+   * built from `DIAL_VIEWBOX_SIZE`, `EDGE_MARGIN` and `ARC_BAND_RATIO` rather than from a restated
+   * 75.92. Exact equality, not `toBeCloseTo`: the whole reason `PANEL_CARD_FONT_SIZE` derives
+   * 21.2576 instead of typing the 21.26 every document in this repo writes is that the shorthand is
+   * 0.0024 units *above* the arc title, which is the relationship being forbidden.
+   *
+   * A lone arc, because that is the largest a title ever gets — stacking divides the band and takes
+   * it to 9.99 two deep and 6.24 three deep (#70). Getting the panel under the *smallest* arc title
+   * would be a different and much harsher rule.
+   */
+  it("sets the card body to the size a lone arc's title actually renders at", () => {
+    const outerRadius = DIAL_VIEWBOX_SIZE / 2 - EDGE_MARGIN;
+    const bandHeight = outerRadius * ARC_BAND_RATIO;
+
+    const layout = computeArcTitleLayout({
+      title: "Yoga",
+      // Wide enough that neither the two-line threshold nor the angular fit is what is being
+      // measured here: the font size is a function of the ring's height alone.
+      arcSpan: 90,
+      innerRadius: outerRadius - bandHeight,
+      outerRadius,
+    });
+
+    expect(layout.fit.lines).toHaveLength(1);
+    expect(PANEL_CARD_FONT_SIZE).toBe(layout.titleFontSize);
   });
 
   /** Absent, not collapsed — #39 item 4 is still open, and `hidden` needs a rule to obey. */
