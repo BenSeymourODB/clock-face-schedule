@@ -132,17 +132,51 @@ different question — but the panel now has exactly one trailing-line slot and 
 it. If the times line lands under the switch, a board with durations off says nothing about when
 anything happens, which is the gap #169 exists to close.
 
-**Answered by the owner, 2026-08-23: beside it. Two switches, and times are not optional the way a
-duration is.**
+**Answered by the owner, 2026-08-23: beside it — and then sharpened, because "beside it" understates
+it. An agenda card's times are not a switchable channel at all.**
 
-> the start-and-end times text that agenda cards *must* carry in order to be useful as more than an
-> ordered list of events. Those aren't essential on arcs or floating labels, though
+> Agenda cards should *always* show start and end times … A teacher can toggle displaying the agenda
+> off entirely if they're trying to teach a class how to read start and end times from the clock face
+> + arc positions. This, then, means that a teacher should have separate controls for "Show/hide
+> durations" (applies to clock face and agenda), and "Show/hide start/end times on clock face".
 
-So the channel's necessity is **per surface**, which no version of this document had said: a times
-line is what makes a panel card a schedule entry rather than a name in a queue, and the same line on
-an arc or a floating card is redundant against the arc's own angular position. That settles #169's
-direction — the panel states times — and it means the trailing-line slot is not one slot with one
-switch but **two channels the teacher controls separately**.
+So the control model is **three switches with different scopes**, not two channels sharing a slot:
+
+| control | scope | agenda card | arc / floating label |
+| --- | --- | --- | --- |
+| **Show/hide durations** | both surfaces | optional | optional |
+| **Show/hide start/end times** | **clock face only** | — | optional |
+| **Show/hide the agenda** | the panel | the whole column | — |
+
+**Times on an agenda card are unconditional.** The way a teacher removes them is by removing the
+*agenda*, not by emptying its cards — which is coherent, because a card with no times is not a
+lesser agenda entry, it is a different and worse artefact.
+
+### The principle underneath, which decides more than this table
+
+> I'd like both components of the divided display to be useful on their own, without
+> cross-referencing, with the exception of cases where an agenda card is acting in place of a
+> floating label that can't be displayed.
+
+**Each half of the divided display must be readable on its own.** That is a product-level rule this
+document had no statement of, and it is what makes the times unconditional rather than merely
+important:
+
+- A list of names and durations is a **child's-perspective sequence** — *"first we'll do A and it'll
+  take this long, then B and it'll take that long"* — which is a real reading and a useful one.
+- But it says nothing about **when**, so it is only complete by cross-referencing the dial. The
+  agenda's whole reason for existing beside the clock is *events in the context of when they are
+  planned*, and a card without times hands that job back to the face.
+
+The named exception is the one place cross-referencing is intended rather than tolerated: a card
+standing in for a floating label that could not be drawn (#172, shipped in #192). There the card is
+deliberately *about* an arc, which is exactly why that case wants a leader line and the others do
+not — **and the leader is the half of #172's decision that has not been built.**
+
+This likely wants promoting out of a brainstorm. It decides the agenda's contents, #169's direction,
+the scope of two of the three switches above, and the leader-line case — and a rule that decides that
+much should not live only where this one is read. ADR 0009 allocated the width the panel sits in and
+is the natural neighbour; the shape of that is the owner's call, as with #188/#200 Part 2.
 
 ### Why the switches exist, which is not what this document assumed
 
@@ -181,7 +215,13 @@ The owner's design note:
 > start and end times could share a line with duration on any given card if both are enabled for
 > display. That combination may become the minimum character width to accommodate
 
-**It does, and it is the first concrete reason the panel's width lever has a target number.** Measured
+**It does — and under the control model above this is not a corner case, it is the default board.**
+Times on an agenda card are unconditional, and `showEventDurations` defaults to `flag(true)`, so
+*both* channels are present on a card that nobody has configured. The shared-versus-separate question
+is therefore not an option to weigh at leisure: **the panel as shipped cannot draw its own default
+state**, and one of the two answers below has to land with the times line.
+
+It is also the first concrete reason the panel's width lever has a target number. Measured
 against the shipped constants (`PANEL_WIDTH_UNITS` 180, body 21.2576, `PANEL_CARD_PADDING.x` 6,
 `PANEL_CARD_STROKE` 1.7006, `SWATCH_RESERVE` 12 — text width 154.30, budget 12 characters):
 
@@ -424,13 +464,17 @@ line. That is the shape worth rendering first.
 4. **What the times line displaces.** It costs four of eleven events at 21.26, and a countdown (B4)
    wants the same line.
 5. ~~**Whether a times line sits under #178's durations switch or beside it**~~ — **answered
-   2026-08-23: beside it.** Two switches; times are what make a panel card a schedule entry rather
-   than a name in a queue, and are not essential on arcs or floating labels. See "Answered by the
-   owner" above, which also reframes *why* the switches exist (pedagogical, not accessibility) and
-   prices the shared line at **232–255 units of panel** against separate lines' **6 cards → 4**.
-   What remains open from it is narrower: **whether the two channels share a line or take one
-   each** — a width cost against a card cost, both inside #174's ceiling, and a looking question at
-   1× either way.
+   2026-08-23: neither.** An agenda card's times are **unconditional** — three switches with
+   different scopes (durations across both surfaces, times on the clock face only, and the agenda as
+   a whole), and a teacher removes the panel's times by removing the panel. See "Answered by the
+   owner" above, which also states the principle underneath (**each half of the divided display must
+   be readable on its own**) and reframes why the switches exist at all: pedagogical, not
+   accessibility.
+   What remains open is narrower and now **urgent rather than optional**, because times plus the
+   default `showEventDurations = true` is the *unconfigured* board: **do the two channels share a
+   line or take one each?** Sharing needs the panel at **232–255 units** (inside #174's 270.7
+   ceiling); separate lines keep 180 and cost **6 cards → 4**. A looking question at 1× either way,
+   but the panel cannot draw its own default state until one of them lands.
 6. **#41's highlight slot**, if it must hold a group rather than a card.
 
 ## What would settle it
