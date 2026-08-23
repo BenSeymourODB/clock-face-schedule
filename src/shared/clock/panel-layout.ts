@@ -9,10 +9,11 @@
  * Pure arithmetic over numbers the caller reads off the DOM — no host types, so `src/shared/`
  * compiles without the DOM lib (ADR 0003) and every figure here is checkable in node.
  */
+import { TITLE_FONT_SIZE_RATIO } from './arc-title-layout';
 import { SWATCH_RESERVE } from './card-swatch';
 import { formatEventDuration } from './duration';
 import { fitLabelToWidth } from './fit-label';
-import { combineTitleWithEmoji, parseEventTitle } from './clock-utils';
+import { combineTitleWithEmoji, parseEventTitle, roundCoord } from './clock-utils';
 import { PANEL_RESERVE_UNITS } from './label-margin';
 import type { ClockEventInput } from './types';
 
@@ -22,52 +23,82 @@ import type { ClockEventInput } from './types';
  * Width is the reserve, so the column drawn and the width held out of the labels' margin are one
  * number rather than two that agree today. Height matches the dial's viewBox so a unit is the same
  * length in both drawings — the panel's box is `0.3 ×` the dial's box and both are square-fitted, so
- * "26 units" means the same thing on either side of the page.
+ * a card's body size means the same thing on either side of the page.
  */
 export const PANEL_WIDTH_UNITS = PANEL_RESERVE_UNITS;
 
 /**
- * Card body size, straight from ADR 0009: *"180 is the smallest width that serves the panel's own
- * justification. It holds 10 characters a line at 26 units."*
+ * The band a lone arc gets — `(600 / 2 − EDGE_MARGIN) × ARC_BAND_RATIO` = `292 × 0.26`.
  *
- * **Nine as it ships, not ten:** #160's swatch takes `SWATCH_RESERVE` out of every card's text, which
- * its own costing puts at *"one character a line"* — the same character #98's comment says a
- * band-clearing locus would cost. The ADR's figure is the pre-swatch one.
+ * Restated here for the same reason as the padding and the stroke below: both of those constants live
+ * in `src/client/render/analog-clock.ts`, and `src/shared/` may not reach `src/client/` — that split
+ * is the enforcement mechanism for ADR 0003 and is not to be relaxed for a convenience import.
  *
- * This is the figure the whole allocation was chosen for. #70's decision is that a three-deep
- * cluster's arc titles — 6.24 units, about 1.1 m of reading distance once the dial's 85.4% share of
- * the board's height is taken off — are accepted on the band, and that the panel is the surface that
- * carries those names at a size a room can read. Shrinking this gives that up.
+ * `agenda-panel.test.ts` asserts the size this derives against the one `computeArcTitleLayout`
+ * actually returns for a lone arc, so the restatement is checked rather than trusted.
  */
-export const PANEL_CARD_FONT_SIZE = 26;
+const LONE_ARC_BAND_HEIGHT = 75.92;
 
 /**
- * Gap between cards — the largest whole number that keeps ADR 0009's five, floored.
+ * Card body size: **the size a lone arc's title renders at** (#174, ADR 0009's third amendment).
+ *
+ * ADR 0009 specified 26, and the panel that shipped at it was the *second-loudest text on the
+ * display* — above every arc title and above the floating-label cards it shares its styling with,
+ * which inverts the relationship between a surface and the surface it exists to serve. The owner's
+ * constraint is a `never`: the panel's type may not exceed the type on a non-stacked arc.
+ *
+ * Derived rather than typed, and that is not fussiness. Every document in this repo writes the lone
+ * arc title size as the two-decimal **21.26** — this ADR amendment, `arc-title-layout.ts`'s own
+ * comment, #174's tables — but `roundCoord` keeps four decimals, so what the dial renders is
+ * **21.2576**. Typing the shorthand would put the panel 0.0024 units *above* the arc title, which is
+ * the one relationship this change exists to invert. Deriving it also means a change to the ratio
+ * moves the panel with it instead of leaving the two to drift.
+ *
+ * What it costs, and it is the only entry in the table that is a cost: reading distance goes from
+ * 6.77 m to **5.53 m** by the distance/150 convention. #70's argument for the panel existing survives
+ * it — the arc titles the panel rescues are 6.24 units in a three-deep cluster, about 1.1 m, so the
+ * panel is still by a wide margin the most readable statement of an event's name anywhere on the
+ * display. What it buys, at the shipped 180-unit column: **13 characters a line before #160's swatch
+ * and 12 after it** (from 10 and 9), **six three-line cards** (from five) and eight two-line ones
+ * (from seven), and it takes `HH:MM–HH:MM` from unaffordable to affordable — which is #169's choice
+ * to make, not this constant's.
+ *
+ * Per `CLAUDE.md` the arithmetic above is not evidence that it reads from the back of a room, which is
+ * why the type lever was rendered and looked at before it landed rather than adopted from the table.
+ */
+export const PANEL_CARD_FONT_SIZE = roundCoord(LONE_ARC_BAND_HEIGHT * TITLE_FONT_SIZE_RATIO);
+
+/**
+ * Gap between cards — the largest whole number that keeps the tall-card count, floored.
  *
  * The column's usable height is `600 − PANEL_CARD_STROKE` rather than 600, because half a border
- * falls outside each card and the outermost `<svg>` clips it. Five three-line cards leave
- * `597.92 − 576 = 21.92` for four gaps, so **5.48 is the ceiling and 5 is the value**. Six — the
- * figure before the stroke was accounted for — holds only four, which gives up the count the whole
- * 180-unit allocation was justified by.
+ * falls outside each card and the outermost `<svg>` clips it. At 21.2576 a three-line card is 95.2819
+ * units, so six of them leave `598.2994 − 571.6915 = 26.61` for five gaps: **5.3216 is the ceiling
+ * and 5 is the value**. Six would hold only five cards.
+ *
+ * **5 survived #174's type lever by luck rather than design** — at 26 it was the ceiling that kept
+ * *five* cards, where the ceiling was 5.48. The count moved and the gap did not, so
+ * `panel-layout.test.ts` derives the count it is at the ceiling of instead of restating it.
  */
 export const PANEL_CARD_GAP = 5;
 
 /**
  * Lines a card's title may wrap to, before its trailing line.
  *
- * Two, so the tall card is three lines — and at 26 units in a column of 597.92 usable that
- * reproduces ADR 0009's two card counts exactly, which is the check that these are the constants it
- * was written against:
+ * Two, so the tall card is three lines — and at 21.2576 units in a column of 598.2994 usable that
+ * gives one card more in each column than ADR 0009 costed at 26 (#174):
  *
  * | | units |
  * | --- | --- |
- * | `labelCardHeight(3, 26, 3)` | 115.2 |
- * | five of them, four 5-unit gaps | 576 + 20 = **596**, inside the 597.92 |
- * | `labelCardHeight(2, 26, 3)` | 78.8 |
- * | seven of them, six gaps | 551.6 + 30 = 581.6 |
- * | eight | 630.4 + 35 = 665.4 — does not fit |
+ * | `labelCardHeight(3, 21.2576, 3)` | 95.2819 |
+ * | six of them, five 5-unit gaps | 571.6915 + 25 = **596.69**, inside the 598.2994 |
+ * | seven | 667.0 + 30 = 697.0 — does not fit |
+ * | `labelCardHeight(2, 21.2576, 3)` | 65.5213 |
+ * | eight of them, seven gaps | 524.17 + 35 = 559.17 |
+ * | nine | 589.69 + 40 = 629.69 — does not fit |
  *
- * > "The panel holds five cards at 26 units over three lines, seven at two lines." — ADR 0009
+ * > "The panel holds five cards at 26 units over three lines, seven at two lines." — ADR 0009,
+ * > whose third amendment takes the body to the arc-title size and the counts to **six and eight**.
  */
 export const PANEL_CARD_MAX_TITLE_LINES = 2;
 
@@ -81,12 +112,15 @@ export const PANEL_CARD_MAX_TITLE_LINES = 2;
 export const PANEL_CARD_PADDING = { x: 6, y: 3 };
 
 /**
- * Card border weight at the panel's body size — `cardStrokeWidth(26)` (#38).
+ * Card border weight at the panel's body size — `cardStrokeWidth(PANEL_CARD_FONT_SIZE)` (#38).
  *
  * Restated here for the same reason as the padding, and checked the same way: a border is centred on
  * the rect's edge, so half of it falls outside the card and the column has to leave room for it.
+ *
+ * Moves with the body size, so #174's type lever took it from 2.08 to 1.7006 — which is why the
+ * usable column grew slightly (`600 − stroke`) at the same time the cards got shorter.
  */
-export const PANEL_CARD_STROKE = 2.08;
+export const PANEL_CARD_STROKE = 1.7006;
 
 /** A box in whatever unit the caller measured it in — CSS pixels, at the call sites here. */
 export interface PanelBoard {
@@ -152,10 +186,15 @@ export interface AgendaEntry {
   /**
    * The short line under the title, or `undefined` for none.
    *
-   * A duration rather than a clock time, which is the panel's own justification going unserved and
-   * is deliberate for now: `HH:MM–HH:MM` is eleven characters against the ten a 26-unit line holds
-   * in 180 units, and the paddings that admit an eleventh leave zero slack and only work for a
-   * 24-hour rendering. See the plan doc; filed as follow-up work.
+   * A duration rather than a clock time, which is the panel's own justification going unserved.
+   *
+   * **The reason it was a duration has expired and the line has not changed.** It was affordability:
+   * `HH:MM–HH:MM` is eleven characters against the ten a 26-unit line held in 180 units. #174's type
+   * lever takes the budget to twelve, so the line now fits — and what the trailing line should *say*
+   * is #169's question rather than a consequence of this constant. A duration states a length and a
+   * clock time states a boundary; those are different claims, and the panel was justified on the
+   * second. #178 is separately deciding whether durations are shown at all, so changing this here
+   * would settle by accident what two issues are deciding on purpose.
    */
   trailing?: string;
 }
