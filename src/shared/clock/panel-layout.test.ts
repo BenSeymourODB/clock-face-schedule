@@ -39,6 +39,26 @@ function event(
 
 const NOW = new Date(2026, 7, 22, 9, 0, 0);
 
+/**
+ * Cards of `lines` lines that fit down the column at `gap` between them.
+ *
+ * Half a border falls outside the card at each end of the column, so the usable height is
+ * `600 − stroke` rather than 600. Getting that wrong is what would silently drop the count.
+ */
+function cardCount(lines: number, gap: number = PANEL_CARD_GAP): number {
+  const height = labelCardHeight(lines, PANEL_CARD_FONT_SIZE, PANEL_CARD_PADDING.y);
+  const inset = PANEL_CARD_STROKE / 2;
+
+  let count = 0;
+  let y = inset;
+  while (y + height + inset <= PANEL_HEIGHT) {
+    y += height + gap;
+    count += 1;
+  }
+
+  return count;
+}
+
 describe('PANEL_WIDTH_UNITS', () => {
   /**
    * The column drawn and the width held out of the labels' margin have to be one number. Two that
@@ -120,40 +140,39 @@ describe('panelFitsBoard', () => {
 
 describe('the card geometry against ADR 0009', () => {
   /**
-   * > "The panel holds five cards at 26 units over three lines, seven at two lines."
+   * ADR 0009 wrote this as *"five cards at 26 units over three lines, seven at two lines"*, and its
+   * third amendment moves the body to the arc-title size (#174), which buys **one more card in each
+   * column**: six and eight.
    *
    * This is the arithmetic the 180-unit allocation was chosen on, so the constants have to keep
-   * reproducing it. A change to the font size, the gap or the title line cap that quietly holds four
-   * cards has given up the panel's own justification (#70) without saying so.
+   * reproducing it. A change to the font size, the gap or the title line cap that quietly holds one
+   * fewer has given up part of the panel's own justification (#70) without saying so — which is why
+   * these are numbers rather than a `>= 5`.
    */
   it.each([
-    [3, 5],
-    [2, 7]
+    [3, 6],
+    [2, 8]
   ])('holds %i-line cards, %i of them', (lines, expected) => {
-    const height = labelCardHeight(lines, PANEL_CARD_FONT_SIZE, PANEL_CARD_PADDING.y);
-    // Half a border falls outside the card at each end of the column, so the usable height is
-    // `600 − stroke` rather than 600. Getting this wrong is what would silently drop the count.
-    const inset = PANEL_CARD_STROKE / 2;
-
-    let count = 0;
-    let y = inset;
-    while (y + height + inset <= PANEL_HEIGHT) {
-      y += height + PANEL_CARD_GAP;
-      count += 1;
-    }
-
-    expect(count).toBe(expected);
+    expect(cardCount(lines)).toBe(expected);
   });
 
   /**
-   * The gap is the largest whole number that keeps the five, and being at the ceiling is the point:
-   * six holds only four cards. Derived rather than restated, so raising the stroke or the line height
-   * fails here with the reason rather than quietly costing a card.
+   * The gap is the largest whole number that keeps the count above, and being *at* the ceiling is the
+   * point rather than the value 5 being right: one more would cost a card.
+   *
+   * **The count is derived, not typed.** The old form hard-coded the five this asserted the ceiling
+   * for, so when #174 took the body to 21.2576 it failed with an arithmetic mismatch rather than by
+   * naming what had changed — the ceiling for five became 30.47 and any gap under it passes, which
+   * says nothing. The count the gap actually holds is what the ceiling has to be measured against.
+   *
+   * That 5 survived the change is luck, not design: at 21.2576 the ceiling keeping six is 5.3216.
    */
-  it('sets the gap at the ceiling that keeps five tall cards', () => {
+  it('sets the gap at the ceiling for the tall-card count it holds', () => {
     const tall = labelCardHeight(3, PANEL_CARD_FONT_SIZE, PANEL_CARD_PADDING.y);
-    const ceiling = (PANEL_HEIGHT - PANEL_CARD_STROKE - 5 * tall) / 4;
+    const held = cardCount(3, PANEL_CARD_GAP);
+    const ceiling = (PANEL_HEIGHT - PANEL_CARD_STROKE - held * tall) / (held - 1);
 
+    expect(held).toBe(6);
     expect(PANEL_CARD_GAP).toBeLessThanOrEqual(ceiling);
     expect(PANEL_CARD_GAP + 1).toBeGreaterThan(ceiling);
   });
@@ -164,29 +183,46 @@ describe('the card geometry against ADR 0009', () => {
   });
 
   /**
-   * ADR 0009: "It holds 10 characters a line at 26 units." That figure is what justifies 180 rather
+   * ADR 0009: *"It holds 10 characters a line at 26 units."* That figure is what justifies 180 rather
    * than something smaller, so nothing may quietly eat into it — and #160's swatch openly does, by
-   * the one character its own costing prices it at. Both numbers are asserted so the *reason* the
-   * shipped figure is nine stays visible, rather than ten drifting to nine unremarked.
+   * the one character its own costing prices it at.
+   *
+   * The third amendment's type lever (#174) moves both: **13 before the swatch and 12 after it** at
+   * 21.2576. Both are asserted, as before, so the *reason* the shipped figure is the lower of the two
+   * stays visible rather than 13 drifting to 12 unremarked. The swatch still costs exactly one
+   * character, which is worth knowing did not change with the body size.
    */
-  it('holds ADR 0009’s ten characters a line before the swatch, and nine after it', () => {
+  it('holds thirteen characters a line before the swatch, and twelve after it', () => {
     const cardWidth = PANEL_WIDTH_UNITS - PANEL_CARD_STROKE;
 
-    expect(charBudget(cardWidth - PANEL_CARD_PADDING.x * 2, PANEL_CARD_FONT_SIZE)).toBe(10);
+    expect(charBudget(cardWidth - PANEL_CARD_PADDING.x * 2, PANEL_CARD_FONT_SIZE)).toBe(13);
     expect(
       charBudget(cardWidth - SWATCH_RESERVE - PANEL_CARD_PADDING.x * 2, PANEL_CARD_FONT_SIZE)
-    ).toBe(9);
+    ).toBe(12);
   });
 
   /**
-   * Recorded as an assertion rather than only in the plan doc, because it is the reason the trailing
-   * line is a duration and not the clock times the brainstorm asks for. If the budget ever reaches
-   * eleven, `HH:MM–HH:MM` becomes affordable and this test is the prompt to revisit it.
+   * **The prompt this test was written to be, firing.** In its previous form it asserted the budget
+   * *could not* hold `HH:MM–HH:MM` — the reason the trailing line is a duration and not the clock
+   * times the brainstorm asks for — and said so:
+   *
+   * > If the budget ever reaches eleven, `HH:MM–HH:MM` becomes affordable and this test is the prompt
+   * > to revisit it.
+   *
+   * #174's type lever took it to twelve. So the assertion inverts: the budget affords the line, and
+   * what the trailing line should *say* is now a choice rather than a constraint.
+   *
+   * Deliberately still an assertion rather than a deletion, and deliberately not acted on here.
+   * #169 owns the choice — a duration states a length and a clock time states a boundary, which are
+   * different claims and the panel was justified on the second — and #178 is concurrently deciding
+   * whether durations are shown at all. This keeps the affordance from being lost between the two.
    */
-  it('cannot afford an HH:MM–HH:MM line, which is why the trailing line is a duration', () => {
+  it('now affords an HH:MM–HH:MM line, which makes the trailing line #169’s choice', () => {
     const cardWidth = PANEL_WIDTH_UNITS - PANEL_CARD_STROKE - SWATCH_RESERVE;
     const budget = charBudget(cardWidth - PANEL_CARD_PADDING.x * 2, PANEL_CARD_FONT_SIZE);
-    expect('09:00–09:45'.length).toBeGreaterThan(budget);
+
+    expect('09:00–09:45'.length).toBe(11);
+    expect(budget).toBeGreaterThanOrEqual('09:00–09:45'.length);
   });
 });
 
@@ -287,12 +323,12 @@ describe('planAgendaCards', () => {
     expect(cards[0].y).toBe(PANEL_CARD_STROKE / 2);
   });
 
-  /** The ADR's five, arrived at through the planner rather than through the arithmetic above. */
-  it('fits five three-line cards and reports the rest as dropped', () => {
+  /** The count above, arrived at through the planner rather than through the arithmetic. */
+  it('fits six three-line cards and reports the rest as dropped', () => {
     const plan = planAgendaCards(entries(8), { height: PANEL_HEIGHT });
 
-    expect(plan.cards).toHaveLength(5);
-    expect(plan.dropped).toBe(3);
+    expect(plan.cards).toHaveLength(6);
+    expect(plan.dropped).toBe(2);
     expect(plan.cards[0].lines).toHaveLength(3);
   });
 
@@ -347,9 +383,12 @@ describe('planAgendaCards', () => {
   /**
    * Time order is the column's whole meaning. Skipping a tall card for a short one behind it would
    * put 15:30 above 14:30.
+   *
+   * The filler count is the tall-card capacity, so it has to move with it: at five the column now has
+   * room left and the tiny card fits, which made this test pass while testing nothing (#174).
    */
   it('stops at the first card that does not fit rather than reordering', () => {
-    const tall = entries(5);
+    const tall = entries(cardCount(3));
     const plan = planAgendaCards([...tall, { id: 'tiny', title: 'X', color: '#fff' }], {
       height: PANEL_HEIGHT
     });
