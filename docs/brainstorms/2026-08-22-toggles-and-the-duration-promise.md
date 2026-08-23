@@ -49,7 +49,7 @@ current figure is an accident of four gates. Measured over 2028 arcs in 192 stat
 | the arc | 336 (16.6%) | **367 (18.1%)** | 875 arcs (43.1%) carry no title at all — too narrow for text, let alone a second line; another 356 (17.6%) carry a two-line title, and #145's model overruns by 6.09 units on the widest ring the dial has |
 | the floating card | 407 (20.1%) | **496 (24.5%)** — every card that exists | a card exists only where a title overflowed; making one for an event whose title fit is a new card, not a fuller one |
 | **arc + every existing card** | 743 (36.6%) | **832 (41.0%)** — and 863 (42.6%) only if the arc's gates go too | — |
-| the panel | **974 of 974 — 100%** | **5 cards** at 26 units, 7 at two lines (ADR 0009); 6 at #174's 21.26 | a fixed column, and it lists a window of the day rather than the dial's set |
+| the panel | **974 of 974 — 100%** | **5 cards** at 26 units, 7 at two lines (ADR 0009); **6 and 8** at #174's 21.2576, shipped in #190 | a fixed column, and it lists a window of the day rather than the dial's set |
 
 **The combined ceiling deliberately does not sum the two above it.** 367 + 496 is 863, but the arc's
 367 spends the lone-arc gate, and the section below concludes that gate should be kept — so 832 is
