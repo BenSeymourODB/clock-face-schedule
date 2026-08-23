@@ -5,8 +5,12 @@ ready to build. Nothing here is decided. It adds two things the issues did not h
 and speed figures #40 flags as risks are now **measured** rather than intuited, and the panel is
 shown to have a concurrency defect **today**, before any cursor exists. Two inputs from the owner
 (2026-08-22) are folded in and are treated as settled: **the cards may be set smaller than they are
-now**, and **every card must state its start and end times** — which is #169, and which ADR 0009's
-third amendment already makes affordable.
+now**, and **every card must state its start and end times** — which is #169, and which the body
+size #190 has now shipped already makes affordable.
+
+**Re-measured against `main` after #190 and #172 landed.** Every arithmetic figure below is unchanged
+by them — the sweeps take a body size as a parameter — but the rendered card counts moved, and are
+restated at the shipped 21.2576 with the pre-#190 figure beside them.
 
 **Issue:** #40 and #41, under the #36 epic. The defect in "What the panel does today" is not filed.
 **Docs:** `docs/brainstorms/2026-08-17-agenda-panel.md` (the panel's purpose and the original
@@ -16,23 +20,25 @@ statement of this problem), ADR 0009 and its third amendment (the 180 units, the
 
 ## What the panel does today, rendered
 
-Built at 1920×1080 and looked at, which is what found this. At **`?now=01:45&freeze=1`** the panel
-draws five cards — 🎮 Game Time, 🔴 Deadline, 🟣 Study Skills, 🟠 Swimming Group B, 🟡 Tidy Up — as a
-plain vertical sequence. **Four of those five are running at that instant**, and the dial a few
-hundred units to the left draws the same four as concentric rings, which is the whole point of the
-dial.
+Built at 1920×1080 and looked at, which is what found this. Re-rendered after **#190** shipped the
+21.2576-unit body, since a smaller body fits more cards and the figures below move with it.
 
-> **The two halves of the display contradict each other about the same five events at the same
-> moment.** The dial says "these are simultaneous"; the panel says "these happen one after another".
+At **`?now=01:45&freeze=1`** the panel draws six cards — 🎮 Game Time, 🔴 Deadline, 🟣 Study Skills,
+🟠 Swimming Group B, 🟡 Tidy Up, ⚫ Assembly — as a plain vertical sequence. **Four of those six are
+running at that instant**, and the dial a few hundred units to the left draws the same four as
+concentric rings, which is the whole point of the dial.
 
-The unpinned frame carries a quieter version of it: `⚫ Staff Debrie...` (04:00–04:30) is drawn
+> **The two halves of the display contradict each other about the same events at the same moment.**
+> The dial says "these are simultaneous"; the panel says "these happen one after another".
+
+The unpinned frame carries a quieter version of it: `⚫ Staff Debrief a...` (04:00–04:30) is drawn
 directly above `🟤 ⚽` (04:02–04:26), and ⚽ runs entirely *inside* Staff Debrief. Two consecutive
-cards, nothing to say they are concurrent.
+cards, nothing to say they are concurrent. (Seven cards there since #190, against six before it.)
 
 Two smaller things the same screenshots show, both relevant to what a cursor would be added to:
 
 - **No card says whether it is running.** In the unpinned frame 🟡 Tidy Up is draining on the dial and
-  its card is indistinguishable from the four future ones beside it.
+  its card is indistinguishable from the six future ones beside it.
 - **No card says when anything happens.** The trailing line is a duration (`44 min`), which is #169.
 
 So the concurrency problem is not a consequence of adding a cursor. **It is a defect the panel
@@ -88,14 +94,15 @@ intuitively rather than decoding it, that is the risk #40 names, and 14.5× is w
 
 ## What the owner's two inputs change
 
-**Smaller type.** ADR 0009's third amendment already takes the body to **21.26** (#174, decided
-2026-08-22, not yet built — 26 is what renders). The owner's note here says smaller still is
-legible, so the exchange rate is worth having in one place:
+**Smaller type.** ADR 0009's third amendment took the body to 21.26, and **#190 has since shipped
+it** — `PANEL_CARD_FONT_SIZE` is now derived from the lone arc title rather than written down, so it
+renders at **21.2576**. The owner's note here says smaller still is legible, so the exchange rate is
+worth having in one place. The rows below 21.26 are the ones that would be new:
 
 | body | mm, 4 ft board | distance/150 | chars a line at 180 | 3-line cards fitting |
 | --- | --- | --- | --- | --- |
-| 26.00 — as it renders | 45.11 | 6.77 m | 9 | 5 |
-| **21.26 — as decided** | 36.89 | 5.53 m | **12** | **6** |
+| 26.00 — before #190 | 45.11 | 6.77 m | 9 | 5 |
+| **21.26 — as it renders** | 36.89 | 5.53 m | **12** | **6** |
 | 17.52 — the floating-label body | 30.40 | 4.56 m | 14 | 7 |
 | 15.00 | 26.03 | 3.90 m | 17 | 8 |
 | 13.00 | 22.55 | 3.38 m | 19 | 9 |
@@ -104,9 +111,9 @@ legible, so the exchange rate is worth having in one place:
 Every unit an indent, a rail or a lane takes is bought out of this table. That is the currency the
 options below are priced in.
 
-**Times on every card (#169).** `HH:MM–HH:MM` is 11 characters and fits from 21.26 down, so #169
-stops being blocked and becomes a layout cost. Rendered on the fixture at the unpinned pin, with a
-real times line in place of the duration:
+**Times on every card (#169).** `HH:MM–HH:MM` is 11 characters against the 12 the shipped body now
+holds, so #169 is no longer blocked at all — it is a layout cost and a choice. Rendered on the
+fixture at the unpinned pin, with a real times line in place of the duration:
 
 | body | cards drawn, times line | times line kept on | cards with no trailing line at all |
 | --- | --- | --- | --- |
@@ -231,6 +238,15 @@ answers it if it is.
   the whole-column reading Family B loses.
   A rail printing each event's *own* times is a different price and not affordable: `HH:MM` needs
   **52.56 units at 17.52**, which costs five characters a line (12 → 7).
+
+  **#172 has just priced the reading a rail would carry, from the other side.** It drops a floating
+  label whose event the panel already names — but *only when that label collides with another*,
+  deliberately, because the card's position on the dial says **which arc** the name belongs to and
+  *"the panel has no channel for"* it. That is exactly the channel a rail would add. So the rail's
+  value is not only the now marker: it is the anchor #172 is currently paying collisions to keep.
+  Whether a rail in the panel could discharge that anchor — and so let #172 suppress unconditionally,
+  clearing the **86 further labels** its collision gate currently keeps for the anchor's sake, of 99
+  panel-named — is a question worth putting to #172 rather than answering here.
 - **C2 — the dial is the rail.** Draw no cursor in the panel at all. The dial already answers "where
   has the day got to" — with hands, against numerals at 28.62 units, in the middle of the board — and
   the panel answers "what is it called and when". **Zero cost**, and it should be the baseline every
@@ -302,7 +318,7 @@ unpinned dial, whose states are invariant):
 
 | pin | what the panel is being judged on |
 | --- | --- |
-| `?now=01:45&freeze=1` | the worst case — **five cards, four of them running at once**. Not currently in the README's pin table, which reaches this cluster at `01:30` where only three are running. |
+| `?now=01:45&freeze=1` | the worst case — **six cards, four of them running at once** (five and four before #190). Not currently in the README's pin table, which reaches this cluster at `01:30` where only three are running. |
 | `?now=04:15&freeze=1` | one event nested wholly inside another (⚽ inside Staff Debrief), both draining |
 | unpinned | one running, one future overlap, nothing concurrent — the case that must not be the only one looked at |
 
