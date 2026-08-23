@@ -1,9 +1,13 @@
 # The panel's type lever — the agenda card's body drops to the arc-title size
 
-**Status:** done — shipped in #190
+**Status:** done — shipped in #190, with its review corrections in #194
 **Issue:** #174 (the type half only; the width half stays held for #138)
 **Docs:** `docs/DESIGN.md` ADR 0009, third amendment item 2 — already written, and this is what
 makes it true of the code
+
+> #190 merged before its review response landed, so the reversal recorded below — the constant being a
+> literal rather than a derived expression — describes #194 rather than #190. On `main` between the two,
+> `build/Code.gs` carries 322 bytes of dial geometry that ADR 0003 forbids.
 
 ## What ships
 
