@@ -885,6 +885,37 @@ describe("analogClock", () => {
       // relief being free: no card gave up an event's length to buy another card room.
       expect(withDuration(relieved)).toEqual(["late", "middle"]);
     });
+
+    /**
+     * **#178's switch changes the geometry this rule decides on, so the two compose and neither
+     * PR measured the composition.** With durations off a card loses its trailing line and
+     * `fitLabelToClearedWidth` re-wraps the title onto fewer, *wider* lines: measured on the
+     * fixture at `?now=05:00&freeze=1`, the `Staff Debrief and Planning` card goes from
+     * 99.74 × 49.41 units on three lines to **125.85 × 34.18 on two** — 26.11 units wider. Wider
+     * cards collide differently, so the off state suppresses a different set: swept over 48 pins at
+     * 1920×1080 the column admits 301 → 489 cards and the band draws 178 → 157 labels, differing at
+     * 12 pins and always downward.
+     *
+     * That extra relief is welcome, but it is only safe because of the property asserted here: the
+     * off state must never drop a card the panel does **not** name. The sweep found 21 additional
+     * drops and 0 violations; this is the assertion that keeps it true, since a rule that decided on
+     * post-resolution rects could drop an unnamed card the wider geometry pushed into a collision,
+     * and that arc would be named nowhere (#146).
+     */
+    it("suppresses only panel-named cards when durations are off and the cards are wider", () => {
+      const named = new Set(["early"]);
+      const off = { showDurations: false, namedElsewhere: () => named };
+
+      // The named card still goes, so the switch has not disabled the rule.
+      expect(cardIds(build(pile, off).element)).toEqual(["late", "middle"]);
+
+      // And the wider off-state cards do not cost an unnamed one its label, however they now pile.
+      expect(cardIds(build(pile, { showDurations: false }).element)).toEqual([
+        "early",
+        "late",
+        "middle",
+      ]);
+    });
   });
 
   describe("ticking", () => {
