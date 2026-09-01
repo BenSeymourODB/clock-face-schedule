@@ -79,9 +79,10 @@ along the top edge carrying a persistent 1h/12h switch.
 reach and keeps it always visible, because a switch that shows its own position is the only thing
 that stops a scale change being a mode nobody knows was made. Pressing it fades the dial out,
 redraws it at the other scale and updates `?scale=` in place — no reload. It costs the dial 9.60% of
-its height at 1920×1080 and hands the labels 60.9 units a side back, which is ADR 0009's trade taken
-deliberately: the dial is bound by the board's *height*, so vertical space converts into horizontal
-room. The scale is **not yet persisted** — a reload opens on the deployment's answer (#85, #31).
+its height at 1920×1080 and hands the labels back 60.9 units a side with the panel drawn, 66.3
+without it, which is ADR 0009's trade taken deliberately: the dial is bound by the board's *height*,
+so vertical space converts into horizontal room. The scale is **not yet persisted** — a reload opens
+on the deployment's answer (#85, #31).
 
 **Preferences persist in `PropertiesService`, not in the browser** (#31) — the page's origin rotates
 between sessions, so cookies and `localStorage` outlive nothing here. A user property wins over a

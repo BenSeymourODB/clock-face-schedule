@@ -94,8 +94,7 @@
      *
      * ADR 0009 costed a bar at 60/80/100/120 mm on a 4 ft 16:9 board and ADR 0008 quotes the
      * 100 mm case, which is **8.2% of that board's height** — so 8.2vh is the ADRs' own figure
-     * rather than a new one. The floor is for a laptop window, where 8.2vh stops being a touch
-     * target; it does not bind on any board.
+     * rather than a new one.
      *
      * Measured at 1920×1080 with the panel up: the dial goes 922.32 → 833.76 px (−9.60%) and the
      * labels' margin 183.2 → 244.1 units a side. That is ADR 0009's trade taken deliberately — the
@@ -104,9 +103,13 @@
      * saturate at thirteen characters a line. The ADR predicts −8.2%; the extra 1.4 points are the
      * label frame, which its model did not carry.
      *
-     * Retuning the bar is this one declaration. Nothing else is derived from it.
+     * A `min-height` and not a height: the switch measures **53.60 px**, so below a 654 px-tall
+     * viewport the content is what sets the row and this declaration stops binding. An earlier
+     * version wrote `max(3rem, 8.2vh)` for a floor that could therefore never be reached — 48 px is
+     * under 53.60 at every viewport size — and claimed in this comment to be the one number that
+     * retunes the bar. It is that on any board; on a laptop window the switch is.
      */
-    --bar-height: max(3rem, 8.2vh);
+    --bar-height: 8.2vh;
 
     height: 100vh;
     display: grid;
@@ -272,6 +275,35 @@
   .scale-option input:focus-visible + .scale-option-text {
     outline: 3px solid var(--destructive);
     outline-offset: -3px;
+  }
+
+  /*
+   * Windows High Contrast and friends force every background and text colour to a system pair — so
+   * the thumb, the track and both labels collapse to the same two colours, and the real radios are
+   * `opacity: 0` and cannot stand in. That leaves a switch with no visible position, which is
+   * precisely the failure ADR 0008 forbids: a mode changed with nothing on screen saying so.
+   *
+   * An `outline` survives forced colours where a background does not, so the lit option carries one
+   * of its own. `--destructive` becomes a system colour here, which is why the focus ring above gets
+   * a second channel — `outline-style` — rather than being told apart from this one by hue.
+   *
+   * **Reasoned rather than rendered**, and flagged as such: the preview cannot emulate forced
+   * colours, so what is verified is only that the normal path is unchanged. It is additive and
+   * cannot make the ordinary case worse, which is why it ships ahead of a look at real hardware.
+   */
+  @media (forced-colors: active) {
+    .scale-switch-thumb {
+      display: none;
+    }
+
+    .scale-option input:checked + .scale-option-text {
+      outline: 3px solid CanvasText;
+      outline-offset: -3px;
+    }
+
+    .scale-option input:focus-visible + .scale-option-text {
+      outline-style: dashed;
+    }
   }
 
   /*

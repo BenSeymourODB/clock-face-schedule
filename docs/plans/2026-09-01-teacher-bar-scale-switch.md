@@ -118,8 +118,9 @@ Two, both invisible to a green suite.
 `application/x-www-form-urlencoded` — so one press on `?now=04:15&freeze=1` produced
 `?now=04%3A15&freeze=1&scale=1h`. Nothing breaks; it decodes to the same pin. But `?now=04:15` is a
 string a person types, reads back off a board and pastes into a PR, and README prints it in that form
-a dozen times. `withScaleParam` replaces one pair textually and leaves every other byte alone, which
-is also what made it node-testable instead of living in the entry file.
+a dozen times. `withScaleParam` replaces one pair textually — the scale pair moves to the end of the
+query, every other pair's own text is untouched — which is also what made it node-testable instead
+of living in the entry file.
 
 **2. The fade could not be seen at all, and the reason was not a bug.** The automation browser
 reports `prefers-reduced-motion: reduce`, so both the CSS transition and `main.ts`'s wait were
@@ -132,11 +133,50 @@ read a rule's resolved value rather than an animation at t=0: `#dial[data-swappi
 to 0 and back to 1, and the thumb translates 118.047 px — exactly its own width — landing on the
 second segment's cell.
 
+## What review found after that
+
+A `/code-review` pass turned up one live defect and one piece of dead code, both in the parts of this
+that no spec could reach.
+
+**The dial could be left permanently blank.** `data-swapping` was cleared only by the fade's own
+timer, and the reduced-motion branch cancelled that timer without clearing the attribute — so a board
+whose motion setting changed *between* two presses ended at `opacity: 0` with nothing left to undo
+it. Reproduced live on the preview. A `redraw` that threw was the second route to the same state.
+
+The fix is a single `settle()` that every path out goes through, with the redraw in a `try` and the
+attribute cleared in the `finally`: a dial showing the *old* scale is wrong, a blank one is worse and
+gives a viewer nothing to report but "the board stopped working". And the swap moved out of `main.ts`
+into `scale-swap.ts` — the defect was in the one file that cannot be given a spec, which is the whole
+argument for the move. Four cases now cover it, and two of them were checked by reintroducing the
+defect and watching them fail.
+
+**`--bar-height: max(3rem, 8.2vh)` had a floor that could never bind.** The switch measures 53.60 px,
+so the content sets the row below a 654 px-tall viewport and 48 px is under that at every size. Two
+adjacent comments said otherwise — "the floor is for a laptop window" and "retuning the bar is this
+one declaration". Now `8.2vh`, with the content floor stated.
+
+**Three smaller ones, all taken.** The bar was a `<nav>`, which publishes a navigation landmark for a
+bar that navigates nowhere — now `role="group"`, and `toolbar` when #47 gives it a second control to
+arrow between. `withScaleParam`'s docstring claimed to leave every other byte alone when the scale
+pair does move to the end. And the README quoted the panel-up margin delta without naming which
+ground it was, against `CLAUDE.md`'s own rule.
+
+**One acknowledged and not taken:** in demo mode a press renders the band twice — once from
+`setScale`, once from the re-seated fixture's `setEvents`. Both happen behind a dial at `opacity: 0`,
+on a control pressed a handful of times a lesson, and the only way to make it one is a combined
+set-scale-and-events entry point that exists for nothing else.
+
+**Not yet looked at on hardware:** forced-colors mode. Every colour the switch's state rides on —
+thumb background, track background, both label colours — is forced there, and the real radios are
+`opacity: 0`, so the position signal would have gone. An `outline`, which forced colours preserves,
+now carries it. The reasoning is sound and the preview cannot emulate the mode, so what is verified
+is only that the normal path is unchanged.
+
 ## The one number that lives in two files
 
-`SCALE_SWAP_MS` in `teacher-bar.ts` and `--scale-fade` in `Styles.html` are the same 180 ms: the
+`SCALE_SWAP_MS` in `scale-swap.ts` and `--scale-fade` in `Styles.html` are the same 180 ms: the
 stylesheet fades, and the client has to know when the old picture has finished leaving before it
-draws the new one. `teacher-bar.test.ts` reads the declaration back and compares, because the failure
+draws the new one. `scale-swap.test.ts` reads the declaration back and compares, because the failure
 otherwise is a dial redrawn mid-fade — a flicker, which reads as a fault rather than as a mistake and
 would pass every other test in the file.
 

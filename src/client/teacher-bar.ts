@@ -19,17 +19,6 @@
 import type { DialScaleId } from "../shared/clock";
 
 /**
- * How long the switch takes to move and the dial takes to fade, in milliseconds.
- *
- * The same number as `--scale-fade` in `Styles.html`, which is where both transitions are actually
- * declared; this copy exists because the host has to know when the old picture has finished leaving
- * before it draws the new one. `teacher-bar.test.ts` reads the stylesheet back and compares, so the
- * two cannot drift — the failure otherwise is a dial redrawn mid-fade, which looks like a flicker
- * rather than like a mistake.
- */
-export const SCALE_SWAP_MS = 180;
-
-/**
  * The scales the switch offers, in the order it lays them out.
  *
  * 12 hours first because it is the default and the dial's inherited behaviour, so the thumb's
@@ -43,38 +32,6 @@ const SCALE_OPTIONS: readonly { id: DialScaleId; label: string }[] = [
 
 /** The radio group's name. Shared by both inputs, which is what makes them one control. */
 const SCALE_INPUT_NAME = "dial-scale";
-
-/** The parameter the dial's scale has always been selectable by (#34), and still is. */
-const SCALE_PARAM = "scale";
-
-/**
- * `search` with `?scale=` set to `scale`, and **every other parameter left byte-identical**.
- *
- * The obvious version of this is `URLSearchParams.set` and `URL.toString()`, and it was written that
- * way first. It rewrites the whole query string in `application/x-www-form-urlencoded`, which
- * percent-encodes characters a query may legally carry raw — so pressing the switch on
- * `?now=04:15&freeze=1` produced `?now=04%3A15&freeze=1&scale=1h`. Nothing breaks: it decodes to the
- * same pin. But `?now=04:15` is a parameter a person types, reads back off the bar of a board and
- * pastes into a PR, and `README.md` prints it in that form a dozen times. Mangling it as a side
- * effect of an unrelated press is the kind of small dishonesty that gets copied forward.
- *
- * So the edit is textual and confined to one pair. Safe because the values are this module's own —
- * `12h` and `1h`, which need no escaping — rather than anything read off the page.
- *
- * A repeated `scale=` collapses to one, which is the behaviour `URLSearchParams.get` already has:
- * it reads the first, and leaving a second behind would make the URL say two things.
- *
- * Pure, so the encoding question is settled in node rather than inside the entry file that reads
- * `window.location` — the one place it cannot be unit-tested.
- */
-export function withScaleParam(search: string, scale: DialScaleId): string {
-  const kept = search
-    .replace(/^\?/, "")
-    .split("&")
-    .filter((pair) => pair !== "" && pair !== SCALE_PARAM && !pair.startsWith(`${SCALE_PARAM}=`));
-
-  return `?${[...kept, `${SCALE_PARAM}=${scale}`].join("&")}`;
-}
 
 export interface TeacherBarParams {
   /** Which scale the dial opened on — the switch shows it rather than deciding it. */
@@ -94,8 +51,14 @@ export interface TeacherBarHandle {
 }
 
 export function teacherBar({ scale, onScaleChange }: TeacherBarParams): TeacherBarHandle {
-  const element = document.createElement("nav");
+  // A `div` with `role="group"`, not a `<nav>`: ADR 0008 says *navigation-bar-style*, which is a
+  // statement about where the bar sits and how it looks, and a `<nav>` publishes a navigation
+  // landmark for a bar that navigates nowhere. Not `role="toolbar"` either — that promises arrow
+  // keys move between the toolbar's items, and here they belong to the radio group inside it.
+  // #47 adding a second control is when `toolbar` starts being the true one.
+  const element = document.createElement("div");
   element.className = "bar-controls";
+  element.setAttribute("role", "group");
   element.setAttribute("aria-label", "Display controls");
 
   const group = document.createElement("div");

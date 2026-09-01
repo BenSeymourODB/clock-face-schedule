@@ -7,9 +7,8 @@
  * scale it was opened on, and it reports the new one before the dial has caught up.
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import styles from "../../static/Styles.html?raw";
 import type { DialScaleId } from "../shared/clock";
-import { SCALE_SWAP_MS, teacherBar, withScaleParam } from "./teacher-bar";
+import { teacherBar } from "./teacher-bar";
 
 function build(scale: DialScaleId = "12h") {
   const onScaleChange = vi.fn();
@@ -90,53 +89,9 @@ describe("the scale switch", () => {
     expect(group.getAttribute("role")).toBe("radiogroup");
     expect(group.getAttribute("aria-label")).toBe("Dial scale");
     expect(bar.element.getAttribute("aria-label")).toBe("Display controls");
-  });
-
-  /**
-   * The one number that lives in two files. `main.ts` waits `SCALE_SWAP_MS` before redrawing the
-   * dial and the stylesheet fades it over `--scale-fade`; a drift between them redraws the dial
-   * mid-fade, which reads as a flicker rather than as a mistake and would pass every other test
-   * here.
-   */
-  it("waits exactly as long as the stylesheet fades for", () => {
-    const declared = /--scale-fade:\s*(\d+)ms/.exec(styles);
-
-    expect(declared, "Styles.html declares --scale-fade in milliseconds").not.toBeNull();
-    expect(Number(declared?.[1])).toBe(SCALE_SWAP_MS);
-  });
-});
-
-/**
- * The record a press leaves in the URL. The scale has been selectable by `?scale=` since #34 and
- * stays so, so the switch's job here is to keep that parameter telling the truth rather than to
- * introduce a second control.
- */
-describe("withScaleParam", () => {
-  it.each([
-    ["", "?scale=1h"],
-    ["?", "?scale=1h"],
-    ["?demo=1", "?demo=1&scale=1h"],
-    ["?scale=12h", "?scale=1h"],
-    ["?now=04:15&scale=12h&freeze=1", "?now=04:15&freeze=1&scale=1h"],
-    // A repeat would leave the URL saying two things; `URLSearchParams.get` reads only the first.
-    ["?scale=12h&scale=1h", "?scale=1h"],
-    // Valueless, which is what `?scale` on its own parses as — replaced rather than kept beside.
-    ["?scale", "?scale=1h"],
-    // Not the parameter, however much it looks like it.
-    ["?scaled=1", "?scaled=1&scale=1h"],
-  ])("%s → %s", (search, expected) => {
-    expect(withScaleParam(search, "1h")).toBe(expected);
-  });
-
-  /**
-   * The defect this function exists for, found by pressing the switch on a pinned preview rather
-   * than by reading the code: `URLSearchParams` re-encodes the whole query string, so an unrelated
-   * `?now=04:15` came back as `?now=04%3A15`. It still parses; it is no longer the string README
-   * prints or a person types.
-   */
-  it("leaves every other parameter exactly as it was authored", () => {
-    expect(withScaleParam("?now=2026-08-18T04:15&freeze=1", "12h")).toBe(
-      "?now=2026-08-18T04:15&freeze=1&scale=12h"
-    );
+    // Not a `<nav>`: the bar navigates nowhere, and a landmark saying otherwise is worse
+    // than none. Not `toolbar` either, until #47 gives it a second control to move between.
+    expect(bar.element.getAttribute("role")).toBe("group");
+    expect(bar.element.tagName).toBe("DIV");
   });
 });

@@ -36,7 +36,8 @@ import {
 import { type AgendaPanelHandle, agendaPanel } from "./render/agenda-panel";
 import { type AnalogClockHandle, DIAL_VIEWBOX_SIZE, analogClock } from "./render/analog-clock";
 import { type ScheduleStatus, describeStatus, nextStatus } from "./schedule-status";
-import { SCALE_SWAP_MS, teacherBar, withScaleParam } from "./teacher-bar";
+import { scaleSwapper, withScaleParam } from "./scale-swap";
+import { teacherBar } from "./teacher-bar";
 
 const TICK_INTERVAL_MS = 1_000;
 const POLL_INTERVAL_MS = 5 * 60 * 1_000;
@@ -493,45 +494,27 @@ function startDisplay(): void {
     if (showingFixture) seatFixture(next);
   }
 
-  /** Cleared and re-armed by a press landing mid-fade, so two quick presses cost one redraw. */
-  let pendingSwap: number | null = null;
+  /** The fade, and the clearing of it on every path out — `scale-swap.ts` owns both. */
+  const swapDial = scaleSwapper({
+    dial: dial instanceof HTMLElement ? dial : null,
+    redraw: drawScale,
+    reducedMotion: prefersReducedMotion
+  });
 
   /**
-   * The switch's answer: fade the dial out, redraw it at the new scale, and let the transition carry
-   * it back in.
+   * The switch's answer: record the choice, then let the dial catch up behind a fade.
    *
-   * The fade is not decoration. The two scales share no drawn element — different outer numerals, a
-   * second numeral ring, different hand lengths, and an arc set taken from a different window at
-   * twelve times the resolution — so an instant swap is every mark on the dial changing at once,
-   * which reads as a fault rather than as a mode. Fading is what says *this is the same display,
-   * saying something else*.
-   *
-   * The switch itself has already moved by the time this runs, and does not wait: a control that
-   * lagged the press by the fade would feel broken to whoever is standing at the board.
+   * Two steps, in this order and not the other. The URL and the mount are written *now* because they
+   * are the record of what was asked for; the picture is deferred because swapping every mark on the
+   * dial at once reads as a fault rather than as a mode. The switch has already moved by the time
+   * this runs and does not wait either — a control that lagged the press by the fade would feel
+   * broken to whoever is standing at the board.
    */
   function changeScale(next: DialScaleId): void {
     if (next === currentScale) return;
     currentScale = next;
     recordScale(dial, next);
-
-    if (pendingSwap !== null) window.clearTimeout(pendingSwap);
-
-    if (!(dial instanceof HTMLElement) || prefersReducedMotion()) {
-      pendingSwap = null;
-      drawScale(next);
-      return;
-    }
-
-    const fading = dial;
-    fading.dataset["swapping"] = "1";
-    pendingSwap = window.setTimeout(() => {
-      pendingSwap = null;
-      // `currentScale`, not the `next` this call was made with: a second press during the fade has
-      // already moved it, and the dial should arrive at what the switch says rather than at what an
-      // earlier press asked for.
-      drawScale(currentScale);
-      delete fading.dataset["swapping"];
-    }, SCALE_SWAP_MS);
+    swapDial(next);
   }
 
   if (barHost) {
