@@ -1,0 +1,22 @@
+# Line endings are LF in the working tree, on every platform.
+#
+# Not a style preference — two suites read repository text off disk and assert on its line
+# structure, so the terminator is load-bearing. `implement-issue-workflow.test.mjs` matches the
+# claim markers against `\nBranch: `, and `pin-table.test.ts` splits README on `\n` and looks its
+# table header up by exact string. Both are green in CI, which is Linux, and both fail on a Windows
+# checkout with the default `core.autocrlf=true` — five failures that say nothing about the code and
+# cannot be fixed in it.
+#
+# The blobs were already LF (autocrlf converts on the way in, not in the repository), so this
+# changes what is checked out and not what is stored: `git add --renormalize .` over the whole tree
+# is a no-op. It only has to be said out loud, because a per-machine `core.autocrlf` is not part of
+# the repository and the next Windows clone has it set too.
+#
+# `eol=lf` rather than a bare `text=auto`: `auto` leaves the working tree on the platform default,
+# which is the setting being overridden.
+* text=auto eol=lf
+
+# Binary, so no conversion is attempted on either axis.
+*.png binary
+*.jpg binary
+*.ico binary
