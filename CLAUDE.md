@@ -38,9 +38,16 @@ is a design built on a false premise.
 
 The same discipline is what makes **pushback land**. Every objection that changed a decision here
 carried a number — "the hour hand is 130.8 units against a timer wanting 130, so it is entirely
-hidden"; "⚫ measures 1.21:1, which is not a faint edge but no edge"; "nine of Google's eleven colours
-fail on white"; "at 330° the band wraps at every time of day". Unquantified concerns get waved past,
-and they deserve to be.
+hidden"; "⚫ measures 1.316:1, which is not a faint edge but no edge"; "nine of Google's eleven
+colours fail on white"; "at 330° the band wraps at every time of day". Unquantified concerns get
+waved past, and they deserve to be.
+
+That ⚫ figure read **1.21:1** here for months, and correcting it is the point rather than a footnote:
+1.21 is `#1F2937` against `--card`, and #74 established that no arc is drawn on `--card`. Against
+`BAND_BACKGROUND` (`#0c0e12`), the ground arcs actually sit on, it is **1.316:1**. The conclusion is
+untouched — 1.316:1 is still no edge — but a number measured against the wrong ground was quoted in
+the passage arguing that only measured claims land. **Name the ground with the ratio**; a contrast
+figure without one is not yet a measurement.
 
 ## Render before you believe it works
 
@@ -114,7 +121,7 @@ held open by the minimum span, an overflowing title, a two-line title carrying a
 crossing each end of the period, an event **straddling `now`** so the drain is in the *default*
 picture rather than a state a reviewer has to know to ask for (#71/#76 — this is the one whose
 absence let masks that drained nothing ship through two releases), and a `⚫` event whose colour
-measures **1.21:1** on the dial background. Add to it when your change has a stress case none of
+measures **1.316:1** against `BAND_BACKGROUND`. Add to it when your change has a stress case none of
 those covers; do not quietly make it easier.
 
 A demo mode that ships to production was a deliberate call: legibility has to be judged on the smart

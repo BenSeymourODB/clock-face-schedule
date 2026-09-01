@@ -1,10 +1,11 @@
 # clock-face-schedule
 
-An analog clock dial whose outer band carries one coloured arc per calendar event in the
-current 12-hour period — implemented as a **Google Apps Script web app** against a single
-Google Calendar.
+An analog clock dial whose outer band carries one coloured arc per calendar event in a rolling
+window around now — implemented as a **Google Apps Script web app** against a single Google
+Calendar.
 
-12 o'clock is the start of the period (midnight or noon); 720 minutes map to 360°. Each arc
+The 12-hour dial maps 720 minutes to 360°, and draws a window running 3 hours behind to 8 ahead
+(#25); a `?scale=1h` mode gives one revolution per hour instead. Each arc
 carries the event's emoji and a curved title. Overlapping events stack onto concentric inner
 rings. Titles too long for their arc are promoted to a floating label outside the dial with a
 connector line back to the arc.
@@ -61,38 +62,38 @@ and a `google.script.run` bridge in place of ordinary HTTP. See [docs/DESIGN.md]
 
 ## Status
 
-**MVP complete.** Deployed as an Apps Script web app, it draws the current 12-hour period from the
-viewer's own default calendar: coloured arcs with emoji and curved titles, concentric stacking for
+**MVP complete, and past it.** Deployed as an Apps Script web app, it draws **the viewer's own
+default calendar** — the app runs as whoever opens it, so there is nothing to share and no way for
+one viewer to read another's. The dial shows a **rolling window, 3 hours behind and 8 ahead** (#25),
+not a fixed AM/PM period: coloured arcs with emoji and curved titles, concentric stacking for
 overlapping events, floating labels for titles too long for their arc, live hands, and a five-minute
 poll that keeps the last good schedule on screen — marked with when it was last fresh — rather than
 blanking when a fetch fails.
 
-Adding `?check=1` to the URL shows bring-up diagnostics: colour emoji rendering, the
-`google.script.run` round trip, a calendar read, and the viewer's stored preferences with a
-write-and-echo check on them. Off by default, because the display itself carries no chrome.
+Two things have shipped since that were sketches when this section was written: a **1-hour scale
+mode** (`?scale=1h`), one revolution per hour for the detail a 12-hour dial cannot show, and an
+**agenda panel** beside the dial listing what is running and what is next.
 
-**Preferences persist in `PropertiesService`, not in the browser** (#31). The page's origin rotates
-between sessions, so cookies and `localStorage` outlive nothing here; a user-scoped property store
-does. `doGet` templates the resolved values into the page, so reading them costs no round trip, and
-only a change writes one. A user property wins over a script property, which wins over the code's
-default — so a forked school instance sets deployment-wide defaults in the script store. **Deleting a
-user property puts that display back on the deployment's answer** (#83), which is what keeps the
-script store useful: without it, a display that had once stored a key would ignore every later change
-an admin made to it.
+**Preferences persist in `PropertiesService`, not in the browser** (#31) — the page's origin rotates
+between sessions, so cookies and `localStorage` outlive nothing here. A user property wins over a
+script property, which wins over the code's default, so a forked school instance sets deployment-wide
+defaults in the script store, and **deleting a user property puts that display back on the
+deployment's answer** (#83). ADR 0009's neighbours in `docs/DESIGN.md` carry the reasoning.
 
 Nothing on the display sets a preference yet — that arrives with the timer's control surface (#47) —
-so today they move only from the Apps Script property editor, which needs both the `pref.` prefix and
-the stored encoding to have any effect:
+so today they move from the Apps Script property editor, which needs the `pref.` prefix and the
+stored encoding to have any effect:
 
 | Property | Values | Default |
 | --- | --- | --- |
 | `pref.showSeconds` | `1` / `0` | `1` |
+| `pref.showEventDurations` | `1` / `0` | `1` |
 | `pref.timerMuted` | `1` / `0` | `0` |
 | `pref.timerDurationSeconds` | whole seconds, 60–43200 | `300` |
 
-Anything else is ignored rather than rejected: an unprefixed key is not a preference, and
-`showSeconds = false` is not `0`. Both fall back silently, which is deliberate — a store written by
-an older version of the code must not be able to blank the display.
+Anything else is ignored rather than rejected — an unprefixed key is not a preference, and
+`showSeconds = false` is not `0` — which is deliberate: a store written by an older version of the
+code must not be able to blank the display.
 
 What remains is mostly **legibility tuning for the intended viewing distance** — the ported
 proportions were designed for a kitchen wall at a few feet, not a classroom projector. See the open
@@ -104,12 +105,15 @@ issues.
 
 Sketches for work not yet costed, each written to be picked up cold:
 
-- [Two time scales](docs/brainstorms/2026-08-17-two-time-scales.md) — the dial cannot distinguish
-  "this lasts minutes" from "this lasts hours"
-- [Agenda panel](docs/brainstorms/2026-08-17-agenda-panel.md) — a card list beside the dial, with a
-  playhead tracking the day
 - [Class timer](docs/brainstorms/2026-08-17-class-timer.md) — a teacher-set countdown drawn on the
   face, and the point where this becomes a tool rather than a display
+- [Label placement](docs/brainstorms/2026-08-21-label-placement-fork.md) — where a floating label is
+  allowed to sit, and the unresolved fork between a ring and two side arcs
+- [Agenda concurrency](docs/brainstorms/2026-08-22-agenda-concurrency.md) — the panel draws
+  simultaneous events as a plain sequence, contradicting the dial beside it
+
+The two-time-scales and agenda-panel sketches are **built**, not pending; their documents are kept as
+the reasoning behind what shipped.
 
 ## Local development
 
@@ -180,6 +184,15 @@ and on the deployed app alike:
 
 `build/preview.html?now=04:15&freeze=1` needs no server. A pinned clock says so on screen, and an
 unreadable time falls back to the real clock rather than inventing one.
+
+Four more parameters change *what* is drawn rather than when, and combine freely with the two above:
+
+| | |
+| --- | --- |
+| `?scale=1h` | The 1-hour dial — one revolution per hour, over a window 5 minutes behind and 50 ahead. The 12-hour dial is the default. |
+| `?durations=0` | Suppress every event's duration line, on the arcs, the floating cards and the agenda alike. `1` forces them on; unset uses the stored preference, which defaults to on. |
+| `?demo=1` | The sample fixture instead of a real calendar. Ships to production deliberately — legibility has to be judged on the board, and waiting for someone's real day to contain a useful overlap is not a plan. The preview is always in demo mode. |
+| `?check=1` | Bring-up diagnostics: colour emoji, the `google.script.run` round trip, a calendar read, and the stored preferences with a write-and-echo check. Off by default, because the display carries no chrome. |
 
 **A notice costs the dial a row of height** (#115). The dial is sized from the display, so a notice no
 longer changes its width — a 439.8 px notice and a 1021.7 px one give the same dial where they used to
@@ -260,6 +273,15 @@ Two consequences of that anchoring worth knowing before you pin something:
 `access` — and the Apps Script UI **writes back to the same file**. Change deployment settings
 here, not in the UI, or the next push reverts them.
 
+The committed pair is **`"executeAs": "USER_ACCESSING"` with `"access": "ANYONE"`**, and the two
+together are why the app needs no calendar sharing and no per-display configuration: it runs as
+whoever opens it and reads *their* default calendar. A shared URL therefore leaks nothing — it grants
+a viewer their own data and no one else's. **Do not change `executeAs` to the owner** expecting to
+harden it; that would show every viewer the owner's calendar instead of their own, which is a
+behaviour change rather than a restriction. The one cost is that `ANYONE` means any *signed-in*
+Google account, so a wall display has to hold a session and shows whichever account is signed in on
+it (#10).
+
 `--force` is deliberate, not laziness. Without it, clasp prompts before overwriting a differing
 remote manifest and **declining skips the entire push, not just the manifest**. Worse, with no
 TTY it auto-declines, prints `Skipping push.`, and exits 0 — so a scripted push would silently
@@ -313,70 +335,11 @@ The gate — `build`, `check-types`, `test` — re-runs inside the deploy job ra
 commit's earlier CI run, because a release or a dispatch can name any ref, including one whose CI
 predates a dependency change.
 
-### One-time setup
+### One-time setup, and how it authenticates
 
-1. Create the two deployments once, and keep the IDs they print:
-
-   ```bash
-   npx clasp create-deployment -d "staging"
-   npx clasp create-deployment -d "production"
-   npx clasp deployments   # every ID, with its version and description
-   ```
-
-   Leave the implicit `@HEAD` deployment alone — that is the `/dev` URL, not a slot.
-
-2. Log in locally, and take the credentials clasp writes:
-
-   ```bash
-   npx clasp login
-   cat ~/.clasprc.json
-   ```
-
-3. Populate the repository's Actions configuration:
-
-   | Where | Name | Value |
-   | --- | --- | --- |
-   | Repository secret | `CLASPRC_JSON` | the whole contents of `~/.clasprc.json` |
-   | Repository variable | `SCRIPT_ID` | the Apps Script project ID |
-   | Environment `staging` → variable | `CLASP_DEPLOYMENT_ID` | the staging deployment ID |
-   | Environment `production` → variable | `CLASP_DEPLOYMENT_ID` | the production deployment ID |
-
-`CLASP_DEPLOYMENT_ID` is **environment-scoped**, which is what lets one job body serve both slots —
-and it means production can carry required reviewers (Settings → Environments) without the workflow
-knowing anything about it. `SCRIPT_ID` is repository-wide because both slots live on one script
-project; defining it on an environment overrides it, should the slots ever need to be separate
-projects. Neither ID is secret: the deployment ID *is* the public web app URL.
-
-A missing value fails the job's first step with a message naming what to add, before anything is
-built or uploaded. A value that is *present but wrong* fails just before the push, for the same
-reason: a deployment ID can be valid and still belong to a different script project — nothing
-requires the two slots to share one — and that pairing is only visible by listing the project's
-deployments. The job lists them first and names both halves of any mismatch, so it never gets as far
-as changing the wrong project's content.
-
-### Why a stored refresh token rather than a service account
-
-`clasp --adc` looks like the keyless answer and is not. Two independent obstacles, both measured
-against clasp 3.4.0:
-
-- **Workload Identity Federation is silently discarded.** clasp's ADC path ends in
-  `if (defaultCreds instanceof OAuth2Client)`, and the `external_account` credentials that
-  `google-github-actions/auth` writes in keyless mode resolve to an `IdentityPoolClient` — which
-  extends `AuthClient`, not `OAuth2Client`. clasp drops it and reports `No credentials found.`
-  (`authorized_user`, `service_account` and `impersonated_service_account` all pass that check.)
-- **The Apps Script API is gated per user**, at <https://script.google.com/home/usersettings> — a
-  page no service account principal can visit. Domain-wide delegation impersonating a real user is
-  the only way round it.
-
-One consequence worth knowing if you ever move off clasp's built-in OAuth client with `--creds`:
-refresh tokens issued by an app in "Testing" publishing status expire after seven days, so CD would
-break weekly. Keep the consent screen in production, or internal to the Workspace domain.
-
-Note also that clasp resolves its auth file to `~/.clasprc.json` and **does not fall back to a local
-one**, contrary to its own `docs/config-files.md`. The workflow sets `clasp_config_auth` for exactly
-this reason; without it a perfectly good `.clasprc.json` sitting beside `.clasp.json` still yields
-`No credentials found.` It has to name the file, too — pointed at a directory, clasp dies with
-`EISDIR` despite `--help` advertising folder support.
+Creating the two deployments, minting the `CLASPRC_JSON` secret, and why this uses a stored refresh
+token rather than a service account: **[`docs/deploying.md`](docs/deploying.md)**. Done once per
+fork; nothing in the everyday loop needs it.
 
 ## Relationship to the prior implementations
 
