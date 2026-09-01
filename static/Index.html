@@ -39,6 +39,13 @@
         evaluated as code and fail the whole page.
       -->
       <!--
+        The teacher's controls (ADR 0008). Emitted unconditionally and outside every scriptlet: the
+        1h/12h switch is its own state indicator, and a bar that some loads do not carry is not one.
+        Empty here and filled by the client, as #panel is — the controls are DOM the client owns, and
+        markup here would be a second copy of what they are.
+      -->
+      <div id="bar"></div>
+      <!--
         The dial and the panel share one row, and it is a flex row rather than two grid columns for
         the reason Styles.html records: grid sizes columns before rows, so a panel whose width comes
         from the row's height cannot contribute a column width. ADR 0009, #39.

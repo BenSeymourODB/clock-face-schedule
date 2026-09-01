@@ -1,0 +1,179 @@
+# The teacher's top bar, and the 1h/12h switch in it
+
+**Status:** in progress — [#85](https://github.com/BenSeymourODB/clock-face-schedule/issues/85) keeps
+the two decisions this deliberately does not take (persisting the choice, and how the switch reads
+from the back of the room), and
+[#47](https://github.com/BenSeymourODB/clock-face-schedule/issues/47) is the bar's second occupant,
+still not-ready on three interaction decisions of its own.
+**Issue:** #85 (the switch and the bar), alongside #47 (the bar's other tenant) and #34 (the scale)
+**Docs:** ADR 0008, ADR 0009, `docs/brainstorms/2026-08-17-two-time-scales.md`,
+`docs/plans/2026-08-19-one-hour-scale-mode.md`,
+`docs/brainstorms/2026-08-22-toggles-and-the-duration-promise.md`
+
+## What this delivers
+
+The bar itself, and one control in it: a persistent two-segment switch between the 12-hour dial and
+#34's 1-hour one. Pressing it redraws the dial and rewrites `?scale=` without a reload.
+
+Until now the 1-hour mode was reachable only by typing a URL, which is a check a developer performs
+and not a control a teacher uses.
+
+## What was already decided, and where
+
+Collected because five documents each hold a piece, and the pieces are what bound this work rather
+than being restated as options.
+
+| Decision | Where |
+| --- | --- |
+| Interactive controls live in a navigation-bar-style **top bar**, along the upper edge | ADR 0008 |
+| The bar is **always visible**, not revealed on interaction | ADR 0008, settling #85's first open item |
+| The bar's height is not a trade against the dial — height converts into horizontal slack | ADR 0009, #85's comment |
+| The scale control is a **persistent switch showing its own position**, not a menu and not automatic switching | #34's comment, quoted in the 1-hour plan |
+| A switch of that kind is what defuses the hazard of a live mode change | ADR 0008's placement/liveness section |
+| `?scale=` stays, as `?demo=1` and `?check=1` do, so a board can be checked on the device | #85, the 1-hour plan's "not here" list |
+| The bar is designed **once** for #85 and #47 rather than twice | #47's comment, #85's third open item |
+| Nothing about the geometry needs revisiting — `analogClock` and `clockFace` already take a scale | #85's "already done" section |
+
+ADR 0008's accessibility caveat is carried unchanged and is not something this closes: height locks
+out a teacher in a wheelchair by exactly the property that locks out the children, and that is
+accepted as a first pass on a pilot rather than as an end state.
+
+## What it costs the dial, measured
+
+ADR 0009's argument is that the dial is bound by the board's **height**, so vertical space the bar
+takes comes back as horizontal room. Taken at ADR 0009's own priced case — a 100 mm bar on a 4 ft
+16:9 board, which is 8.2% of that board's height, hence `8.2vh`:
+
+| at 1920×1080, `#status` hidden | before | after |
+| --- | --- | --- |
+| dial | 922.32 px | **833.76 px** (−9.60%) |
+| px per viewBox unit | 1.5372 | 1.3896 |
+| labels' margin, panel up | 183.2 u | **244.1 u** |
+| labels' margin, no panel | 234.5 u | 300.8 u |
+
+Both margins stay far above ADR 0009's 75.4-unit knee, so the panel is still free and a card still
+saturates at thirteen characters a line. The rendered dial measured **833.77 px**, against 833.76
+predicted.
+
+The ADR predicts −8.2% and this is −9.60%. The difference is the label frame, which the ADR's model
+did not carry: its board had the dial at full height, and this one already spends 7.3vmin a side on
+the frame cards paint into (#115). Charging the frame **twice** would have made it worse still, which
+is why `#display`'s top padding is dropped and the bar sits flush against the upper edge with its own
+bottom margin restating the frame below it — the same shape `#status` uses on the other side, and
+`dial-frame.test.ts` holds it.
+
+## How the switch reads
+
+#85's remaining open item is whether the state reads at classroom distance, and it is explicit that
+this is a looking question rather than a derivable one, because *"state on a switch is carried by
+position and colour rather than glyph height"*. The half that **is** derivable was computed, with the
+ground named each time:
+
+| | ratio | against |
+| --- | --- | --- |
+| thumb `--card-foreground` | **16.13:1** | the `--card` track it slides on |
+| track `--card` | 1.09:1 | `--page` |
+| track edge `--border` | 4.00:1 | `--page` |
+| lit label `--page` | 17.54:1 | the thumb |
+| quiet label `--muted-foreground` | 6.98:1 | the track |
+| focus ring `--destructive` | 3.42:1 / 4.72:1 | the thumb / the track |
+
+The track measures 1.09:1 against the page, which is no edge at all — the same finding as ⚫'s
+1.316:1 — so the track carries a `--border` outline, which is where the 4.00:1 row comes from.
+
+**The owner's constraint, taken as given:** the bar is operated by someone within touching distance
+of the board, so its *text* need not meet the dial's legibility-at-distance bar. That is why the
+labels are set at `clamp(0.95rem, 1.9vmin, 1.35rem)` rather than near the numerals' 28.62 units.
+It does **not** relax the state signal, and the two are worth keeping apart: ADR 0008 permits a live
+scale control only because the switch is its own indicator, and an indicator nobody can read from the
+back of the room is not one. So the *position* signal is the part sized for distance — a thumb
+travelling its own full width, at 16.13:1 against its track — and the labels are the part allowed to
+be quiet. A distant viewer also has the dial's own numerals, which change from 1–12 to 0–55.
+
+Whether that is enough is still #85's looking question, and it wants the hardware.
+
+## What is deliberately not here
+
+- **Persisting the choice.** #31's mechanism exists and #85 asks for it, but `PREFERENCES` has no
+  scale key and adding one is not free: it decides whether a stored value or `?scale=` wins, which
+  #85 records as *"a one-line decision but should be a deliberate one"* (its own suggestion is that
+  the parameter wins). Shipping the switch without the store leaves the board opening on the
+  deployment's answer after a reload, which is the safe direction: nobody can leave a display
+  permanently in a mode the next person did not choose.
+- **The timer's controls (#47).** Three interaction decisions still open — how the digits are
+  entered, whether the two display modes get icons, and whether Stop is confirmed. The bar is built
+  as a flex row aligned to the right precisely so that button lands beside this switch without
+  moving it.
+- **A durations switch (#178).** The toggles brainstorm concludes it needs the bar *more* than the
+  scale switch does — an absent duration is indistinguishable from one that did not fit — but it is
+  a preference, so it lands with the persistence above rather than before it.
+- **Reworking the reach affordance.** ADR 0008's "revisit when the pilot has real users" stands.
+
+## What rendering found that the tests did not
+
+Two, both invisible to a green suite.
+
+**1. `URLSearchParams` mangled an unrelated parameter.** The first version set `?scale=` with
+`URL`/`searchParams` and wrote back `url.toString()`, which re-encodes the *whole* query string as
+`application/x-www-form-urlencoded` — so one press on `?now=04:15&freeze=1` produced
+`?now=04%3A15&freeze=1&scale=1h`. Nothing breaks; it decodes to the same pin. But `?now=04:15` is a
+string a person types, reads back off a board and pastes into a PR, and README prints it in that form
+a dozen times. `withScaleParam` replaces one pair textually and leaves every other byte alone, which
+is also what made it node-testable instead of living in the entry file.
+
+**2. The fade could not be seen at all, and the reason was not a bug.** The automation browser
+reports `prefers-reduced-motion: reduce`, so both the CSS transition and `main.ts`'s wait were
+correctly skipped — the reduced-motion path, working. Confirming the fade needed a preview built with
+the media block neutralised and `matchMedia` stubbed. Worth writing down, because the next person to
+screenshot a transition in this repo will hit it and read it as a defect.
+
+The fade's mechanism was then checked with transitions momentarily disabled, which is the only way to
+read a rule's resolved value rather than an animation at t=0: `#dial[data-swapping]` resolves opacity
+to 0 and back to 1, and the thumb translates 118.047 px — exactly its own width — landing on the
+second segment's cell.
+
+## The one number that lives in two files
+
+`SCALE_SWAP_MS` in `teacher-bar.ts` and `--scale-fade` in `Styles.html` are the same 180 ms: the
+stylesheet fades, and the client has to know when the old picture has finished leaving before it
+draws the new one. `teacher-bar.test.ts` reads the declaration back and compares, because the failure
+otherwise is a dial redrawn mid-fade — a flicker, which reads as a fault rather than as a mistake and
+would pass every other test in the file.
+
+## Why the dial is redrawn rather than transitioned
+
+The two scales share no drawn element: different outer numerals, a second numeral ring, different
+hand lengths, and an arc set taken from a different window at twelve times the resolution. There is
+nothing to tween, so `analogClock.setScale` rebuilds the face and re-renders the arcs, and the host
+hides the rebuild behind a fade. The `<svg>` element survives the swap, which is what lets one node
+be faded rather than two dials cross-dissolved.
+
+Two things a partial redraw would have left behind, and both have a test: the face is rebuilt (arcs
+alone would leave a 12-hour face reading a band running twelve times faster), and it is built at the
+*current* time rather than the one the dial opened on (the hands would otherwise jump back to the
+load frame — #152's class of defect).
+
+**The demo fixture is re-seated on every switch**, because both halves of it are scale-bound (#34):
+`demoFixture` picks a different set of sample events per scale, and `fixtureAnchor` places it against
+that scale's own window. A refresher kept across a switch would tile the 12-hour fixture's thirteen
+hours across a 55-minute window. It is re-seated from `loadedAt` and never from a fresh `now()`,
+which is #152's property and the one a scale switch could quietly spend: the anchor is what fixes
+every event's offset from `now`, so re-reading the clock would move the fixture's *states* as a side
+effect of changing scale.
+
+## The platform fact this ran into
+
+**The address bar does not change on the deployed app, and cannot.** The page runs inside an
+HtmlService sandbox iframe on a `googleusercontent.com` origin, so `window.location` belongs to the
+*frame* — the `script.google.com/…/exec?scale=1h` URL a teacher typed belongs to the parent document,
+which this page may not touch. `doGet` templates that parameter onto the mount instead, which is
+exactly why `chosenScale` prefers the attribute over the query string.
+
+So `recordScale` writes **both**: the attribute, which is what anything re-reading the page believes,
+and the query string, which is the URL on `build/preview.html` where the page *is* the document. On
+the deployed app the second half is a no-op that costs nothing and keeps one code path. The call is
+wrapped, because `replaceState` throws in a sandbox without `allow-same-origin` and a display must
+not stop working over a URL it could not rewrite.
+
+`replaceState` and not `pushState`: a back button that silently un-toggles a wall display is worse
+than no history at all.

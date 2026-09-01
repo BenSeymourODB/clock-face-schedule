@@ -118,6 +118,16 @@ describe("the page template", () => {
     expect(TEMPLATE).not.toContain("<?!= durationsParam");
   });
 
+  /**
+   * ADR 0008's bar, and the one property it cannot be built without: it is on screen on **every**
+   * load. The switch inside it is what stops a scale change being a mode nobody knows was made, and
+   * a switch that some loads do not carry is not an indicator — so this asserts the host survives
+   * the guards, the way the preference attributes do, rather than merely appearing in the file.
+   */
+  it("emits the controls host whatever the conditions evaluate to", () => {
+    expect(withoutGuardedRegions(TEMPLATE)).toContain('<div id="bar">');
+  });
+
   it("keeps scriptlet delimiters out of its comments", () => {
     // HtmlService compiles `<? … ?>` wherever it appears: it does not parse HTML, so a comment is
     // not a comment to it. A delimiter written inside one as illustration is compiled as code —

@@ -45,6 +45,13 @@ function block(selector: string): string {
  * The padding is a percentage of the shorter viewport axis and the dial is sized from what is left,
  * so a padding of `p` per cent of an axis of length `V` leaves the dial `V − 2p·V/100` px for its
  * 600 units, and the frame beside it is `600p / (100 − 2p)` units wide.
+ *
+ * **Conservative since the bar (ADR 0008).** The bar takes height off the dial without changing the
+ * frame's pixel width, so the same padding buys *more* viewBox units than this returns — 56.7
+ * against 51.3 at 1920×1080. The direction is the safe one: every assertion below compares a card's
+ * reach against this figure, so understating it can only make the guard stricter. Left as the
+ * padding's own arithmetic rather than folding the bar in, because the bar's height is a `max()` of
+ * two units and the result would be a second layout engine living in a spec.
  */
 function frameUnits(): number {
   const percent = Number(/--label-frame:\s*([\d.]+)vmin/.exec(block("#display"))?.[1] ?? NaN);
@@ -238,7 +245,25 @@ describe("the display's sizing rule", () => {
     const display = block("#display");
 
     expect(display).toMatch(/grid-template-columns:\s*minmax\(\s*0/);
-    expect(display).toMatch(/grid-template-rows:\s*minmax\(\s*0/);
+    // The dial's row is the middle one now the bar sits above it, and it is the only one that may
+    // be `1fr`: the bar's and the notice's are `auto`, sized by their own contents. A bare `1fr`
+    // anywhere here is #115 — a track floored at the SVG's own `width="600"` attribute.
+    expect(display).toMatch(/grid-template-rows:\s*auto\s+minmax\(\s*0\s*,\s*1fr\s*\)\s+auto/);
+  });
+
+  /**
+   * The bar's cost, and the one property that keeps it ADR 0009's trade rather than a loss.
+   *
+   * ADR 0009's argument is that vertical space the bar takes converts into horizontal room, because
+   * the dial is bound by the board's *height*. That only holds while the bar is charged **once**:
+   * the page's top padding is dropped and the bar sits flush against the upper edge, with its own
+   * bottom margin re-stating the frame between it and the dial. Restoring a symmetric
+   * `padding: var(--label-frame)` would charge the frame twice and cost the dial 51.3 units for
+   * nothing, which no other assertion here would notice.
+   */
+  it("charges the bar's separation once, at the frame a card at twelve needs", () => {
+    expect(block("#display")).toMatch(/padding:\s*0\s+var\(--label-frame\)\s+var\(--label-frame\)/);
+    expect(block("#bar")).toMatch(/margin-bottom:\s*var\(--label-frame\)/);
   });
 
   /**

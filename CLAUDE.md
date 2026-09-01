@@ -94,15 +94,27 @@ and the fixture, and a second `now()` read anywhere on the way up brings it back
 **Every preview dial is one line of text smaller than the board's** (#115). The dial is sized from
 the display now, so a notice no longer changes its *width* — but it is still a grid row, and demo
 mode posts one of its own ("Sample events — not a real calendar") whether or not you pin. So the
-preview draws 807.9 px against a healthy board's 922.3 at 1920×1080, about 12% down, in *every*
+preview draws 719.3 px against a healthy board's 833.8 at 1920×1080, about 14% down, in *every*
 state: pinning costs nothing further. Geometry and contrast are in viewBox units and unaffected —
 judge them on a pinned screenshot as before — but check anything about *size* with `#status` hidden,
 which is what a working board shows.
 
-**Physical figures come from the dial's rendered size, which is 85.4% of the board's height** — the
-rest is the frame floating labels paint into, sized in `Styles.html` from how far a card can reach
-(#121 is the cheaper way to get it back). At 1920×1080 that is 1.5372 px per viewBox unit. Anything
-quoted in millimetres has to be derated by that, not by the 600 px the dial used to render at.
+**Physical figures come from the dial's rendered size, which is 77.2% of the board's height** — the
+rest is two things, and they are separate. 7.3vmin a side is the frame floating labels paint into,
+sized in `Styles.html` from how far a card can reach (#121 is the cheaper way to get it back), and
+8.2vh off the top is ADR 0008's teacher bar, which ADR 0009 prices as a trade rather than a loss: the
+dial is bound by the board's *height*, so what the bar takes vertically comes back as horizontal room
+(922.3 → 833.8 px, and the labels' margin 234.5 → 300.8 units a side). At 1920×1080 that is
+**1.3896 px per viewBox unit**. Anything quoted in millimetres has to be derated by that, not by the
+600 px the dial used to render at, and not by the 1.5372 it read before the bar.
+
+**Transitions cannot be looked at in the automation browser without arranging it.** It reports
+`prefers-reduced-motion: reduce`, so the scale swap's fade — CSS transition and the client's own wait
+alike — is correctly skipped, and reads on a screenshot exactly like a fade that was never built.
+Seeing one takes a preview with the `@media (prefers-reduced-motion: reduce)` block neutralised and
+`window.matchMedia` stubbed before the client runs. And a rule's *resolved* value has to be read with
+transitions momentarily off: `getComputedStyle` during a transition reports the animated value at
+t = 0, which is the old one, so a working fade measures as no fade at all.
 
 So: for any change to rendered output, `npm run build`, serve `build/preview.html`, screenshot it,
 and look. Query the DOM for the attributes you changed as a cross-check — but measurement confirms

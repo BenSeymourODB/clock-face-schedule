@@ -25,6 +25,18 @@
      * event-arc.ts, where contrast.ts measures elapsed outlines against it.
      */
     --page: #0c0e12;
+
+    /*
+     * How long the dial takes to fade out and the incoming scale to fade in, and how long the
+     * switch's own thumb takes to travel between its two positions.
+     *
+     * One duration for one gesture, deliberately: the control that changed the picture and the
+     * picture itself move together, so a viewer who looks up mid-swap sees one thing happening
+     * rather than two. `SCALE_SWAP_MS` in `teacher-bar.ts` is the same number — the client has to
+     * know when the old picture has finished leaving before it draws the new one — and
+     * `teacher-bar.test.ts` reads this declaration back so the two cannot drift.
+     */
+    --scale-fade: 180ms;
   }
 
   * {
@@ -77,6 +89,25 @@
      */
     --label-frame: 7.3vmin;
 
+    /*
+     * The teacher's controls, and the one number that prices them (ADR 0008, ADR 0009).
+     *
+     * ADR 0009 costed a bar at 60/80/100/120 mm on a 4 ft 16:9 board and ADR 0008 quotes the
+     * 100 mm case, which is **8.2% of that board's height** — so 8.2vh is the ADRs' own figure
+     * rather than a new one. The floor is for a laptop window, where 8.2vh stops being a touch
+     * target; it does not bind on any board.
+     *
+     * Measured at 1920×1080 with the panel up: the dial goes 922.32 → 833.76 px (−9.60%) and the
+     * labels' margin 183.2 → 244.1 units a side. That is ADR 0009's trade taken deliberately — the
+     * dial is bound by the board's *height*, so height the bar takes comes back as width — and both
+     * margins stay far above the ADR's 75.4-unit knee, so the panel is still free and cards still
+     * saturate at thirteen characters a line. The ADR predicts −8.2%; the extra 1.4 points are the
+     * label frame, which its model did not carry.
+     *
+     * Retuning the bar is this one declaration. Nothing else is derived from it.
+     */
+    --bar-height: max(3rem, 8.2vh);
+
     height: 100vh;
     display: grid;
     grid-template-columns: minmax(0, 1fr);
@@ -85,11 +116,162 @@
      * and the dial's content wants to be as tall as the column is wide, so the track would grow to
      * 1877 px on a 1080-tall board and the page would scroll. Flooring it at zero makes the track
      * the height actually available, which is what the dial then takes a percentage of.
+     *
+     * The bar's row is `auto` for the same reason the notice's is: it is sized by its own contents,
+     * and only the dial's row may be handed the remainder.
      */
-    grid-template-rows: minmax(0, 1fr) auto;
+    grid-template-rows: auto minmax(0, 1fr) auto;
     align-items: center;
     justify-items: center;
-    padding: var(--label-frame);
+    /*
+     * No padding on top, because the bar is there instead. A nav bar belongs flush against the
+     * upper edge — that is ADR 0008's reach affordance — and the bar's own bottom margin below
+     * re-states the frame between it and the dial. Charging the frame twice would cost the dial
+     * 51.3 units for nothing.
+     */
+    padding: 0 var(--label-frame) var(--label-frame);
+  }
+
+  /*
+   * The teacher's controls, along the upper edge of the display (ADR 0008).
+   *
+   * **Always present, never hidden**, unlike `#panel` and `#status`. The 1h/12h switch inside it is
+   * the only thing that keeps a scale change from being a mode nobody knows was made: a switch
+   * showing its own position is its own state indicator, and a switch that is not on screen is not
+   * an indicator at all.
+   *
+   * Right-aligned, which is where the class-timer sketch puts its own button (#47) — the bar is
+   * designed once for both rather than twice, and a second control lands beside this one without
+   * moving it.
+   */
+  #bar {
+    width: 100%;
+    min-height: var(--bar-height);
+    display: flex;
+    align-items: center;
+    /*
+     * The same frame the page leaves at its edges, charged to the bar for the reason `#status`'s
+     * margin is charged to the notice: the dial is flush against this row, and a card at twelve
+     * o'clock reaches as far past the viewBox as one at six.
+     */
+    margin-bottom: var(--label-frame);
+  }
+
+  .bar-controls {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+  }
+
+  /*
+   * The 1h/12h scale switch (#85, #34).
+   *
+   * A two-segment control rather than an on/off switch, because neither scale is the absence of the
+   * other — "12 hours" turned off does not say "1 hour". Both states are named and one is lit.
+   *
+   * **The thumb's position is the state signal, not the label.** #85 leaves open how the switch
+   * reads at classroom distance, and answers half of it in advance: state on a switch is carried by
+   * position and colour rather than by glyph height. Measured, with the ground named each time:
+   *
+   * | | ratio | against |
+   * | --- | --- | --- |
+   * | thumb --card-foreground | 16.13:1 | the --card track it slides on |
+   * | track --card | 1.09:1 | --page — which is why the track carries a --border edge |
+   * | track edge --border | 4.00:1 | --page |
+   * | lit label --page | 17.54:1 | the thumb |
+   * | quiet label --muted-foreground | 6.98:1 | the track |
+   *
+   * WCAG asks 3:1 of a graphical object; the position signal clears it more than fivefold. The
+   * labels are the part that may be quiet, because this is the one surface on this display that is
+   * operated from within arm's reach.
+   */
+  .scale-switch {
+    position: relative;
+    display: grid;
+    /*
+     * Equal columns whatever the two labels measure, which is what lets the thumb be exactly half
+     * the track. `1fr` tracks in an auto-width grid equalise to the wider item's max-content, so
+     * "12 hours" sizes both and "1 hour" does not sit in a narrower cell.
+     */
+    grid-template-columns: repeat(2, 1fr);
+    padding: 0.25rem;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+  }
+
+  .scale-switch-thumb {
+    position: absolute;
+    top: 0.25rem;
+    bottom: 0.25rem;
+    left: 0.25rem;
+    width: calc(50% - 0.25rem);
+    border-radius: 999px;
+    background: var(--card-foreground);
+    transition: transform var(--scale-fade) ease;
+  }
+
+  /*
+   * Driven by an attribute rather than by `:checked`, because CSS cannot reach backwards from a
+   * checked input to a thumb that precedes it — and because the attribute is then the DOM's own
+   * record of which scale the switch is showing, which a spec can read without laying anything out.
+   */
+  .scale-switch[data-scale="1h"] .scale-switch-thumb {
+    transform: translateX(100%);
+  }
+
+  .scale-option {
+    position: relative;
+    display: grid;
+  }
+
+  /*
+   * Visually gone but still focusable, so the pair keeps every behaviour a native radio group has —
+   * arrow keys, roving focus, exactly one checked member — rather than re-implementing them on
+   * buttons. `pointer-events: none` leaves the label as the whole touch target.
+   */
+  .scale-option input {
+    position: absolute;
+    margin: 0;
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  .scale-option-text {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    /* A target an adult can hit standing at a board with a class waiting. */
+    min-height: 2.75rem;
+    padding: 0 1.25rem;
+    border-radius: 999px;
+    /*
+     * Read from touching distance rather than from the back of the room, which is true of this
+     * surface and of nothing else on the display: whoever presses it is standing at the board. The
+     * state it sets is read at distance from the thumb above, and from the dial's own numerals.
+     */
+    font-size: clamp(0.95rem, 1.9vmin, 1.35rem);
+    font-weight: 600;
+    color: var(--muted-foreground);
+    white-space: nowrap;
+    cursor: pointer;
+    user-select: none;
+    transition: color var(--scale-fade) ease;
+  }
+
+  .scale-option input:checked + .scale-option-text {
+    color: var(--page);
+  }
+
+  /*
+   * `--destructive` because it is the only accent in the palette clearing 3:1 against both grounds a
+   * focused option can have — 3.42:1 on the lit thumb, 4.72:1 on the `--card` track.
+   * `--card-foreground` would vanish on the thumb and `--page` on the track.
+   */
+  .scale-option input:focus-visible + .scale-option-text {
+    outline: 3px solid var(--destructive);
+    outline-offset: -3px;
   }
 
   /*
@@ -124,6 +306,25 @@
     flex: 1 1 0;
     min-width: 0;
     height: 100%;
+    /*
+     * The scale swap, which is a redraw rather than a transition: the two dials share no element —
+     * different numerals, different hand lengths, a different arc set on a different window — so
+     * nothing can be tweened between them. Fading the whole picture out and the new one in is the
+     * honest version of that, and it also hides the rebuild.
+     *
+     * `opacity` only, and named rather than `all`: this box changes width whenever the panel appears
+     * or the board is resized, and an animated width would make every resize a redraw.
+     */
+    transition: opacity var(--scale-fade) ease;
+  }
+
+  /*
+   * Set for the length of the fade-out by `changeScale` in `main.ts`, which redraws the dial when it
+   * clears and lets the transition carry it back. An attribute rather than a class, because every
+   * other piece of state the host writes onto the mount is one.
+   */
+  #dial[data-swapping] {
+    opacity: 0;
   }
 
   /*
@@ -199,6 +400,19 @@
 
   #status[hidden] {
     display: none;
+  }
+
+  /*
+   * A viewer who has asked for less motion gets the swap and not the fade. `main.ts` reads the same
+   * query and skips its own wait, so the dial is redrawn at the moment of the press rather than
+   * sitting invisible for the fade's duration with nothing moving.
+   */
+  @media (prefers-reduced-motion: reduce) {
+    #dial,
+    .scale-switch-thumb,
+    .scale-option-text {
+      transition: none;
+    }
   }
 
   /* ----- Bring-up diagnostics, only present with ?check=1 ----- */

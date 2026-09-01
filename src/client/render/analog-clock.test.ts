@@ -1028,6 +1028,82 @@ describe("analogClock", () => {
     });
   });
 
+  /**
+   * #85's switch, over #34's geometry. The scale change is a redraw of everything — the band's
+   * degrees-per-minute, the window it filters against, both numeral rings and both hand lengths —
+   * so the cases worth holding are the ones a partial redraw would leave behind.
+   */
+  describe("setScale", () => {
+    it("redraws the band at the other scale's resolution", () => {
+      // 20 minutes: 10° on a 12-hour revolution, 120° on a 60-minute one.
+      const clock = build([input("a", 4 + 5 / 60, 4 + 25 / 60)]);
+      expect(arcSpanDegrees(arcs(clock.element)[0])).toBeCloseTo(10, 3);
+
+      clock.setScale("1h");
+
+      expect(arcSpanDegrees(arcs(clock.element)[0])).toBeCloseTo(120, 3);
+    });
+
+    it("redraws the face, which the arcs alone would leave on the old scale", () => {
+      // The inner hour ring exists only on the 1-hour dial. `clockFace` resolves its numerals and
+      // both hand lengths at construction, so a `setScale` that rebuilt only the arcs would leave a
+      // 12-hour face reading a band running twelve times faster — the one picture ADR 0008's whole
+      // argument is about, arrived at from inside.
+      const clock = build([]);
+      const innerRing = () => clock.element.querySelectorAll('[data-testid^="hour-number-inner-"]');
+      expect(innerRing()).toHaveLength(0);
+
+      clock.setScale("1h");
+      expect(innerRing()).toHaveLength(12);
+
+      clock.setScale("12h");
+      expect(innerRing()).toHaveLength(0);
+    });
+
+    it("keeps the face last, so the hands still paint over the labels", () => {
+      const clock = build([input("a", 2, 3, { title: LONG_TITLE })]);
+
+      clock.setScale("1h");
+
+      expect(testIds(clock.element.children)).toEqual([
+        "event-arcs-layer",
+        "floating-labels-layer",
+        "clock-face",
+      ]);
+    });
+
+    it("draws the face at the current time rather than at the one the dial opened on", () => {
+      // The hands would jump back to the load frame otherwise, which is the same class of defect
+      // #152 was: two drawings on one page disagreeing about when they are.
+      const clock = build([]);
+      clock.setTime(AFTERNOON);
+
+      clock.setScale("1h");
+
+      expect(clock.element.getAttribute("aria-label")).toContain(AFTERNOON.toLocaleTimeString());
+    });
+
+    it("does nothing when asked for the scale it is already drawing", () => {
+      const clock = build([input("a", 4 + 5 / 60, 4 + 25 / 60)]);
+      const before = clock.element.querySelector('[data-testid="clock-face"]');
+
+      clock.setScale("12h");
+
+      expect(clock.element.querySelector('[data-testid="clock-face"]')).toBe(before);
+      expect(arcSpanDegrees(arcs(clock.element)[0])).toBeCloseTo(10, 3);
+    });
+
+    it("keeps the same element, which is the node the host fades", () => {
+      // `main.ts` cross-fades one node rather than two dials, so the swap must not replace the SVG.
+      const clock = build([]);
+      const element = clock.element;
+
+      clock.setScale("1h");
+
+      expect(clock.element).toBe(element);
+    });
+  });
+
   describe("accessible name", () => {
     it.each([
       [[], "0 events"],

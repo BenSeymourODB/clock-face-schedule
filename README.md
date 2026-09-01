@@ -70,9 +70,18 @@ overlapping events, floating labels for titles too long for their arc, live hand
 poll that keeps the last good schedule on screen — marked with when it was last fresh — rather than
 blanking when a fetch fails.
 
-Two things have shipped since that were sketches when this section was written: a **1-hour scale
-mode** (`?scale=1h`), one revolution per hour for the detail a 12-hour dial cannot show, and an
-**agenda panel** beside the dial listing what is running and what is next.
+Three things have shipped since that were sketches when this section was written: a **1-hour scale
+mode** (`?scale=1h`), one revolution per hour for the detail a 12-hour dial cannot show, an
+**agenda panel** beside the dial listing what is running and what is next, and a **teacher's bar**
+along the top edge carrying a persistent 1h/12h switch.
+
+**The bar is the display's only interactive surface.** ADR 0008 puts it out of small children's
+reach and keeps it always visible, because a switch that shows its own position is the only thing
+that stops a scale change being a mode nobody knows was made. Pressing it fades the dial out,
+redraws it at the other scale and updates `?scale=` in place — no reload. It costs the dial 9.60% of
+its height at 1920×1080 and hands the labels 60.9 units a side back, which is ADR 0009's trade taken
+deliberately: the dial is bound by the board's *height*, so vertical space converts into horizontal
+room. The scale is **not yet persisted** — a reload opens on the deployment's answer (#85, #31).
 
 **Preferences persist in `PropertiesService`, not in the browser** (#31) — the page's origin rotates
 between sessions, so cookies and `localStorage` outlive nothing here. A user property wins over a
@@ -80,9 +89,10 @@ script property, which wins over the code's default, so a forked school instance
 defaults in the script store, and **deleting a user property puts that display back on the
 deployment's answer** (#83). ADR 0009's neighbours in `docs/DESIGN.md` carry the reasoning.
 
-Nothing on the display sets a preference yet — that arrives with the timer's control surface (#47) —
-so today they move from the Apps Script property editor, which needs the `pref.` prefix and the
-stored encoding to have any effect:
+Nothing on the display sets a *preference* yet. The bar's scale switch is not one — the scale has
+never been a stored key, and #85 keeps the decision of whether a stored value or `?scale=` should win
+— so today preferences move from the Apps Script property editor, which needs the `pref.` prefix and
+the stored encoding to have any effect:
 
 | Property | Values | Default |
 | --- | --- | --- |
@@ -189,16 +199,16 @@ Four more parameters change *what* is drawn rather than when, and combine freely
 
 | | |
 | --- | --- |
-| `?scale=1h` | The 1-hour dial — one revolution per hour, over a window 5 minutes behind and 50 ahead. The 12-hour dial is the default. |
+| `?scale=1h` | The 1-hour dial — one revolution per hour, over a window 5 minutes behind and 50 ahead. The 12-hour dial is the default. Also the bar's own switch, which rewrites this parameter in place rather than reloading — on the preview, where the page is the document. Inside the deployed app's sandbox iframe the address bar belongs to the parent frame and does not change, which is why `doGet` templates the parameter onto the mount and the client prefers that over its own query string. |
 | `?durations=0` | Suppress every event's duration line, on the arcs, the floating cards and the agenda alike. `1` forces them on; unset uses the stored preference, which defaults to on. |
 | `?demo=1` | The sample fixture instead of a real calendar. Ships to production deliberately — legibility has to be judged on the board, and waiting for someone's real day to contain a useful overlap is not a plan. The preview is always in demo mode. |
 | `?check=1` | Bring-up diagnostics: colour emoji, the `google.script.run` round trip, a calendar read, and the stored preferences with a write-and-echo check. Off by default, because the display carries no chrome. |
 
 **A notice costs the dial a row of height** (#115). The dial is sized from the display, so a notice no
 longer changes its width — a 439.8 px notice and a 1021.7 px one give the same dial where they used to
-give 600 px and 950. It is still a grid row, though, so a page carrying one draws the dial at 807.9 px
-against a healthy board's 922.3 at 1920×1080. On the preview that is every state, pinned or not, since
-demo mode posts a notice of its own: screenshots are to the right proportions and about 12% down on
+give 600 px and 950. It is still a grid row, though, so a page carrying one draws the dial at 719.3 px
+against a healthy board's 833.8 at 1920×1080. On the preview that is every state, pinned or not, since
+demo mode posts a notice of its own: screenshots are to the right proportions and about 14% down on
 scale; hide `#status` to see what the wall gets.
 
 **The times below exercise the demo fixture's states**, and are what the fixture's offsets mean once
