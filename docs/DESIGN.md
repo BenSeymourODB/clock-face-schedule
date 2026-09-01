@@ -311,10 +311,14 @@ rather than in the plan, because they are the ADR's own argument being spent:
   at `clamp(0.95rem, 1.9vmin, 1.35rem)`, and the position signal at a thumb travelling its own full
   width, measuring **16.13:1 against the `--card` track it slides on**. Whether *that* is enough is
   #85's remaining open item and wants the hardware.
-- **The switch changes nothing that is stored.** #85 asks for #31 to persist the choice and this
-  does not, deliberately: which of a stored value and `?scale=` wins is a decision #85 says should be
-  taken on purpose. A reload therefore opens on the deployment's answer, which is the safe direction
-  — nobody can leave a display permanently in a mode the next person did not choose.
+- **The press persists; the URL does not.** #85 leaves open which of a stored value and `?scale=`
+  wins, and it is settled here as *both*, split by what caused the change. `?scale=` wins for what is
+  *drawn* — it is what a board is pointed at to check something on the device, and a setting a wall
+  display cannot be pointed at can only be checked from a workstation. But only pressing the switch
+  **writes**, because a URL is a look and not a decision: a board opened once on `?scale=1h` to
+  inspect an arc would otherwise leave every later viewer on the 1-hour dial with nobody having
+  chosen it, which is this ADR's own hazard reached through the store instead of through the switch.
+  Drop the parameter and the board returns to what was last pressed.
 
 **Revisit when** the pilot has real users, or as soon as anyone the top bar excludes is among them —
 whichever comes first.

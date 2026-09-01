@@ -13,6 +13,18 @@
  */
 
 /**
+ * A scale id, imported for its *type* only.
+ *
+ * `import type` is erased by the compiler, so this costs the server bundle nothing — and that
+ * matters here specifically. `doGet` passes `?scale=` through unparsed for exactly this reason:
+ * reaching `shared/clock` at runtime would pull `clock-utils` and its emoji tables into `Code.gs`,
+ * which is the trap `shared/clock/index.ts` records. The *values* are therefore restated below
+ * rather than read from `DIAL_SCALES`, and `preferences.test.ts` compares the two so a third scale
+ * cannot be added to one without the other.
+ */
+import type { DialScaleId } from "./clock";
+
+/**
  * One preference.
  *
  * `parse` returns `undefined` for anything it does not recognise rather than throwing, and rejects
@@ -58,16 +70,44 @@ function wholeNumber(
   };
 }
 
+/**
+ * One of a closed set of spellings, stored as itself.
+ *
+ * The wire form **is** the URL form, deliberately: `?scale=1h` and a stored `1h` are parsed by this
+ * one definition, so a value the store accepts and one the URL accepts cannot come apart. That is
+ * the rule `showEventDurations` states for `1`/`0` and the reason `resolveOverride` takes raw
+ * strings rather than parsed values.
+ *
+ * Rejects rather than repairs, like every definition here — `parseDialScaleId` falls back to `12h`
+ * for unrecognised input, which is right for a URL nobody can correct and wrong for a layer that
+ * has another beneath it. An unknown scale must fall *through* to the stored value or the default,
+ * not stand in front of it.
+ */
+function oneOf<T extends string>(defaultValue: T, allowed: readonly T[]): PreferenceDefinition<T> {
+  return {
+    default: defaultValue,
+    parse: (raw) => allowed.filter((value) => value === raw)[0],
+    encode: (value) => value
+  };
+}
+
 const MINUTE_SECONDS = 60;
 const TWELVE_HOURS_SECONDS = 12 * 60 * 60;
+
+/**
+ * Every scale the switch offers, restated rather than read from `DIAL_SCALES` — see the note on the
+ * type-only import above. `preferences.test.ts` holds the two in step.
+ */
+const DIAL_SCALE_IDS: readonly DialScaleId[] = ["12h", "1h"];
 
 /**
  * Every preference there is. Insertion order is the wire order, which makes an encoded string
  * deterministic and therefore comparable in a test.
  *
- * Deliberately short. A key here is a promise that something reads it, so #46's timer display mode,
- * #48's readout and #34's scale mode are registered by those issues rather than guessed at now;
- * a colour-scheme override waits on a light palette that clears contrast (see #27's table).
+ * Deliberately short. A key here is a promise that something reads it, so #46's timer display mode
+ * and #48's readout are registered by those issues rather than guessed at now; a colour-scheme
+ * override waits on a light palette that clears contrast (see #27's table). #34's scale arrived that
+ * way — registered by #85, the issue that gave the display a control to write it with.
  */
 export const PREFERENCES = {
   /**
@@ -113,19 +153,43 @@ export const PREFERENCES = {
    * `?durations=` is the control, and it speaks this definition's own alphabet rather than a second
    * one.
    */
-  showEventDurations: flag(true)
+  showEventDurations: flag(true),
+
+  /**
+   * Which scale the dial opens on (#34, #85) — and the one preference a control on the display now
+   * writes.
+   *
+   * **`?scale=` wins over this, and only pressing the switch writes it.** Two halves of one rule,
+   * and each is doing work:
+   *
+   * The parameter wins because it is what a teacher points a board at to check something on the
+   * device, and #85 asks for it in as many words. `chosenScale` resolves it through
+   * `resolveOverride`, the same four layers `showEventDurations` uses.
+   *
+   * Only the *press* persists because a URL is a look, not a decision. A board opened once on
+   * `?scale=1h` to check an arc would otherwise leave every later visitor on the 1-hour dial, with
+   * nobody having chosen it — which is ADR 0008's hazard reached through the store instead of
+   * through the switch. So loading with the parameter shows that scale and stores nothing, and the
+   * board goes back to the remembered one the moment the parameter is dropped.
+   *
+   * `12h` matches `analogClock`'s own default, so registering this moves nothing until a press.
+   */
+  dialScale: oneOf<DialScaleId>("12h", DIAL_SCALE_IDS)
 };
 
 /**
  * Resolve a preference the way a URL parameter overrides a stored value (#178): the first `layer`
  * that parses wins, and if none does the `stored` value stands.
  *
- * This is the inverse of how `chosenScale` treats `?scale=`, and deliberately. There the parameter
- * *is* the setting, so a stored/templated value winning stops a deployed URL being overridden by the
- * sandbox iframe's own query string. Here the setting is the stored preference and the parameter is
- * a teacher checking an override on the device — so the parameter has to win, but only where it is
- * present and valid. An empty or unrecognised layer falls *through* to `stored` rather than being
- * repaired, which is `resolvePreferences`' own rule applied to one preference across raw layers.
+ * **Both overridable settings resolve this way now**, and the note here used to say the opposite.
+ * `chosenScale` did prefer a templated value outright, because `?scale=` *was* the setting and there
+ * was nothing beneath it to defer to; #85 gave the scale a stored value, and the parameter became an
+ * override of it like every other. What survives from that asymmetry is the *layer order* rather
+ * than the rule: the templated attribute beats the page's own query string, because on the deployed
+ * app the latter belongs to the sandbox iframe rather than to the URL a teacher typed.
+ *
+ * An empty or unrecognised layer falls *through* to `stored` rather than being repaired, which is
+ * `resolvePreferences`' own rule applied to one preference across raw layers.
  *
  * Pure and shared so the precedence is asserted once, in node, rather than inside the entry file
  * that reads `window.location` — the one place it cannot be unit-tested.

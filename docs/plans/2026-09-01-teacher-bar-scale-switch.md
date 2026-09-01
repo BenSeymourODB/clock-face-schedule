@@ -1,8 +1,8 @@
 # The teacher's top bar, and the 1h/12h switch in it
 
 **Status:** in progress — [#85](https://github.com/BenSeymourODB/clock-face-schedule/issues/85) keeps
-the two decisions this deliberately does not take (persisting the choice, and how the switch reads
-from the back of the room), and
+the one decision this cannot take offline (how the switch reads from the back of the room, which
+wants the hardware), and
 [#47](https://github.com/BenSeymourODB/clock-face-schedule/issues/47) is the bar's second occupant,
 still not-ready on three interaction decisions of its own.
 **Issue:** #85 (the switch and the bar), alongside #47 (the bar's other tenant) and #34 (the scale)
@@ -94,12 +94,6 @@ Whether that is enough is still #85's looking question, and it wants the hardwar
 
 ## What is deliberately not here
 
-- **Persisting the choice.** #31's mechanism exists and #85 asks for it, but `PREFERENCES` has no
-  scale key and adding one is not free: it decides whether a stored value or `?scale=` wins, which
-  #85 records as *"a one-line decision but should be a deliberate one"* (its own suggestion is that
-  the parameter wins). Shipping the switch without the store leaves the board opening on the
-  deployment's answer after a reload, which is the safe direction: nobody can leave a display
-  permanently in a mode the next person did not choose.
 - **The timer's controls (#47).** Three interaction decisions still open — how the digits are
   entered, whether the two display modes get icons, and whether Stop is confirmed. The bar is built
   as a flex row aligned to the right precisely so that button lands beside this switch without
@@ -200,6 +194,45 @@ hours across a 55-minute window. It is re-seated from `loadedAt` and never from 
 which is #152's property and the one a scale switch could quietly spend: the anchor is what fixes
 every event's offset from `now`, so re-reading the clock would move the fixture's *states* as a side
 effect of changing scale.
+
+## Persisting the choice, and the half of the rule that is not obvious
+
+#85's second small decision — whether a stored value or `?scale=` wins — is settled as **both**,
+split by what caused the change:
+
+- **`?scale=` wins for what is drawn.** It is what a board is pointed at to check something on the
+  device, and a setting a wall display cannot be pointed at is one that can only be checked from a
+  workstation. `chosenScale` resolves it through `resolveOverride`, the same four layers
+  `showEventDurations` uses — so the two settings no longer have opposite precedence, and the three
+  docstrings that said they did are corrected rather than left to be discovered.
+- **Only the press writes.** A URL is a look, not a decision. A board opened once on `?scale=1h` to
+  inspect an arc would otherwise leave every later viewer on the 1-hour dial with nobody having
+  chosen it — ADR 0008's own hazard, reached through the store instead of through the switch. Drop
+  the parameter and the board returns to what was last pressed.
+
+`PREFERENCES.dialScale` is a `oneOf` over a closed set, and its wire form **is** its URL form: `1h`
+is `1h` in both, parsed by one definition, so a value the store accepts and one the URL accepts
+cannot come apart. It rejects rather than repairs, unlike `parseDialScaleId` — falling back to `12h`
+is right for a URL nobody can correct and wrong for a layer with another beneath it, where it would
+answer for the store instead of deferring to it.
+
+**The scale ids are restated in `shared/preferences.ts` rather than read from `DIAL_SCALES`**, and
+that is the one thing here that looks like sloppiness and is not. `shared/preferences.ts` is in the
+*server* bundle; reaching `shared/clock` at runtime pulls `clock-utils` and its emoji tables into
+`Code.gs`, which is the trap `shared/clock/index.ts` records and the reason `doGet` leaves `?scale=`
+unparsed. The type comes in through an erased `import type`; the values are restated, and
+`preferences.test.ts` compares the two lists so a third scale cannot reach one without the other.
+Verified rather than assumed — the built `Code.gs` contains no `DIAL_SCALES`, no `describeArc`, no
+`assignRings` and no emoji table.
+
+Checked end to end on the built bundle, with a stored `dialScale=1h` templated onto the mount and the
+bridge stubbed to record what it is asked to save:
+
+| | dial opens on | written on load |
+| --- | --- | --- |
+| stored `1h`, no parameter | 1-hour | nothing |
+| stored `1h`, `?scale=12h` | 12-hour | nothing |
+| then pressing **1 hour** | 1-hour | `dialScale=1h` |
 
 ## The platform fact this ran into
 

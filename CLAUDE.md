@@ -178,6 +178,8 @@ board, and waiting for someone's real day to contain a useful overlap is not a p
   The last two are checked for being *there* rather than for what they say: a plan for work nobody
   filed writes `**Issue:** none — <why>`, and saying so is the point. 40 of the first 41 plans
   carried both by hand, which says the convention was followed, not that the next one will be.
+- **No ClickUp in this repo.** Work is tracked in GitHub issues and PRs — never associate a session
+  with a ticket, and never post progress to one.
 - **SVG attribute names are the real ones** — `stroke-width`, not `strokeWidth`. A camelCase name is
   not an error; it sets an attribute nothing reads, and the element renders unstyled with nothing
   logged. Specs assert on rendered attribute names for this reason.
@@ -185,8 +187,13 @@ board, and waiting for someone's real day to contain a useful overlap is not a p
 ## Environment notes (Windows)
 
 - **Python file I/O needs `encoding="utf-8"` explicitly.** The default is cp1252 here, and it has
-  silently mangled em-dashes in committed source more than once. Round-trip with
-  `read_text(encoding="utf-8")` / `write_text(..., encoding="utf-8")`.
+  silently mangled em-dashes in committed source more than once.
+- **And `write_text` translates newlines**, which `encoding="utf-8"` does not stop: text mode maps
+  every newline to CRLF on this platform, so a round-trip through it rewrites the whole file. That is
+  not cosmetic — `pin-table.test.ts` splits README on the newline character and looks its table
+  header up by exact string, so one edit turned a green suite red with a diff that showed nothing.
+  Use `read_bytes().decode("utf-8")` and `write_bytes(s.encode("utf-8"))`, and both traps close at
+  once. `.gitattributes` pins the *checkout* to LF; it cannot defend against a tool writing CRLF back.
 - **Long markdown in a bash heredoc breaks the tool's parser.** Write files with the Write tool or a
   script; use heredocs only for short bodies.
 - **Multi-line commit messages: `git commit -F <file>`.** PowerShell here-strings do not pipe into

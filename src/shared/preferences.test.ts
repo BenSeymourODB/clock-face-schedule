@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
 
+// The barrel, which a *spec* may reach for freely — the runtime cost this import carries is
+// exactly what keeps it out of `preferences.ts` itself, and node has no bundle to protect.
+import { DIAL_SCALES } from "./clock";
+
 import {
   PREFERENCES,
   PREFERENCE_KEYS,
@@ -19,7 +23,8 @@ const DEFAULTS: Preferences = {
   showSeconds: true,
   timerMuted: false,
   timerDurationSeconds: 300,
-  showEventDurations: true
+  showEventDurations: true,
+  dialScale: "12h"
 };
 
 describe("defaults", () => {
@@ -136,7 +141,7 @@ describe("layering sources", () => {
 describe("encoding", () => {
   it("writes every key in registry order", () => {
     expect(encodePreferences(DEFAULTS)).toBe(
-      "showSeconds=1;timerMuted=0;timerDurationSeconds=300;showEventDurations=1"
+      "showSeconds=1;timerMuted=0;timerDurationSeconds=300;showEventDurations=1;dialScale=12h"
     );
   });
 
@@ -164,7 +169,8 @@ describe("encoding", () => {
     showSeconds: [true, false],
     timerMuted: [true, false],
     timerDurationSeconds: [60, 300, 43200],
-    showEventDurations: [true, false]
+    showEventDurations: [true, false],
+    dialScale: ["12h", "1h"]
   };
 
   it.each(PREFERENCE_KEYS)("keeps %s in an attribute-safe alphabet, for every value", (key) => {
@@ -194,12 +200,19 @@ describe("encoding", () => {
         showSeconds: false,
         timerMuted: true,
         timerDurationSeconds: 1800,
-        showEventDurations: false
+        showEventDurations: false,
+        dialScale: "1h" as const
       }
     ],
     [
       "the range's ends",
-      { showSeconds: true, timerMuted: true, timerDurationSeconds: 60, showEventDurations: true }
+      {
+        showSeconds: true,
+        timerMuted: true,
+        timerDurationSeconds: 60,
+        showEventDurations: true,
+        dialScale: "12h" as const
+      }
     ]
   ])("round-trips %s through a wire string", (_case, values) => {
     expect(decodePreferences(encodePreferences(values))).toEqual(values);
@@ -208,9 +221,9 @@ describe("encoding", () => {
 
 /**
  * #178's `?durations=` override: a URL layer beats the stored value where it parses, and falls
- * through where it does not. The precedence is the inverse of `chosenScale`'s, which is the one
- * thing a reader is likely to get backwards — so it is asserted here, in node, rather than only
- * inside `main.ts` where `window.location` cannot be reached.
+ * through where it does not. Asserted here, in node, rather than only inside `main.ts` where
+ * `window.location` cannot be reached — and now shared with `?scale=`, which resolves identically
+ * since #85 gave the scale a stored value for the parameter to override.
  */
 describe("resolveOverride", () => {
   const flagDef = PREFERENCES.showEventDurations;
@@ -244,6 +257,59 @@ describe("resolveOverride", () => {
 
   it("returns the stored value when no layer resolves", () => {
     expect(resolveOverride(flagDef, ["", null, undefined], true)).toBe(true);
+  });
+});
+
+/**
+ * The dial's scale as a stored setting (#85), and the precedence half of its rule: `?scale=` wins,
+ * the store answers when it is absent. The other half — that only *pressing* the switch writes —
+ * is `main.ts`'s and cannot be reached from here; it is asserted at the wire in `preferences.ts`'s
+ * client spec and stated in this definition's own docstring.
+ */
+describe("the dial scale", () => {
+  const scale = PREFERENCES.dialScale;
+
+  it("opens on the 12-hour dial when nothing is stored, as the renderer already did", () => {
+    expect(scale.default).toBe("12h");
+  });
+
+  it.each([
+    ["?scale=1h over a stored 12h", "1h", "12h", "1h"],
+    ["?scale=12h over a stored 1h", "12h", "1h", "12h"],
+  ])("lets the URL win: %s", (_case, layer, stored, expected) => {
+    expect(resolveOverride(scale, [layer], stored as never)).toBe(expected);
+  });
+
+  it.each([
+    ["absent", null],
+    ["empty, which is a stripped preview attribute", ""],
+    ["a scale that does not exist", "30m"],
+    ["the id in the wrong case", "1H"],
+  ])("falls through a %s parameter to what was last pressed", (_case, layer) => {
+    // Never repaired to the default: `parseDialScaleId` answers `12h` for all four of these, which
+    // is right for a URL nobody can correct and would here overrule a setting the teacher chose.
+    expect(resolveOverride(scale, [layer], "1h" as never)).toBe("1h");
+  });
+
+  it("stores as the spelling the URL uses, so one parser serves both", () => {
+    // `?scale=1h` and a stored `1h` are the same string read by the same definition. A second
+    // spelling on the wire is how a value the store accepts and one the URL accepts come apart.
+    expect(encodePreferences({ dialScale: "1h" })).toBe("dialScale=1h");
+    expect(decodePreferences("dialScale=1h").dialScale).toBe("1h");
+  });
+
+  /**
+   * `shared/preferences.ts` restates the scale ids rather than reading `DIAL_SCALES`, because
+   * reaching `shared/clock` at runtime would pull the geometry layer's emoji tables into the server
+   * bundle — the trap `shared/clock/index.ts` records, and the reason `doGet` leaves `?scale=`
+   * unparsed. This is what stops the two lists drifting: a third scale added to `DIAL_SCALES` fails
+   * here until the preference accepts it too, which is the direction that matters — a scale the
+   * dial can draw and the store silently rejects is a switch position that will not stick.
+   */
+  it("accepts exactly the scales the dial has", () => {
+    const accepted = Object.keys(DIAL_SCALES).filter((id) => scale.parse(id) !== undefined);
+
+    expect(accepted).toEqual(Object.keys(DIAL_SCALES));
   });
 });
 

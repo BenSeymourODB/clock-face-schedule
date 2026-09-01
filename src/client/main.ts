@@ -17,7 +17,6 @@ import {
   getPeriodBounds,
   labelMarginUnits,
   panelFitsBoard,
-  parseDialScaleId,
 } from "../shared/clock";
 import {
   PREFERENCES,
@@ -92,14 +91,32 @@ function fetchWindow(): Promise<ClockEventInput[]> {
 }
 
 /**
- * The templated attribute wins over the query string, so the deployed app honours a stored
- * preference while the server-less preview can still be pointed at either scale by hand.
+ * Which scale the dial opens on — the URL first, then what the teacher last pressed.
+ *
+ * The same four layers `chosenDurations` resolves, and now for the same reason: the parameter is an
+ * *override* of a stored setting rather than the setting itself. `?scale=` is what a board is
+ * pointed at to check something on the device, so it wins where it is present and valid; anything
+ * unrecognised falls *through* to the store rather than being repaired, which is
+ * `resolvePreferences`' own rule applied across raw layers.
+ *
+ * The templated attribute still beats the page's own query string, which is unchanged and still
+ * matters: on the deployed app `window.location` is the sandbox iframe's, so the query string here
+ * is not the one the teacher typed — `doGet` templated that onto the mount. In the preview, which
+ * has no server, the attribute strips to `""` and the query string is the whole of it.
+ *
+ * `parseDialScaleId` is deliberately **not** used: it falls back to `12h` for unrecognised input,
+ * which is right for a URL nobody can correct and wrong for a layer that has another beneath it —
+ * it would answer for the store instead of deferring to it. `PREFERENCES.dialScale` rejects.
  */
-function chosenScale(mount: Element): DialScaleId {
+function chosenScale(mount: Element, preferences: PreferenceStore): DialScaleId {
   const templated = mount instanceof HTMLElement ? mount.dataset["scale"] : undefined;
-  if (templated) return parseDialScaleId(templated);
+  const query = new URLSearchParams(window.location.search).get("scale");
 
-  return parseDialScaleId(new URLSearchParams(window.location.search).get("scale"));
+  return resolveOverride(
+    PREFERENCES.dialScale,
+    [templated, query],
+    preferences.get().dialScale
+  );
 }
 
 /**
@@ -160,9 +177,10 @@ function prefersReducedMotion(): boolean {
  * *"a URL parameter for checking it on the device"*, and a setting a wall display cannot be pointed
  * at is one that can only be checked from a workstation.
  *
- * Which inverts `chosenScale`'s precedence, and deliberately: `?scale=` **is** the setting there, so
- * a templated value winning keeps a deployed URL from being overridden by whatever the sandbox
- * iframe carries. Here the setting is the stored preference and the parameter is an override of it.
+ * The same four layers `chosenScale` resolves, and no longer the inverse of them: `?scale=` was the
+ * setting itself until #85 gave the scale a stored value, and both are now a parameter overriding a
+ * preference. The layer *order* is what carried across — templated ahead of the query string,
+ * because on the deployed app the query string is the sandbox iframe's rather than the teacher's.
  *
  * The parameter's alphabet is the preference definition's own — `1` and `0` — because it is parsed
  * by that definition. One parser for both forms, so a value the store accepts and one the URL
@@ -345,7 +363,7 @@ function startDisplay(): void {
    * the dial arrives a beat late, and a press during that beat has to be answered by the scale the
    * switch now says rather than by the one the earlier press asked for.
    */
-  let currentScale = chosenScale(mount);
+  let currentScale = chosenScale(mount, preferences);
   /**
    * Read once for the load, and handed to both drawings so they cannot disagree about it — the same
    * property `loadedAt` has below. A dial stating lengths beside a panel that is not is the mixed
@@ -514,6 +532,11 @@ function startDisplay(): void {
     if (next === currentScale) return;
     currentScale = next;
     recordScale(dial, next);
+    // The press is what persists, and only the press: a board opened once on `?scale=1h` to check
+    // an arc must not leave every later visitor on the 1-hour dial with nobody having chosen it.
+    // Fire-and-forget, like every write here — a setting the store did not keep costs the next
+    // reload's memory of it, which is not worth interrupting a lesson over.
+    preferences.set({ dialScale: next });
     swapDial(next);
   }
 

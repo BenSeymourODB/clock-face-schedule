@@ -81,8 +81,13 @@ that stops a scale change being a mode nobody knows was made. Pressing it fades 
 redraws it at the other scale and updates `?scale=` in place — no reload. It costs the dial 9.60% of
 its height at 1920×1080 and hands the labels back 60.9 units a side with the panel drawn, 66.3
 without it, which is ADR 0009's trade taken deliberately: the dial is bound by the board's *height*,
-so vertical space converts into horizontal room. The scale is **not yet persisted** — a reload opens
-on the deployment's answer (#85, #31).
+so vertical space converts into horizontal room.
+
+**A press is remembered; a URL is not.** `?scale=` still wins over the stored value for what is
+drawn, so a board can be pointed at either dial to check something on the device — but only pressing
+the switch writes `pref.dialScale`. Opening a board once on `?scale=1h` to inspect an arc therefore
+cannot leave every later viewer on the 1-hour dial with nobody having chosen it; drop the parameter
+and it returns to what was last pressed.
 
 **Preferences persist in `PropertiesService`, not in the browser** (#31) — the page's origin rotates
 between sessions, so cookies and `localStorage` outlive nothing here. A user property wins over a
@@ -90,15 +95,15 @@ script property, which wins over the code's default, so a forked school instance
 defaults in the script store, and **deleting a user property puts that display back on the
 deployment's answer** (#83). ADR 0009's neighbours in `docs/DESIGN.md` carry the reasoning.
 
-Nothing on the display sets a *preference* yet. The bar's scale switch is not one — the scale has
-never been a stored key, and #85 keeps the decision of whether a stored value or `?scale=` should win
-— so today preferences move from the Apps Script property editor, which needs the `pref.` prefix and
-the stored encoding to have any effect:
+**The bar's scale switch is the first control on the display that writes a preference**, and the only
+one so far. Everything else still moves from the Apps Script property editor, which needs the `pref.`
+prefix and the stored encoding to have any effect:
 
 | Property | Values | Default |
 | --- | --- | --- |
 | `pref.showSeconds` | `1` / `0` | `1` |
 | `pref.showEventDurations` | `1` / `0` | `1` |
+| `pref.dialScale` | `12h` / `1h` | `12h` |
 | `pref.timerMuted` | `1` / `0` | `0` |
 | `pref.timerDurationSeconds` | whole seconds, 60–43200 | `300` |
 
@@ -200,7 +205,7 @@ Four more parameters change *what* is drawn rather than when, and combine freely
 
 | | |
 | --- | --- |
-| `?scale=1h` | The 1-hour dial — one revolution per hour, over a window 5 minutes behind and 50 ahead. The 12-hour dial is the default. Also the bar's own switch, which rewrites this parameter in place rather than reloading — on the preview, where the page is the document. Inside the deployed app's sandbox iframe the address bar belongs to the parent frame and does not change, which is why `doGet` templates the parameter onto the mount and the client prefers that over its own query string. |
+| `?scale=1h` | The 1-hour dial — one revolution per hour, over a window 5 minutes behind and 50 ahead. Wins over the stored `pref.dialScale`, and does not overwrite it — see above. Unset, the board opens on whatever was last pressed. The bar's switch rewrites this parameter in place rather than reloading, on the preview where the page is the document; inside the deployed app's sandbox iframe the address bar belongs to the parent frame and cannot change, which is why `doGet` templates the parameter onto the mount and the client prefers that over its own query string. |
 | `?durations=0` | Suppress every event's duration line, on the arcs, the floating cards and the agenda alike. `1` forces them on; unset uses the stored preference, which defaults to on. |
 | `?demo=1` | The sample fixture instead of a real calendar. Ships to production deliberately — legibility has to be judged on the board, and waiting for someone's real day to contain a useful overlap is not a plan. The preview is always in demo mode. |
 | `?check=1` | Bring-up diagnostics: colour emoji, the `google.script.run` round trip, a calendar read, and the stored preferences with a write-and-echo check. Off by default, because the display carries no chrome. |
