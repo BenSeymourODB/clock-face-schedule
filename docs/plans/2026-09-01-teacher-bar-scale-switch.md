@@ -102,6 +102,14 @@ Whether that is enough is still #85's looking question, and it wants the hardwar
   scale switch does — an absent duration is indistinguishable from one that did not fit — but it is
   a preference, so it lands with the persistence above rather than before it.
 - **Reworking the reach affordance.** ADR 0008's "revisit when the pilot has real users" stands.
+- **Making the demo fixture demonstrate the switch (#212).** The two fixtures share no ids and one
+  title, so pressing the switch in the preview looks like a data swap rather than a change of scale.
+  That is #34's deliberate call — a 12-hour fixture has nothing sub-hour to show a 55-minute window —
+  but it means the surface `CLAUDE.md` mandates for judging rendered output cannot demonstrate this
+  feature. Verified separately that the *product* is right: with demo mode off and one six-event
+  calendar, the 12-hour dial draws all six and the 1-hour dial a strict subset of four, same ids.
+  Merging the fixtures disturbs crowding that #67, #70, #98, #134 and #136 have each measured, and
+  invalidates README's pin table, so it is #212's own pass rather than this one's.
 
 ## What rendering found that the tests did not
 
