@@ -9,6 +9,7 @@ import {
   rectsOverlap,
 } from "../../shared/clock";
 import readme from "../../../README.md?raw";
+import { fixtureAnchor } from "../clock-pin";
 import { oneHourSampleEvents, sampleEvents } from "../sample-events";
 import { type AnalogClockParams, analogClock } from "./analog-clock";
 
@@ -1484,7 +1485,20 @@ describe("the ring thicknesses README states in prose", () => {
  * positions.
  */
 describe("analogClock's label placement spike", () => {
-  const SIXTEEN_NINE = 234.5;
+  /**
+   * The grant these specs stand in for, **measured rather than quoted**: 244.1 units at 1920×1080
+   * and 175.0 at 1920×1200, panel drawn and `#status` hidden, read off the built preview by dividing
+   * the dial's own spare width by its 1.38966 px/unit scale. #213's pair, and the pair the plan's
+   * locus tables are computed at.
+   *
+   * Not the 234.5 / 172.1 the block above still carries. Those are the superseded figures the fourth
+   * amendment to ADR 0009 tells a reader to stop briefing this spike off — they are the same
+   * quantity 8.4% low, because a margin is a count of viewBox units and ADR 0008's bar changed the
+   * dial's rendered size. Every radius derived here would be understated by the same 8.4%, which is
+   * precisely the error the plan opens by correcting.
+   */
+  const SIXTEEN_NINE = 244.1;
+  const SIXTEEN_TEN = 175.0;
   const RING_LOCUS = OUTER_RADIUS * 1.02;
 
   /** An event every half hour with a title too long for its arc, so cards land all round the dial. */
@@ -1584,11 +1598,12 @@ describe("analogClock's label placement spike", () => {
   });
 
   it("derives 'wide' from the granted margin, which is what makes it track the board", () => {
-    // ADR 0009's circle is the midpoint of the band's outer edge and the board's: at a 234.5-unit
-    // margin that is (292 + 534.5) / 2 = 413.25, and at 172.1 it is 378.05.
+    // ADR 0009's circle is the midpoint of the band's outer edge and the board's: at the measured
+    // 244.1-unit grant that is (292 + 544.1) / 2 = 418.05, and at 175.0 it is 383.5 — the two the
+    // plan's tables walk.
     const nine = Math.max(...horizontalOffsets({ labelPlacement: "sides", labelLocus: "wide" }));
     const ten = Math.max(
-      ...horizontalOffsets({ labelPlacement: "sides", labelLocus: "wide", labelMargin: 172.1 })
+      ...horizontalOffsets({ labelPlacement: "sides", labelLocus: "wide", labelMargin: SIXTEEN_TEN })
     );
 
     expect(nine).toBeGreaterThan(ten);
@@ -1631,5 +1646,58 @@ describe("analogClock's label placement spike", () => {
 
   it("applies the locus to the ring as well, so the fork can be walked either way", () => {
     expect(labelsLayer({ labelLocus: 380 })).not.toBe(labelsLayer({}));
+  });
+
+  /**
+   * The property the renders found and no table predicted: **a widened locus is only usable on the
+   * sides.** Measured on the fixture at the three pins #138 names, 1920×1080 and 1920×1200 with
+   * `#status` hidden — every radius above the shipped one leaves cards overlapping on the ring (4
+   * pairs across the three pins from R = 320 upward, one of them hiding 339.4 × 32.6 units of a
+   * title at `?now=19:00&freeze=1`) and **none at all on the sides, at every radius tested**.
+   *
+   * The mechanism is the mismatched budget #138 is built on, arriving as the thing that decides the
+   * fork rather than as the thing that motivates it: a wider card needs more vertical separation, the
+   * ring has none to give at twelve and six, and `stackLabels` runs out of band. So the locus is what
+   * recovers the titles and clears the band, and side placement is what makes a locus that does
+   * either one survivable.
+   *
+   * Counted as pairs rather than asserted card by card, and the ring half is asserted too: without
+   * it this would pass on a dial that draws no colliding card at all and would be measuring the
+   * fixture instead of the placement.
+   */
+  it("leaves no card overlapping at a widened locus, where the ring does", () => {
+    /** The fixture at one of #138's pins, anchored the way `?now=HH:00&freeze=1` anchors it. */
+    const overlappingPairs = (hour: number, overrides: Partial<AnalogClockParams>): number => {
+      const at = new Date(2026, 7, 18, hour, 0, 0, 0);
+      const { element } = analogClock({
+        events: sampleEvents(fixtureAnchor(null, at)),
+        time: at,
+        labelMargin: SIXTEEN_NINE,
+        ...overrides,
+      });
+      const rects = [...element.querySelectorAll('[data-testid^="floating-label-rect-"]')].map(
+        (rect) => ({
+          x: Number(rect.getAttribute("x")),
+          y: Number(rect.getAttribute("y")),
+          width: Number(rect.getAttribute("width")),
+          height: Number(rect.getAttribute("height")),
+        })
+      );
+
+      expect(rects.length, `no card was drawn at ${hour}:00`).toBeGreaterThan(3);
+      return rects.filter((rect, index) =>
+        rects.some((other, otherIndex) => otherIndex > index && rectsOverlap(rect, other))
+      ).length;
+    };
+
+    for (const hour of [11, 13, 19]) {
+      expect(overlappingPairs(hour, { labelPlacement: "sides", labelLocus: 380 })).toBe(0);
+    }
+    expect(
+      [11, 13, 19].reduce(
+        (total, hour) => total + overlappingPairs(hour, { labelPlacement: "ring", labelLocus: 380 }),
+        0
+      )
+    ).toBeGreaterThan(0);
   });
 });

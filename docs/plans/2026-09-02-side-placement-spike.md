@@ -61,9 +61,17 @@ Three things move, and one of them moves against the direction the 2026-09-02 co
    line at all"* holds only at today's radius — which is the correction the second decision-mode
    comment made, now re-measured at the real grants.
 
-That is the fork stated in one line: **the ring's radius is the only one that clears `#status`, R ≈ 380
+That is the fork as the tables state it: **the ring's radius is the only one that clears `#status`, R ≈ 380
 is the only one that buys the characters, and only R ≈ 452 clears the band.** Three properties, three
 radii, and the spike's job is to show what each looks like.
+
+**Point 3 does not survive the render, and the reason is what the table is a bound on.** These figures
+sweep *every bearing* in θ ∈ [45°, 135°] with the longest fixture title — a guarantee about a position
+the dial may never occupy. Rendered at the pins, the occupied bearings are kinder: R = 320 puts the
+lowest card at **590.3** and R = 340 at **592.1**, both inside the box on both boards, with nothing
+truncated at 340. So two of #138's three promises *are* simultaneously deliverable, which is the claim
+the second decision-mode comment ruled out — the table was conservative by about one radius step, not
+wrong. Full rendered results in "What the pictures said" below.
 
 ## What the flag does
 
@@ -117,9 +125,76 @@ iterating, for the same reason the locus is scanned rather than solved.
    the numbers there move (they must not — the default path is unchanged).
 4. **Visual pass.** Render `?now=11:00`, `?now=13:00`, `?now=19:00` and unpinned, at 1920×1080 and
    1920×1200, for the ring and for `sides` at each of the three radii. Look at them, attach them, and
-   report what the pictures say that the tables do not.
+   report what the pictures say that the tables do not. **Done — "What the pictures said" below.**
+
+## What the pictures said
+
+Phase 4, done. Every combination rendered on the built preview at 1920×1080 and 1920×1200 with
+`#status` hidden — which is what a working board shows, and what makes the grant the measured
+244.1 / 175.0 rather than the preview's own — and every card read back off the DOM. The ring is
+rendered **at the same widened radii as the sides**, which is the comparison neither the issue nor
+this plan had asked for and the one that settles the fork.
+
+Aggregate over the three pins, 15 cards, `?labels=sides`:
+
+| 16:9, sides | titles cut | cards in the band | cards past y 600 | overlapping pairs | lowest card |
+| --- | --- | --- | --- | --- | --- |
+| R = 297.84 — shipped | **5** | 15 | 0 | 0 | 565.2 |
+| R = 320 | 1 | 15 | 0 | 0 | 590.3 |
+| **R = 340** | **0** | 13 | **0** | **0** | **592.1** |
+| R = 380 | 0 | 8 | 3 | 0 | 630.6 |
+| R = 452 | 0 | **0** | 7 | 0 | 648.7 |
+
+| same radii, `ring` | titles cut | cards in the band | cards past y 600 | overlapping pairs | lowest card |
+| --- | --- | --- | --- | --- | --- |
+| R = 297.84 — shipped | 5 | 12 | 7 | **0** | 648.9 |
+| R = 320 | 1 | 9 | 8 | **4** | 644.2 |
+| R = 340 | 0 | 7 | 7 | **4** | 651.3 |
+| R = 380 | 0 | 5 | 8 | **4** | 665.7 |
+| R = 452 | 0 | **0** | 10 | **5** | 665.7 |
+
+1. **The band clearance and the recovered titles both come from the locus, not from the placement.**
+   The ring at R = 452 also puts every card off the band and truncates nothing. #138's opening claim
+   — cards on the sides "are far less likely to cover an arc" — is not what the renders show is doing
+   the work.
+2. **What side placement does is make a widened locus usable at all.** Above the shipped radius the
+   ring leaves four to five overlapping card pairs at every pin; the sides leave none at any radius
+   tested. At `?now=19:00&freeze=1`, R = 452, the ring hides **339.4 × 32.6 units** of *Study Skills
+   and Exam Revision* under the Swimming card — a title on a card *because* it did not fit its arc,
+   hidden by the card beside it, which is #35's failure returning. The ring's lowest card also
+   saturates at 665.7 from R = 360 up: that is `labelVerticalBand` clamping, and the clamp is why the
+   collisions cannot be displaced away.
+3. **So the mismatched budget is the finding, not the motivation.** A wider card needs more vertical
+   separation; at twelve and six there is none to give. The sides trade the room the dial has for the
+   room it lacks, and that is the whole of their measured contribution — the locus is the decision.
+4. **Past the optimum, width costs width.** 16:10 truncates two titles again at R = 440 and gains two
+   overlapping pairs at 452. `CLAUDE.md`'s recorded lesson, arriving a third time.
+5. **Twelve and six stop being *anchor* positions, not stopping-places.** The sector clamps a card's
+   centre, not its extent: at 16:9, `?now=19:00`, R = 380, the *Parent Teacher Conference Planning
+   Committee* card is centred at 45° and still spans x 309.7 → 827.7 at y 3.8 → 58.8 — 9.7 units off
+   the twelve o'clock ray, across the top of the frame, and 241.4 from the centre, so it is one of the
+   cards still in the band. Nothing is covered there, but "twelve and six stop being label positions"
+   is not what a wide card does.
+6. **Two things the sides fix that no table costed.** The three-card pile at `?now=11:00&freeze=1`
+   resolves into two clear cards on the left and one on the right, and *Assembly* keeps its duration
+   line instead of giving it up. Against that, at the shipped radius the sides are a plain regression:
+   13 characters a line against the ring's 26–50, the *Aftercare* and *Lunch* arc titles covered by
+   cards at `?now=19:00`, and a connector travelling **129.8 units inside the band across 25.9° of
+   it** — the crossing #138 predicted and the corrections withdrew, which turns out to be real at
+   *today's* radius and negligible (1.5–4°) at every wider one.
+
+Two limits on all of it. The fixture peaks at six cards, so nothing here tests #138's capacity table:
+driven with 22 long-titled events the sector saturates and `spreadInSector` falls back to even spacing
+and lets them overlap, as its docstring says it will. And card counts drift by one between radii,
+because a card the panel already names and that lands on another is discharged to the panel (#172) —
+at 16:9, `?now=11:00`, R = 380 that is the Swimming card, dropped on base rects the later passes would
+have separated, so a viewer sees a title leave the dial with nothing on screen explaining why.
 
 ## What this plan does not decide
 
 All three of #138's decisions, and the fork itself. The spike hands the maintainer pictures and the
 numbers above; #138 stays open with the options as the two decision-mode comments state them.
+
+What the render does change is the *shape* of the choice: it is no longer "ring or sides" but "which
+locus, and does it need the sides to be drawable". Ranking band clearance, title width and the status
+line — #138's decision the render cannot make — now has one fewer degree of freedom to argue about.
