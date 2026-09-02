@@ -1,6 +1,6 @@
 # `?panel=0` — a preview parameter that leaves the agenda column off
 
-**Status:** in progress — #185
+**Status:** done — shipped in #213
 **Issue:** #185
 **Docs:** README's parameter table gains a `?panel=0` row and the panel-off figures; no ADR moves —
 ADR 0009's allocation is unchanged and #39 item 4's fallback is still undesigned
