@@ -200,8 +200,11 @@ export interface AnalogClockParams {
   /**
    * The radius a card's centre sits on, overriding `LABEL_RADIUS_RATIO` (#138).
    *
-   * A number in viewBox units, or `"wide"` for ADR 0009's band-clearing circle derived from whatever
-   * margin the board granted. Also a spike, and useful on the ring as well as the sides: the three
+   * A number in viewBox units, or `"wide"` for ADR 0009's circle derived from whatever margin the
+   * board granted — the *widest* candidate, not a clearing one. Rendered on the sides it measures
+   * **246.8 against the band's 292 at 16:9**, so a card is 45.2 units inside the band; the ADR solves
+   * three o'clock only and `adrBandClearingCircle` says so. Also a spike, and useful on the ring as
+   * well as the sides: the three
    * radii the fork trades between are 297.84 (the only one that keeps a card above `#status`), about
    * 380 (the width optimum on 16:9) and about 452 (the only one that clears the band), and a
    * maintainer standing at a board can walk them without a rebuild.

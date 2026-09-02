@@ -1517,6 +1517,29 @@ describe("analogClock's label placement spike", () => {
     );
   }
 
+  /**
+   * Each card's closest approach to the dial's centre — the reading #98 is about, and the one a
+   * horizontal offset cannot give: a card enters the band by its nearest *corner*, so the quantity
+   * is the distance from the centre to the rect rather than to its inner edge.
+   */
+  function cardClearances(overrides: Partial<AnalogClockParams>): number[] {
+    const { element } = build(SWEEP, { labelMargin: SIXTEEN_NINE, ...overrides });
+    const rects = [...element.querySelectorAll('[data-testid^="floating-label-rect-"]')];
+
+    expect(rects.length, "no card was drawn").toBeGreaterThan(8);
+    return rects.map((rect) => {
+      const x = Number(rect.getAttribute("x"));
+      const y = Number(rect.getAttribute("y"));
+      const width = Number(rect.getAttribute("width"));
+      const height = Number(rect.getAttribute("height"));
+
+      return Math.hypot(
+        Math.max(x - CX, CX - (x + width), 0),
+        Math.max(y - CY, CY - (y + height), 0)
+      );
+    });
+  }
+
   it("draws the shipped ring when nothing asks for anything else", () => {
     expect(labelsLayer({})).toBe(labelsLayer({ labelPlacement: "ring", labelLocus: null }));
   });
@@ -1573,6 +1596,37 @@ describe("analogClock's label placement spike", () => {
 
   it("falls back to the ring locus for 'wide' on a page that could not measure a board", () => {
     expect(labelsLayer({ labelLocus: "wide" })).toBe(labelsLayer({}));
+  });
+
+  /**
+   * The claim README and two docstrings made about `wide` until a render checked it: that ADR 0009's
+   * circle is *the band-clearing one*. It is not, and the reason is not the ADR's three-o'clock
+   * premise — it is that the ADR solves for a card of width `m + 8` and the shipped rule sizes a card
+   * to the whole granted margin, so the card that actually lands there is far wider than the one the
+   * radius was solved for and its inner edge reaches back over the band.
+   *
+   * Asserted as an inequality against the band rather than at a fixed figure: the point is the
+   * direction of the error, and pinning 246.8 would make this fail on any legitimate change to card
+   * sizing while saying nothing more.
+   */
+  it("does not clear the band at 'wide', which is what the ADR's circle is named for", () => {
+    // The band's outer edge is `OUTER_RADIUS` itself — arcs are drawn outward from it (#74).
+    const bandOuter = OUTER_RADIUS;
+    const clearances = cardClearances({ labelPlacement: "sides", labelLocus: "wide" });
+
+    expect(Math.min(...clearances)).toBeLessThan(bandOuter);
+  });
+
+  /**
+   * And the radius that does clear it, so the pair reads as a measurement rather than as a complaint
+   * about `wide`. 452 is the figure the plan's table lands on for the measured 16:9 grant.
+   */
+  it("clears the band at the radius measured for it", () => {
+    // The band's outer edge is `OUTER_RADIUS` itself — arcs are drawn outward from it (#74).
+    const bandOuter = OUTER_RADIUS;
+    const clearances = cardClearances({ labelPlacement: "sides", labelLocus: 452 });
+
+    expect(Math.min(...clearances)).toBeGreaterThanOrEqual(bandOuter);
   });
 
   it("applies the locus to the ring as well, so the fork can be walked either way", () => {

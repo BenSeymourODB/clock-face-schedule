@@ -225,8 +225,10 @@ function chosenLabelPlacement(mount: Element): LabelPlacement {
  * The locus radius a card sits on, in viewBox units — #138's spike, and the parameter that makes the
  * fork walkable on a board instead of only in a table.
  *
- * `wide` is ADR 0009's band-clearing circle read off whatever margin the board granted, so it tracks
- * the board rather than naming a radius for one of them. A number is taken as authored and only
+ * `wide` is ADR 0009's circle read off whatever margin the board granted, so it tracks the board
+ * rather than naming a radius for one of them. It is the widest candidate rather than the one that
+ * clears the band: rendered on the sides it leaves a card **45.2 units inside the band at 16:9**,
+ * because the ADR solves three o'clock only. A number is taken as authored and only
  * sanity-bounded: the three radii the fork trades between are 297.84, ~380 and ~452, and a value
  * outside `(0, 1000]` is a typo rather than a question — anything unparseable falls through to the
  * shipped locus, which is what every other parameter here does with input it cannot use.
