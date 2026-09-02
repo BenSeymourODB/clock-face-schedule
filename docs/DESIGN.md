@@ -572,11 +572,18 @@ the **board row** rather than the viewport whenever the panel is up, because the
 
 | | margin per side, no panel | **as handed, panel drawn** |
 | --- | --- | --- |
-| 16:9 | 234.5 | **183.2** |
-| 16:10 | 172.1 | **120.8** |
+| 16:9 | **300.8** | **244.1** |
+| 16:10 | **231.7** | **175.0** |
 
-`src/client/main.ts`'s own docstring states the transition — *"16:9 goes 234.5 → 183.2 and 16:10
-172.1 → 120.8, both still saturated"*. Both rows are correct about different boards: 234.5 / 172.1
+> **These four figures were 234.5 / 183.2 and 172.1 / 120.8 until #213, and the arithmetic was never
+> wrong — the scale was.** A margin is a count of viewBox units, so it moves inversely with the dial's
+> rendered size, and ADR 0008's bar took that from 922.3 px to 833.8: every figure here is 8.4% larger
+> than the number it replaced. The panel-drawn pair was re-read off `measureLabelMargin`'s own
+> `?check=1` row; the panel-off pair could not be produced at all before #185's `?panel=0` — that
+> board had no way onto a screen, which is why this column stayed stale through the bar landing.
+
+`src/client/main.ts`'s own docstring states the transition — *"16:9 goes 300.8 → 244.1 and 16:10
+231.7 → 175.0, both still saturated"*. Both rows are correct about different boards: 300.8 / 231.7
 are the allocation, and are what a board below the panel threshold actually grants. **Neither is what
 the labels receive on a board that draws a panel, which is every board above 1.5513.**
 
@@ -584,10 +591,17 @@ Nothing about guaranteed card width moves — 120.8 is still past the 75.4 knee,
 13 characters a line either way, which is why this shipped without anyone noticing. What moves is
 every figure *derived* from the margin:
 
-- **The 16:10 penalty on a band-clearing locus is 2 characters, not the 5 this ADR states and not the
-  0 the placement-fork brainstorm concluded.** At 120.8, `W = m + 8 = 128.8` gives 11 characters a
-  line against the circle's saturated 13. On 16:9 at 183.2 it is 17 — still a gain, still not free.
-  Both prior figures were computed at a no-panel grant.
+- **There is no 16:10 penalty on a band-clearing locus — it is a 3-character *gain*.** At the real
+  175.0, `W = m + 8 = 183` gives **16** characters a line against the circle's saturated 13; on 16:9
+  at 244.1 it is **22**. Computed with the shipped constants — `labelFontSize` 17.52
+  (`outerRadius × 0.06`), `CHAR_WIDTH_RATIO` 0.6, 6 units of padding a side — which reproduce this
+  ADR's own superseded figures exactly (17 at 183.2, 11 at 120.8, 13 at the saturated 155.2), so the
+  model is checked rather than asserted.
+
+  **This bullet has now been wrong in both directions**, which is the thing to notice about it: this
+  ADR first stated a 5-character penalty, the placement-fork brainstorm concluded 0, the correction
+  above made it 2, and the measured answer is a gain of 3. Every one of those was the same formula
+  over a margin figure taken at the wrong dial size. The formula was never the problem.
 - **A band-clearing locus is not "unavailable" at 12 and 6.** Those 22.5-to-96.1-unit figures measure
   how far the card sits past the **600-unit viewBox**, not above the frame — and `Styles.html` grants
   `--label-frame: 7.3vmin`, **51.3 dial units**, precisely so a card may paint there. One- and
@@ -598,9 +612,13 @@ every figure *derived* from the margin:
   still draws the plain circle at 1.02 of the outer radius, and `gap` is still an open term (#117,
   #138). The margin shipped; the clearance did not.
 
-**Any table computed from 234.5 or 172.1 for a board that draws a panel is stale**, including the
-band-clearing radii and the panel-leader geometry in `docs/brainstorms/2026-08-21-label-placement-fork.md`.
-Re-run them at 183.2 and 120.8 before briefing #138's spike.
+**Any table computed from 234.5, 172.1, 183.2 or 120.8 is stale** — the first two are a no-panel grant
+and all four are pre-bar — including the band-clearing radii and the panel-leader geometry in
+`docs/brainstorms/2026-08-21-label-placement-fork.md`, and #138's own margin table, which prices side
+placement at "today's renderer allowance (52.4)", 16:10 (90.0) and 16:9 (143.3). **Re-run them at
+244.1 and 175.0 before briefing #138's spike**, and note the direction: every one of those figures is
+*lower* than the real grant, so side placement has more width available than #138 costed it with, not
+less.
 
 **Revisit when** the pilot board is up (#10) and the panel has been looked at from the back of the
 room, or if a target display falls outside 16:9–16:10.
