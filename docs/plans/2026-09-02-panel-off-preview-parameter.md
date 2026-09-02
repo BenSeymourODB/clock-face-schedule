@@ -2,8 +2,13 @@
 
 **Status:** done — shipped in #213
 **Issue:** #185
-**Docs:** README's parameter table gains a `?panel=0` row and the panel-off figures; no ADR moves —
-ADR 0009's allocation is unchanged and #39 item 4's fallback is still undesigned
+**Docs:** README's parameter table gains a `?panel=0` row and the panel-off figures, and **ADR 0009's
+fourth amendment is corrected** — its four label-margin figures were measured before ADR 0008's bar
+and are 8.4% low, and the panel-off half of that table could not be produced at all until this flag
+existed. ADR 0009's *allocation* is unchanged and #39 item 4's fallback is still undesigned.
+
+> The "no ADR moves" this header first claimed was wrong, and the correction is the point rather than
+> a footnote: the ADR's own table is the thing this plan's measurement supersedes. Caught in review.
 
 ## What ships
 
@@ -147,6 +152,38 @@ the clock.
   the existing "gates the suppression source on the panel host being visible". Same justification:
   the rule is one `&&` term away from silently inverting, and `main.ts` has no seam to drive
   (#156).
+- `url-parameter-wiring.test.ts` — **added in review**, and the reason is the more useful half of this
+  plan. See below.
+
+### Two of those guards did not hold, and mutation is what said so
+
+Both were found by review mutating the source rather than by reading the assertions, which is the only
+way this class of hole surfaces — the test-side twin of `CLAUDE.md`'s "a test can encode the same
+wrong assumption as the code".
+
+- **`showPanel`'s guard missed the inversion it was written for.** It asserted `/panelPermitted\s*&&/`
+  present and `/panelPermitted\s*\|\|/` absent, and `!panelPermitted &&` satisfies both — so the
+  one-character mutation the docstring names as the hazard left all 1,944 tests green. Rendered, that
+  mutant draws **no column on any ordinary load** and a column only under `?panel=0`: worse than the
+  defect, and it looks *more* correct in the one screenshot anyone would take to check the flag. Now
+  matched as the whole returned expression, anchored at `return`, with the negation excluded
+  separately.
+- **Nothing joined the parameter's name across the three files that must agree.** `doGet` reads
+  `event.parameter["panel"]`, `Index.html` prints `panelParam` into `data-panel`, the client reads
+  `dataset["panel"]` then its own query string. **Only the query-string route is reachable from a
+  preview or a spec**, and the attribute route is the whole of the deployed app — the page runs in a
+  sandbox iframe whose `location.search` is not the teacher's URL. So deleting the attribute layer left
+  every test green and every screenshot in this plan reproducing, while `/exec?panel=0` on a real board
+  silently ignored the flag. `url-parameter-wiring.test.ts` binds all three spellings, and covers
+  `scale` and `durations` too: they had the identical hole, the assertion is the same three lines, and
+  closing it for one of three would have been the odd choice.
+- A third finding was a **tautology**: this plan's own `panel-layout.test.ts` block re-typed
+  `showPanel`'s conjunction as `expect(panelAllowed([…]) && fits).toBe(false)` one line after
+  establishing `fits === false`, so it could not fail for any implementation of `panelAllowed` at all.
+  Deleted; the conjunction is bound to the source in `main-load-order.test.ts`, which is the only place
+  that relationship exists.
+
+All three mutations now fail.
 
 ## Deferred
 
