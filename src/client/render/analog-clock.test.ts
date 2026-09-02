@@ -1476,3 +1476,106 @@ describe("the ring thicknesses README states in prose", () => {
     expect(thicknessOf("w")).toBeLessThan(thicknessOf("d"));
   });
 });
+
+/**
+ * #138's spike: cards confined to two side sectors instead of spaced round a ring, and a locus a
+ * URL can move. The point of these is the *default* — the shipped dial has to be untouched — plus
+ * the one property that makes the pictures worth looking at: twelve and six stop being label
+ * positions.
+ */
+describe("analogClock's label placement spike", () => {
+  const SIXTEEN_NINE = 234.5;
+  const RING_LOCUS = OUTER_RADIUS * 1.02;
+
+  /** An event every half hour with a title too long for its arc, so cards land all round the dial. */
+  const SWEEP = Array.from({ length: 22 }, (_unused, index) =>
+    input(`s${index}`, 1 + index / 2, 1 + index / 2 + 25 / 60, { title: LONG_TITLE })
+  );
+
+  function labelsLayer(overrides: Partial<AnalogClockParams>): string {
+    return (
+      build(SWEEP, overrides).element.querySelector('[data-testid="floating-labels-layer"]')
+        ?.innerHTML ?? ""
+    );
+  }
+
+  /**
+   * Each card's centre offset from the dial's vertical axis.
+   *
+   * The horizontal axis and not the bearing, because the bearing of a *drawn* card is not the
+   * bearing it was placed at: the displacement pass moves a centre vertically (#134), which rotates
+   * it off the locus. `x` is untouched by that, so `|x − cx|` is the one reading that still answers
+   * for the placement rather than for the pass after it.
+   */
+  function horizontalOffsets(overrides: Partial<AnalogClockParams>): number[] {
+    const { element } = build(SWEEP, { labelMargin: SIXTEEN_NINE, ...overrides });
+    const rects = [...element.querySelectorAll('[data-testid^="floating-label-rect-"]')];
+
+    expect(rects.length, "no card was drawn").toBeGreaterThan(8);
+    return rects.map((rect) =>
+      Math.abs(Number(rect.getAttribute("x")) + Number(rect.getAttribute("width")) / 2 - CX)
+    );
+  }
+
+  it("draws the shipped ring when nothing asks for anything else", () => {
+    expect(labelsLayer({})).toBe(labelsLayer({ labelPlacement: "ring", labelLocus: null }));
+  });
+
+  it("keeps every card out of the wedge at twelve and six", () => {
+    // A card at the sector's own edge sits at `R·sin 45°` from the axis; anything nearer the axis
+    // than that is in the wedge the spike exists to empty.
+    const edge = RING_LOCUS * Math.sin(Math.PI / 4);
+
+    for (const offset of horizontalOffsets({ labelPlacement: "sides" })) {
+      expect(offset).toBeGreaterThanOrEqual(edge - 1e-6);
+    }
+  });
+
+  it("is a real change: the ring does put cards in that wedge", () => {
+    // Without this the assertion above could pass on a dial that draws no card near the axis
+    // anyway, and the spike would be measuring the fixture rather than the placement.
+    const edge = RING_LOCUS * Math.sin(Math.PI / 4);
+
+    expect(Math.min(...horizontalOffsets({ labelPlacement: "ring" }))).toBeLessThan(edge);
+  });
+
+  it("uses both sides rather than piling one", () => {
+    const { element } = build(SWEEP, {
+      labelMargin: SIXTEEN_NINE,
+      labelPlacement: "sides",
+    });
+    const centres = [...element.querySelectorAll('[data-testid^="floating-label-rect-"]')].map(
+      (rect) => Number(rect.getAttribute("x")) + Number(rect.getAttribute("width")) / 2
+    );
+
+    expect(centres.some((x) => x > CX)).toBe(true);
+    expect(centres.some((x) => x < CX)).toBe(true);
+  });
+
+  it("moves every card outward for a wider locus", () => {
+    const ring = horizontalOffsets({ labelPlacement: "sides" });
+    const wider = horizontalOffsets({ labelPlacement: "sides", labelLocus: 380 });
+
+    expect(Math.max(...wider)).toBeGreaterThan(Math.max(...ring));
+    expect(Math.min(...wider)).toBeGreaterThan(Math.min(...ring));
+  });
+
+  it("derives 'wide' from the granted margin, which is what makes it track the board", () => {
+    // ADR 0009's circle is the midpoint of the band's outer edge and the board's: at a 234.5-unit
+    // margin that is (292 + 534.5) / 2 = 413.25, and at 172.1 it is 378.05.
+    const nine = Math.max(...horizontalOffsets({ labelPlacement: "sides", labelLocus: "wide" }));
+    const ten = Math.max(
+      ...horizontalOffsets({ labelPlacement: "sides", labelLocus: "wide", labelMargin: 172.1 })
+    );
+
+    expect(nine).toBeGreaterThan(ten);
+  });
+
+  it("falls back to the ring locus for 'wide' on a page that could not measure a board", () => {
+    expect(labelsLayer({ labelLocus: "wide" })).toBe(labelsLayer({}));
+  });
+
+  it("applies the locus to the ring as well, so the fork can be walked either way", () => {
+    expect(labelsLayer({ labelLocus: 380 })).not.toBe(labelsLayer({}));
+  });
+});
