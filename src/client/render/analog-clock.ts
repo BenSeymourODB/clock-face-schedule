@@ -531,8 +531,8 @@ export function analogClock({
     //
     // The angular room each card needs comes from the card laid out at its *own* bearing, one pass.
     // Height depends on bearing depends on height, and the spread is a separation rule rather than a
-    // proof of non-overlap (`side-placement.ts` says so, and the nudge pass below still runs), so iterating
-    // it would buy precision the rule does not have. The height is taken with the duration line
+    // proof of non-overlap (`side-placement.ts` says so, and the nudge pass below still runs), so
+    // iterating it would buy precision the rule does not have. The height is taken with the duration line
     // offered, which the planner below may then decline — so the demand is over-stated rather than
     // under-stated, which is the safe direction for a separation.
     if (labelPlacement === "sides") {

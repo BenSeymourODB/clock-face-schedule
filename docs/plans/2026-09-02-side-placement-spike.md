@@ -108,8 +108,9 @@ Crowding is resolved by spreading, not by even spacing: cards start at their cla
 and are pushed apart only as far as their own heights demand, inside the sector's bounds. An
 uncrowded card therefore stays next to its arc, and a full sector degrades to even spacing. Where the
 sector cannot hold them all, the pass distributes evenly and leaves the overlap to the vertical nudges
-`planOptionalLines` returns, which still run — whether displacement remains necessary under side placement is decision 3's second
-half, and the honest way to answer it is to leave it in and count how often it fires.
+`planOptionalLines` returns, which still run — whether displacement remains necessary under side
+placement is decision 3's second half, and the honest way to answer it is to leave it in and count
+how often it fires.
 
 The angular separation a card needs is taken from its height at its *clamped anchor* bearing, one
 pass. Height depends on bearing depends on height, and the spread is a separation rule rather than a
