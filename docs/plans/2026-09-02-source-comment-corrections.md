@@ -1,7 +1,7 @@
 # Three source comments that contradict the code they document
 
-**Status:** in progress — [#209](https://github.com/BenSeymourODB/clock-face-schedule/issues/209)
-is the whole of the work and nothing here outlives it.
+**Status:** done — shipped in
+[#215](https://github.com/BenSeymourODB/clock-face-schedule/pull/215)
 **Issue:** #209 (from the 2026-08-23 doc sweep)
 **Docs:** `docs/DESIGN.md` ("Overlapping events and concentric rings"), `CLAUDE.md` ("Comments
 explain decisions, not code")
