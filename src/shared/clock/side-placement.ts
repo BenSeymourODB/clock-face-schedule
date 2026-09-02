@@ -71,7 +71,8 @@ export function sectorTarget(angle: number): number {
  * 5.20 units of vertical travel per degree that is half a unit of card, and the exact form would
  * still be an approximation of the real requirement: a card is a rectangle, so what it needs to clear
  * its neighbour depends on both bearings and not on one. The spread pass below is a separation rule,
- * not a proof of non-overlap; `stackLabels` remains the thing that guarantees it.
+ * not a proof of non-overlap; the vertical nudges `planOptionalLines` returns, bounded by
+ * `labelVerticalBand`, remain the thing that resolves what it leaves overlapping.
  */
 export function angularHeight(height: number, radius: number): number {
   if (radius <= 0) return 0;
@@ -141,7 +142,8 @@ function isotonic(targets: readonly number[]): number[] {
  *
  * Where the cards cannot fit at all the pass spreads them evenly across the sector and lets them
  * overlap. Deliberate: the alternative is pushing cards outside the sector, which is the overhang
- * #138's decision 2 is choosing [45°, 135°] to avoid, and `stackLabels` still runs afterwards.
+ * #138's decision 2 is choosing [45°, 135°] to avoid, and the vertical nudge pass still runs
+ * afterwards.
  */
 export function spreadInSector(
   targets: readonly number[],

@@ -108,8 +108,8 @@ keeping a card near its own arc is the property decision 1 says actually costs s
 Crowding is resolved by spreading, not by even spacing: cards start at their clamped anchor bearing
 and are pushed apart only as far as their own heights demand, inside the sector's bounds. An
 uncrowded card therefore stays next to its arc, and a full sector degrades to even spacing. Where the
-sector cannot hold them all, the pass distributes evenly and leaves the overlap to `stackLabels`,
-which still runs — whether displacement remains necessary under side placement is decision 3's second
+sector cannot hold them all, the pass distributes evenly and leaves the overlap to the vertical nudges
+`planOptionalLines` returns, which still run — whether displacement remains necessary under side placement is decision 3's second
 half, and the honest way to answer it is to leave it in and count how often it fires.
 
 The angular separation a card needs is taken from its height at its *clamped anchor* bearing, one

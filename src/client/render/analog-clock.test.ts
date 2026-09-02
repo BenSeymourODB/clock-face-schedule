@@ -1657,7 +1657,7 @@ describe("analogClock's label placement spike", () => {
    *
    * The mechanism is the mismatched budget #138 is built on, arriving as the thing that decides the
    * fork rather than as the thing that motivates it: a wider card needs more vertical separation, the
-   * ring has none to give at twelve and six, and `stackLabels` runs out of band. So the locus is what
+   * ring has none to give at twelve and six, and the nudge pass runs out of band. So the locus is what
    * recovers the titles and clears the band, and side placement is what makes a locus that does
    * either one survivable.
    *
