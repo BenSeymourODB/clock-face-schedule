@@ -201,12 +201,13 @@ and on the deployed app alike:
 `build/preview.html?now=04:15&freeze=1` needs no server. A pinned clock says so on screen, and an
 unreadable time falls back to the real clock rather than inventing one.
 
-Four more parameters change *what* is drawn rather than when, and combine freely with the two above:
+Five more parameters change *what* is drawn rather than when, and combine freely with the two above:
 
 | | |
 | --- | --- |
 | `?scale=1h` | The 1-hour dial — one revolution per hour, over a window 5 minutes behind and 50 ahead. Wins over the stored `pref.dialScale`, and does not overwrite it — see above. Unset, the board opens on whatever was last pressed. The bar's switch rewrites this parameter in place rather than reloading, on the preview where the page is the document; inside the deployed app's sandbox iframe the address bar belongs to the parent frame and cannot change, which is why `doGet` templates the parameter onto the mount and the client prefers that over its own query string. |
 | `?durations=0` | Suppress every event's duration line, on the arcs, the floating cards and the agenda alike. `1` forces them on; unset uses the stored preference, which defaults to on. |
+| `?panel=0` | Leave the agenda column off, so the panel-less board can be screenshotted — the shape a display reaches on its own as it approaches square, and the one ADR 0009's undesigned narrow-board fallback has to be judged against. `1` means "draw it where the board can carry it", which is the default: the parameter can only take the column away, never put one on a board that fails `panelFitsBoard`, since that would cost the dial height or push the labels below the 75.4-unit knee. Stores nothing and posts no notice — see below for why. |
 | `?demo=1` | The sample fixture instead of a real calendar. Ships to production deliberately — legibility has to be judged on the board, and waiting for someone's real day to contain a useful overlap is not a plan. The preview is always in demo mode. |
 | `?check=1` | Bring-up diagnostics: colour emoji, the `google.script.run` round trip, a calendar read, and the stored preferences with a write-and-echo check. Off by default, because the display carries no chrome. |
 
@@ -216,6 +217,32 @@ give 600 px and 950. It is still a grid row, though, so a page carrying one draw
 against a healthy board's 833.8 at 1920×1080. On the preview that is every state, pinned or not, since
 demo mode posts a notice of its own: screenshots are to the right proportions and about 14% down on
 scale; hide `#status` to see what the wall gets.
+
+**`?panel=0` does not make the dial bigger** (#185), which is worth stating because it is the
+opposite of what the flag was expected to show. Rendered with `#status` hidden:
+
+| | panel drawn | `?panel=0` |
+| --- | --- | --- |
+| **1920×1080** dial drawing | 833.8 px | **833.8 px — unchanged** |
+| dial's *box* | 1512.2 px | 1762.3 px |
+| agenda column | 250.1 px (180.0 units) | absent |
+| labels' margin | 244.1 u/side | 300.8 u/side |
+| **1920×1200** dial drawing | 926.4 px | **926.4 px — unchanged** |
+| dial's *box* | 1466.9 px | 1744.8 px |
+| agenda column | 277.9 px (180.0 units) | absent |
+| labels' margin | 175.0 u/side | 231.7 u/side |
+
+The dial fills a square viewBox at `xMidYMid meet`, so the drawing fits the **shorter** axis — the
+height, on any board wider than it is tall. Returning 250 px of width to a height-bound drawing
+buys it nothing, so what the extra box does is re-centre it: the dial slides **125 px right** at
+16:9. The floating-label set is identical either way, at every pin in the table above and on both
+boards, and card widths do not move either — both margins are far above the 75.4-unit knee where
+guaranteed card width saturates. So a panel-off board differs from a panel-on one by the column's
+own information and the dial's horizontal position, and by nothing else.
+
+The 56.7 units a side the labels gain are the page's `--label-frame`, not the column's 180 halved:
+`labelMarginUnits` subtracts the panel's reserve whether or not a column is drawn, so 90 units a
+side stay held for a panel that is not there (#171).
 
 **The times below exercise the demo fixture's states**, and are what the fixture's offsets mean once
 a pin anchors them to midnight — measured by rendering, not predicted. Each claim names one event and

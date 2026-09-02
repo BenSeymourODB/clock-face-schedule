@@ -16,6 +16,7 @@ import {
   PANEL_RESERVE_UNITS,
   getPeriodBounds,
   labelMarginUnits,
+  panelAllowed,
   panelFitsBoard,
 } from "../shared/clock";
 import {
@@ -61,6 +62,18 @@ const clockPin = readClockPin(
   new Date()
 );
 const now = createTimeSource(clockPin);
+
+/**
+ * Whether `?panel=` permits the agenda column (#185) — read at module level for the reason the pin
+ * is: it is a property of the load, not of a frame, and `showPanel` runs on every board resize.
+ *
+ * One read for both of `showPanel`'s callers, so the column `trackBoardLayout` draws and the state
+ * `?check=1`'s label-margin row reports cannot come apart.
+ */
+const panelPermitted = panelAllowed([
+  mount instanceof HTMLElement ? mount.dataset["panel"] : undefined,
+  new URLSearchParams(window.location.search).get("panel")
+]);
 
 /** google.script.run is callback-based; everything downstream wants to await. */
 function callServer<T>(name: string, ...args: unknown[]): Promise<T> {
@@ -259,7 +272,15 @@ function measureLabelMargin(mount: Element, board: Element, panelShown: boolean)
    *
    * Costs nothing where it matters. ADR 0009's guaranteed card width saturates at 13 characters a
    * line for any margin at or above 75.4, and `panelFitsBoard` will not show a panel that leaves
-   * less — so 16:9 goes 234.5 → 183.2 and 16:10 172.1 → 120.8, both still saturated.
+   * less — so 16:9 goes **300.8 → 244.1** and 16:10 **231.7 → 175.0**, both still saturated.
+   *
+   * **Those were 234.5 → 183.2 and 172.1 → 120.8 until #213, measured before ADR 0008's bar.** The
+   * arithmetic never changed; the *scale* did. A margin is a count of viewBox units, so it moves
+   * inversely with the dial's rendered size, and the bar took that from 922.3 px to 833.8 — which
+   * makes every unit figure here 8.4% larger than the number it replaced. `?panel=0` (#185) is what
+   * put the panel-off half of this pair on screen for the first time, and both halves were re-read off
+   * this function's own `?check=1` row rather than re-derived. `docs/DESIGN.md`'s ADR 0009 fourth
+   * amendment carried the same stale pair and is corrected with it.
    */
   const available = panelShown
     ? board.getBoundingClientRect().width
@@ -283,13 +304,18 @@ function measureLabelMargin(mount: Element, board: Element, panelShown: boolean)
  *
  * The absent case is also what an unmeasurable page falls into, which is the safe direction: a panel
  * sized from a zero would be a sliver of cards nobody can read.
+ *
+ * `?panel=0` can only take the column *away*, never add one — see `panelAllowed` (#185).
  */
 function showPanel(board: Element): boolean {
-  return panelFitsBoard(
-    board.getBoundingClientRect(),
-    DIAL_VIEWBOX_SIZE,
-    PANEL_RESERVE_UNITS,
-    LABEL_MARGIN_KNEE_UNITS
+  return (
+    panelPermitted &&
+    panelFitsBoard(
+      board.getBoundingClientRect(),
+      DIAL_VIEWBOX_SIZE,
+      PANEL_RESERVE_UNITS,
+      LABEL_MARGIN_KNEE_UNITS
+    )
   );
 }
 

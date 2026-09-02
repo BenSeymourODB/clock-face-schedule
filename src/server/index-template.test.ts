@@ -118,6 +118,28 @@ describe("the page template", () => {
     expect(TEMPLATE).not.toContain("<?!= durationsParam");
   });
 
+  it("templates the panel parameter onto the mount element", () => {
+    // #185's preview flag. `panelAllowed` is handed this attribute and nothing else, so the
+    // hyphenated name is what has to match across the boundary.
+    expect(TEMPLATE).toContain('data-panel="<?= panelParam ?>"');
+  });
+
+  it("emits the panel attribute whatever the conditions evaluate to", () => {
+    expect(withoutGuardedRegions(TEMPLATE)).toContain("data-panel=");
+  });
+
+  it("leaves the panel attribute empty once scriptlets are stripped", () => {
+    // The `data-durations` trap, one surface over and one step worse: `panelAllowed` reads `"0"` as
+    // "leave the column off", so a stripped value the client took for `"0"` would draw **every**
+    // preview — and every real load with no `?panel=` — with no agenda column at all, on exactly the
+    // boards ADR 0009 sized one for. Empty has to mean "the URL said nothing".
+    expect(TEMPLATE.replace(SCRIPTLET, "")).toContain('data-panel=""');
+  });
+
+  it("escapes the panel value rather than printing it raw", () => {
+    expect(TEMPLATE).not.toContain("<?!= panelParam");
+  });
+
   /**
    * ADR 0008's bar, and the one property it cannot be built without: it is on screen on **every**
    * load. The switch inside it is what stops a scale change being a mode nobody knows was made, and
