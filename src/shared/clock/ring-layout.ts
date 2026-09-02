@@ -35,15 +35,15 @@ export interface RingAssignment {
  * did not need. Keeping earlier events further out is also the reading order a viewer expects.
  *
  * `windowStartAngle` rebases every angle onto how far past it they fall, in `[0, 360)`, before
- * sorting. `calculateTrueArcAngles` never reduces an angle modulo 360 (clock-utils.ts), so its
- * output is already in chronological order for any window and needs no rebasing — this parameter
- * is a backstop for a caller that instead hands in angles independently normalised per event (e.g.
- * a raw hand-position value), where two events on opposite sides of a period boundary can sort in
- * the wrong order without it. Assumes `windowStartAngle` does not fall strictly inside any single
- * candidate's own span; a candidate already straddling the rebase origin sorts incorrectly
- * regardless; upstream code deriving `windowStartAngle` from the window's own edge, rather than
- * from a point nothing spans, avoids this. Defaults to 0, a no-op against angles already in
- * `[0, 360)` from a period-aligned window — today's only caller.
+ * sorting. **Required in practice rather than a backstop**: the default of 0 is a no-op only for
+ * angles already inside `[0, 360)`, and today's only caller is not such a caller — it passes the
+ * window's own start angle explicitly, because a rolling window (#25) reaches past 360° and the
+ * 1-hour scale always does (10:45 gives 240°–570°). Rebased onto 0, the modulo turns 380° into 20°,
+ * which sorts before an event at 30°; interval partitioning walked in the wrong order puts two
+ * overlapping events on one ring, the later drawn at identical radii and hidden entirely beneath
+ * the earlier. Assumes `windowStartAngle` does not fall strictly inside any single candidate's own
+ * span; a candidate already straddling the rebase origin sorts incorrectly regardless, and taking
+ * the angle from the window's own edge rather than from a point nothing spans avoids that.
  *
  * Optimal in ring *count* says nothing about ring *thickness*. Callers divide a fixed band by
  * `clusterDepth`, so a deep cluster still yields rings too thin to carry an emoji or a title;

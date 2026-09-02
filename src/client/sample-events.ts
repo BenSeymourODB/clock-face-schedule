@@ -64,9 +64,13 @@ export function sampleEvents(windowStart: Date): ClockEventInput[] {
     // sidestep the question, and yellow takes a black title — 1.18:1 on the bare dial the drained
     // side exposes, so the title has to change colour across the seam. The title is long enough to
     // reach past the seam for the same reason: a short one sits entirely on the spent side and
-    // never exercises the split. Overlaps only "b", which ends at +3:00, so it opens no fifth ring
-    // and the cluster above keeps its thickness — and a drained portion ends up beside a fully
-    // elapsed arc, which is the comparison a viewer actually has to make.
+    // never exercises the split. It overlaps "b" for thirty minutes and "k" for fifteen (2:30 to
+    // 2:45), and still opens no fifth ring — but that is a property of the whole fixture rather
+    // than of this event's own clashes: peak concurrency anywhere in it is 4, at +1:45 where "a",
+    // "b", "c" and "k" run together, and 4 is `maxRings`. So the cluster above keeps its thickness
+    // — and a drained portion ends up beside a fully elapsed arc, which is the comparison a viewer
+    // actually has to make. `sample-events.test.ts` holds that bound against the renderer's own
+    // cap; stated of one event's overlaps it was both false and the wrong quantity (#209).
     //
     // It does not escape the cluster, though: overlapping "b" joins it, so `assignRings` reports
     // clusterDepth 4 for this arc and it renders at **15.56 units** — ring 0, shared with "a",
