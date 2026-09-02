@@ -84,8 +84,9 @@ function verticalSpan(radius: number, from: number, to: number): number {
  * *arithmetic* quietly assumed they separate uniformly. Allotting arc length instead is what the
  * first version did, and the shortfall was measured on review: two four-line cards placed at that
  * rule's minimum overlap by **19.2 units at 45° on the shipped locus**, **22.1 at R = 418**, and by
- * 2.1 even at three o'clock. The vertical nudges `planOptionalLines` returns were covering it, so
- * nothing rendered a visible overlap — the class of latent defect a green suite hides.
+ * 2.1 even at three o'clock. `displaceVertically` was covering it — its nudges arrive here
+ * through `planOptionalLines`, which calls it once per trial — so nothing rendered a visible
+ * overlap: the class of latent defect a green suite hides.
  *
  * Solved rather than approximated, because the obvious correction is wrong in the other direction:
  * dividing by `sin θ` at the card's own bearing uses the slope where the pair *starts*, and the slope
@@ -198,7 +199,7 @@ function isotonic(targets: readonly number[]): number[] {
  *
  * Where the cards cannot fit at all the pass spreads them evenly across the sector and lets them
  * overlap. Deliberate: the alternative is pushing cards outside the sector, which is the overhang
- * #138's decision 2 is choosing [45°, 135°] to avoid, and the vertical nudge pass still runs
+ * #138's decision 2 is choosing [45°, 135°] to avoid, and `displaceVertically` still runs
  * afterwards.
  */
 export function spreadInSector(

@@ -56,8 +56,8 @@ describe('separationDegrees', () => {
   /**
    * The defect this function exists to fix, asserted as the shortfall the arc-length rule left. Two
    * four-line cards (104 units) separated by `height / radius` overlap by 19.2 units at the sector's
-   * own edge and by 2.1 even at three o'clock — measured on review, and latent because `stackLabels`
-   * was nudging it away.
+   * own edge and by 2.1 even at three o'clock — measured on review, and latent because
+   * `displaceVertically` was nudging it away.
    */
   it.each([
     ['at 45°, the sector edge', 45, 297.84, 19.2],

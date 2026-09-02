@@ -107,8 +107,8 @@ keeping a card near its own arc is the property decision 1 says actually costs s
 Crowding is resolved by spreading, not by even spacing: cards start at their clamped anchor bearing
 and are pushed apart only as far as their own heights demand, inside the sector's bounds. An
 uncrowded card therefore stays next to its arc, and a full sector degrades to even spacing. Where the
-sector cannot hold them all, the pass distributes evenly and leaves the overlap to the vertical nudges
-`planOptionalLines` returns, which still run — whether displacement remains necessary under side
+sector cannot hold them all, the pass distributes evenly and leaves the overlap to
+`displaceVertically`, which still runs — whether displacement remains necessary under side
 placement is decision 3's second half, and the honest way to answer it is to leave it in and count
 how often it fires.
 
@@ -117,8 +117,9 @@ wrong in a way only review caught. Cards clear each other *vertically*, and a de
 the locus is worth `R·sin θ` of vertical — least at the sector's own ends. Allotting arc length
 (`height / radius`) therefore under-separated everywhere and worst where it mattered: two four-line
 cards at that rule's minimum overlap by **19.2 units at 45° on the shipped locus**, 22.1 at R = 418,
-and 2.1 even at three o'clock. The vertical nudges `planOptionalLines` returns were covering it, so
-nothing rendered a visible overlap — the class of latent defect a green suite hides, and the reason it is now asserted directly.
+and 2.1 even at three o'clock. `displaceVertically` was covering it, so nothing rendered a visible
+overlap — the class of latent defect a green suite hides, and the reason it is now asserted
+directly in `side-placement.test.ts`.
 
 The correction is not `height / (R·sin θ)` either: that uses the slope where the pair *starts* and
 the slope falls away on both sides of three o'clock, so at 90° it still delivers 101.9 against the
