@@ -89,6 +89,16 @@ export interface FloatingLabelParams {
   text: string;
   /** Arc midpoint angle in degrees, 0° = 12 o'clock, clockwise. */
   anchorAngle: number;
+  /**
+   * Bearing the card's own centre sits on, when it is not the arc's (#138).
+   *
+   * Defaults to `anchorAngle`, which is the ring: a card directly outside the arc it names. Side
+   * placement moves the card and leaves the connector pointing back, so the two come apart and the
+   * card's position stops being the channel that says which arc it belongs to — the connector
+   * becomes the whole of it. That is the cost #138's decision 1 is about, and it is only visible
+   * because these are two parameters rather than one.
+   */
+  cardAngle?: number;
   /** Outer radius of the arc — where the connector starts. */
   anchorRadius: number;
   /** Radius of the circle the label centre sits on, before the vertical clamp. */
@@ -157,6 +167,7 @@ export interface FloatingLabelGeometry {
 export function floatingLabelGeometry({
   text,
   anchorAngle,
+  cardAngle,
   labelRadius,
   cx,
   cy,
@@ -170,7 +181,7 @@ export function floatingLabelGeometry({
   // there. Sizing the card to that room is what keeps the clamp from having to pull a too-wide
   // card inward across the numerals (#21); the clamp below is left in place as a backstop and,
   // for any card this function produces, does nothing horizontally.
-  const natural = polarToCartesian(cx, cy, labelRadius, anchorAngle);
+  const natural = polarToCartesian(cx, cy, labelRadius, cardAngle ?? anchorAngle);
   const frameLimit = labelWidthLimit(natural.x, clockBox);
   const faceLimitFor = (lineCount: number): number =>
     faceClearanceLimit(

@@ -34,7 +34,7 @@ export interface SuppressibleLabel {
   id: string;
   /**
    * The card's box at its **natural** position — before `planOptionalLines` offers a duration line
-   * and before `stackLabels` displaces anything.
+   * and before `displaceVertically` moves anything.
    *
    * Measuring after the resolver would be measuring the wrong thing: only 2 of 251 cards still
    * overlap once it has run — `rectsOverlap` over the rendered rects, on either base — because it has

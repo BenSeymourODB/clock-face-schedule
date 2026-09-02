@@ -683,3 +683,83 @@ describe("floatingLabel against the dial's real geometry", () => {
     });
   });
 });
+
+/**
+ * #138's spike seam: the card's bearing and the arc's come apart, so the connector is the only thing
+ * left saying which arc a card belongs to.
+ */
+describe("floatingLabel's cardAngle", () => {
+  it("defaults to the anchor's bearing, which is the ring", () => {
+    expect(render({ anchorAngle: 45 }).innerHTML).toBe(
+      render({ anchorAngle: 45, cardAngle: 45 }).innerHTML
+    );
+  });
+
+  it("moves the card without moving the connector's anchor", () => {
+    const moved = render({ anchorAngle: 10, cardAngle: 90 });
+    const ring = render({ anchorAngle: 10 });
+
+    const [movedX1, movedY1] = numbers(part(moved, "connector"), "x1", "y1");
+    const [ringX1, ringY1] = numbers(part(ring, "connector"), "x1", "y1");
+    expect([movedX1, movedY1]).toEqual([ringX1, ringY1]);
+
+    // The card itself is where `cardAngle` put it — 90° is three o'clock, so it is off to the right
+    // of a card the ring would have placed near the top.
+    const [movedRectX] = numbers(part(moved, "rect"), "x");
+    const [ringRectX] = numbers(part(ring, "rect"), "x");
+    expect(movedRectX).toBeGreaterThan(ringRectX);
+  });
+
+  it("still terminates the connector on the card's own edge, however far it reached", () => {
+    const group = render({ anchorAngle: 0, cardAngle: 90 });
+    const [x, y, width, height] = numbers(part(group, "rect"), "x", "y", "width", "height");
+    const [x2, y2] = numbers(part(group, "connector"), "x2", "y2");
+
+    // On an edge: one coordinate is pinned to a side of the rect and the other lies within it.
+    const onVerticalEdge =
+      (Math.abs(x2 - x) < 0.51 || Math.abs(x2 - (x + width)) < 0.51) &&
+      y2 >= y - 0.51 &&
+      y2 <= y + height + 0.51;
+    const onHorizontalEdge =
+      (Math.abs(y2 - y) < 0.51 || Math.abs(y2 - (y + height)) < 0.51) &&
+      x2 >= x - 0.51 &&
+      x2 <= x + width + 0.51;
+    expect(onVerticalEdge || onHorizontalEdge).toBe(true);
+  });
+
+  it("sizes the card for where the card is, not for where its arc is", () => {
+    // Twelve o'clock is frame-unbounded and three o'clock is the tightest position on the dial, so
+    // a card sized at the anchor's bearing rather than its own would be far too wide to fit.
+    const atTwelve = floatingLabelGeometry({
+      id: "e1",
+      text: "Parent Teacher Conference Planning Committee",
+      anchorAngle: 0,
+      anchorRadius: ANCHOR_RADIUS,
+      labelRadius: LABEL_RADIUS,
+      color: "#22c55e",
+      cx: CX,
+      cy: CY,
+      clockBox: CLOCK_BOX,
+      faceRadius: FACE_RADIUS,
+    });
+    const movedToThree = floatingLabelGeometry({
+      id: "e1",
+      text: "Parent Teacher Conference Planning Committee",
+      anchorAngle: 0,
+      cardAngle: 90,
+      anchorRadius: ANCHOR_RADIUS,
+      labelRadius: LABEL_RADIUS,
+      color: "#22c55e",
+      cx: CX,
+      cy: CY,
+      clockBox: CLOCK_BOX,
+      faceRadius: FACE_RADIUS,
+    });
+
+    // 700.8 units of frame at twelve o'clock against 59.2 at three, on this box — the whole of
+    // #138's mismatched-budget argument, and the card is sized by the second of them once it moves.
+    expect(atTwelve.limits.frame).toBeCloseTo(700.8, 1);
+    expect(movedToThree.limits.frame).toBeCloseTo(59.2, 1);
+    expect(movedToThree.rect.width).toBeLessThan(atTwelve.rect.width);
+  });
+});

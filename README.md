@@ -201,7 +201,7 @@ and on the deployed app alike:
 `build/preview.html?now=04:15&freeze=1` needs no server. A pinned clock says so on screen, and an
 unreadable time falls back to the real clock rather than inventing one.
 
-Four more parameters change *what* is drawn rather than when, and combine freely with the two above:
+Six more parameters change *what* is drawn rather than when, and combine freely with the two above:
 
 | | |
 | --- | --- |
@@ -209,6 +209,8 @@ Four more parameters change *what* is drawn rather than when, and combine freely
 | `?durations=0` | Suppress every event's duration line, on the arcs, the floating cards and the agenda alike. `1` forces them on; unset uses the stored preference, which defaults to on. |
 | `?demo=1` | The sample fixture instead of a real calendar. Ships to production deliberately — legibility has to be judged on the board, and waiting for someone's real day to contain a useful overlap is not a plan. The preview is always in demo mode. |
 | `?check=1` | Bring-up diagnostics: colour emoji, the `google.script.run` round trip, a calendar read, and the stored preferences with a write-and-echo check. Off by default, because the display carries no chrome. |
+| `?labels=sides` | **A spike, and #138's** — floating-label cards confined to two side sectors ([45°, 135°] and its mirror) instead of spaced round a ring, with each connector left pointing back at its arc. The dial hands a card 65 characters a line at twelve and six where two cards cannot be separated at all, and about 12 at three and nine where they separate fastest; this spends the budget where it exists. Unset, and on every default path, the ring is what draws. Not a stored preference: a spike is a question. |
+| `?locus=380` | The radius a card's centre sits on, in viewBox units — the shipped locus is 297.84. Applies to the ring as well as the sides, so the fork can be walked from a board without a rebuild. `?locus=wide` takes ADR 0009's circle from whatever margin the board granted — the *widest* candidate, and **not** the band-clearing one: the ADR solves three o'clock only, and rendered on the sides `wide` leaves a card 45.2 units inside the band at 16:9 (246.8 against the band's 292). Rendered across the three pins on both boards, three radii mark the trade: **≈340** truncates no title on either board *and* keeps every card inside the dial's box — but still covers arc titles, burying *Deadline* completely at `?now=19:00` on both boards; **≈430** is the smallest that covers none, at the cost of 7 cards past the box; and **≈452** on 16:9 (**≈427** on 16:10) is the smallest that keeps every card off the band, past which a wider locus starts costing characters again — 16:10 truncates two titles at 440. No radius satisfies all four at once, on either placement. The shipped 297.84 is not the only radius that clears `#status`, which is what the tables predicted: 320 and 340 do too. |
 
 **A notice costs the dial a row of height** (#115). The dial is sized from the display, so a notice no
 longer changes its width — a 439.8 px notice and a 1021.7 px one give the same dial where they used to

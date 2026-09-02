@@ -6,6 +6,7 @@ import {
   type ClockBox,
   type ClockEventInput,
   type DialScaleId,
+  adrBandClearingCircle,
   angleForTime,
   assignRings,
   calculateTrueArcAngles,
@@ -24,6 +25,8 @@ import {
   panelNamedKey,
   planOptionalLines,
   roundCoord,
+  sectorTarget,
+  sideCardAngles,
 } from "../../shared/clock";
 import { svg } from "../svg";
 import { clockFace } from "./clock-face";
@@ -200,7 +203,35 @@ export interface AnalogClockParams {
    * is the only thing naming that arc.
    */
   namedElsewhere?: () => ReadonlySet<string>;
+  /**
+   * Where a floating label's card is allowed to sit — the shipped ring, or #138's two side sectors.
+   *
+   * **A spike, and off unless a URL asks for it.** #138 proposes confining cards to the sides and
+   * the owner's call is that it is settled by looking rather than by argument, so this exists to put
+   * the two side by side on a board. `"ring"` is the shipped behaviour and every default path takes
+   * it; nothing here is stored, because a preference is a decision and this is a question.
+   */
+  labelPlacement?: LabelPlacement;
+  /**
+   * The radius a card's centre sits on, overriding `LABEL_RADIUS_RATIO` (#138).
+   *
+   * A number in viewBox units, or `"wide"` for ADR 0009's circle derived from whatever margin the
+   * board granted — the *widest* candidate, not a clearing one. Rendered on the sides it measures
+   * **246.8 against the band's 292 at 16:9**, so a card is 45.2 units inside the band; the ADR solves
+   * three o'clock only and `adrBandClearingCircle` says so. Also a spike, and useful on the ring as
+   * well as the sides: the three
+   * radii the fork trades between are 297.84 (the only one that keeps a card above `#status`), about
+   * 380 (the width optimum on 16:9) and about 452 (the only one that clears the band), and a
+   * maintainer standing at a board can walk them without a rebuild.
+   */
+  labelLocus?: LabelLocus;
 }
+
+/** #138's fork, as something a render can be asked for. */
+export type LabelPlacement = "ring" | "sides";
+
+/** A locus radius in viewBox units, or ADR 0009's circle read off the granted margin. */
+export type LabelLocus = number | "wide" | null;
 
 export interface AnalogClockHandle {
   element: SVGSVGElement;
@@ -243,6 +274,8 @@ export function analogClock({
   labelMargin = null,
   showDurations = true,
   namedElsewhere,
+  labelPlacement = "ring",
+  labelLocus = null,
 }: AnalogClockParams): AnalogClockHandle {
   /**
    * Both re-bound by `setScale`, so the parameter is the dial's opening scale rather than its
@@ -262,6 +295,22 @@ export function analogClock({
 
   const labelRadius = outerRadius * (1 + LABEL_RADIUS_RATIO);
   const labelFontSize = roundCoord(outerRadius * LABEL_FONT_SIZE_RATIO);
+
+  /**
+   * The locus a card's centre sits on this render (#138's spike).
+   *
+   * A function rather than a constant because `"wide"` is derived from the granted margin, which
+   * `setLabelMargin` re-hands on every resize — the same reason `layoutBox` is rebuilt per render.
+   * `"wide"` without a grant falls back to the ring: ADR 0009's circle is the *board's* edge and a
+   * page that could not measure one has no board to put a card against.
+   */
+  function currentLocus(): number {
+    if (typeof labelLocus === "number") return labelLocus;
+    if (labelLocus === "wide" && grantedMargin !== null) {
+      return adrBandClearingCircle(outerRadius, size / 2 + grantedMargin);
+    }
+    return labelRadius;
+  }
 
   /** Units past the viewBox a card may reach; re-granted on resize, so read at render time. */
   let grantedMargin = labelMargin;
@@ -340,6 +389,7 @@ export function analogClock({
     renderedNamesKey = panelNamedKey(renderedNames);
 
     const clockBox = layoutBox();
+    const locus = currentLocus();
 
     // The origin is the angle origin only — it never moves the window, which rolls continuously
     // with the time (#25) rather than jumping at a period boundary. Both come from the scale
@@ -464,7 +514,7 @@ export function analogClock({
             text: displayTitle,
             anchorAngle: (event.startAngle + event.endAngle) / 2,
             anchorRadius: ringOuterRadius,
-            labelRadius,
+            labelRadius: locus,
             color: event.color,
             cx,
             cy,
@@ -484,6 +534,34 @@ export function analogClock({
 
     // Clockwise, so labels stack down the page in the order a reader scans the dial.
     overflowing.sort((a, b) => a.startAngle - b.startAngle);
+
+    // #138's spike. Top and bottom stop being label positions: every card is pulled into one of two
+    // side sectors and its connector is left pointing back at the arc. Applied here, before any of
+    // the three passes below, because all of them measure rects — a card moved afterwards would be
+    // suppressed, sized and displaced against a position it is not drawn at, which is #134's
+    // ordering bug in a new place.
+    //
+    // The angular room each card needs comes from the card laid out at its *own* bearing, one pass.
+    // Height depends on bearing depends on height, and the spread is a separation rule rather than a
+    // proof of non-overlap (`side-placement.ts` says so, and `displaceVertically` below still runs),
+    // so iterating it would buy precision the rule does not have. The height is taken with the
+    // duration line offered, which the planner below may then decline — so the demand is
+    // over-stated rather than under-stated, which is the safe direction for a separation.
+    if (labelPlacement === "sides") {
+      const cardAngles = sideCardAngles(
+        overflowing.map(({ params }) => ({
+          anchorAngle: params.anchorAngle,
+          cardHeight: floatingLabelGeometry({
+            ...params,
+            cardAngle: sectorTarget(params.anchorAngle),
+          }).rect.height,
+        })),
+        locus
+      );
+      overflowing.forEach((entry, index) => {
+        entry.params.cardAngle = cardAngles[index];
+      });
+    }
 
     // #35's duration line makes a card 40% taller, and two cards that land on each other hide a
     // title that is on a card *because* it did not fit its arc. So the duration is treated as what

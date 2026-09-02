@@ -9,6 +9,7 @@ import {
   rectsOverlap,
 } from "../../shared/clock";
 import readme from "../../../README.md?raw";
+import { fixtureAnchor } from "../clock-pin";
 import { oneHourSampleEvents, sampleEvents } from "../sample-events";
 import { type AnalogClockParams, analogClock } from "./analog-clock";
 
@@ -1474,5 +1475,295 @@ describe("the ring thicknesses README states in prose", () => {
   it("keeps the drain thinner than the arc it sends a reviewer to instead", () => {
     expect(thicknessOf("n")).toBeLessThan(thicknessOf("w"));
     expect(thicknessOf("w")).toBeLessThan(thicknessOf("d"));
+  });
+});
+
+/**
+ * #138's spike: cards confined to two side sectors instead of spaced round a ring, and a locus a
+ * URL can move. The point of these is the *default* — the shipped dial has to be untouched — plus
+ * the one property that makes the pictures worth looking at: twelve and six stop being label
+ * positions.
+ */
+describe("analogClock's label placement spike", () => {
+  /**
+   * The grant these specs stand in for, **measured rather than quoted**: 244.1 units at 1920×1080
+   * and 175.0 at 1920×1200, panel drawn and `#status` hidden, read off the built preview by dividing
+   * the dial's own spare width by its 1.38966 px/unit scale. #213's pair, and the pair the plan's
+   * locus tables are computed at.
+   *
+   * Not the 234.5 / 172.1 the block above still carries. Those are the superseded figures the fourth
+   * amendment to ADR 0009 tells a reader to stop briefing this spike off — they are the same
+   * quantity 8.4% low, because a margin is a count of viewBox units and ADR 0008's bar changed the
+   * dial's rendered size. Every radius derived here would be understated by the same 8.4%, which is
+   * precisely the error the plan opens by correcting.
+   */
+  const SIXTEEN_NINE = 244.1;
+  const SIXTEEN_TEN = 175.0;
+  const RING_LOCUS = OUTER_RADIUS * 1.02;
+
+  /** An event every half hour with a title too long for its arc, so cards land all round the dial. */
+  const SWEEP = Array.from({ length: 22 }, (_unused, index) =>
+    input(`s${index}`, 1 + index / 2, 1 + index / 2 + 25 / 60, { title: LONG_TITLE })
+  );
+
+  function labelsLayer(overrides: Partial<AnalogClockParams>): string {
+    return (
+      build(SWEEP, overrides).element.querySelector('[data-testid="floating-labels-layer"]')
+        ?.innerHTML ?? ""
+    );
+  }
+
+  /**
+   * Each card's centre offset from the dial's vertical axis.
+   *
+   * The horizontal axis and not the bearing, because the bearing of a *drawn* card is not the
+   * bearing it was placed at: the displacement pass moves a centre vertically (#134), which rotates
+   * it off the locus. `x` is untouched by that, so `|x − cx|` is the one reading that still answers
+   * for the placement rather than for the pass after it.
+   */
+  function horizontalOffsets(overrides: Partial<AnalogClockParams>): number[] {
+    const { element } = build(SWEEP, { labelMargin: SIXTEEN_NINE, ...overrides });
+    const rects = [...element.querySelectorAll('[data-testid^="floating-label-rect-"]')];
+
+    expect(rects.length, "no card was drawn").toBeGreaterThan(8);
+    return rects.map((rect) =>
+      Math.abs(Number(rect.getAttribute("x")) + Number(rect.getAttribute("width")) / 2 - CX)
+    );
+  }
+
+  /**
+   * Each card's closest approach to the dial's centre — the reading #98 is about, and the one a
+   * horizontal offset cannot give: a card enters the band by its nearest *corner*, so the quantity
+   * is the distance from the centre to the rect rather than to its inner edge.
+   */
+  function cardClearances(overrides: Partial<AnalogClockParams>): number[] {
+    const { element } = build(SWEEP, { labelMargin: SIXTEEN_NINE, ...overrides });
+    const rects = [...element.querySelectorAll('[data-testid^="floating-label-rect-"]')];
+
+    expect(rects.length, "no card was drawn").toBeGreaterThan(8);
+    return rects.map((rect) => {
+      const x = Number(rect.getAttribute("x"));
+      const y = Number(rect.getAttribute("y"));
+      const width = Number(rect.getAttribute("width"));
+      const height = Number(rect.getAttribute("height"));
+
+      return Math.hypot(
+        Math.max(x - CX, CX - (x + width), 0),
+        Math.max(y - CY, CY - (y + height), 0)
+      );
+    });
+  }
+
+  it("draws the shipped ring when nothing asks for anything else", () => {
+    expect(labelsLayer({})).toBe(labelsLayer({ labelPlacement: "ring", labelLocus: null }));
+  });
+
+  it("keeps every card out of the wedge at twelve and six", () => {
+    // A card at the sector's own edge sits at `R·sin 45°` from the axis; anything nearer the axis
+    // than that is in the wedge the spike exists to empty.
+    const edge = RING_LOCUS * Math.sin(Math.PI / 4);
+
+    for (const offset of horizontalOffsets({ labelPlacement: "sides" })) {
+      expect(offset).toBeGreaterThanOrEqual(edge - 1e-6);
+    }
+  });
+
+  it("is a real change: the ring does put cards in that wedge", () => {
+    // Without this the assertion above could pass on a dial that draws no card near the axis
+    // anyway, and the spike would be measuring the fixture rather than the placement.
+    const edge = RING_LOCUS * Math.sin(Math.PI / 4);
+
+    expect(Math.min(...horizontalOffsets({ labelPlacement: "ring" }))).toBeLessThan(edge);
+  });
+
+  it("uses both sides rather than piling one", () => {
+    const { element } = build(SWEEP, {
+      labelMargin: SIXTEEN_NINE,
+      labelPlacement: "sides",
+    });
+    const centres = [...element.querySelectorAll('[data-testid^="floating-label-rect-"]')].map(
+      (rect) => Number(rect.getAttribute("x")) + Number(rect.getAttribute("width")) / 2
+    );
+
+    expect(centres.some((x) => x > CX)).toBe(true);
+    expect(centres.some((x) => x < CX)).toBe(true);
+  });
+
+  it("moves every card outward for a wider locus", () => {
+    const ring = horizontalOffsets({ labelPlacement: "sides" });
+    const wider = horizontalOffsets({ labelPlacement: "sides", labelLocus: 380 });
+
+    expect(Math.max(...wider)).toBeGreaterThan(Math.max(...ring));
+    expect(Math.min(...wider)).toBeGreaterThan(Math.min(...ring));
+  });
+
+  it("derives 'wide' from the granted margin, which is what makes it track the board", () => {
+    // ADR 0009's circle is the midpoint of the band's outer edge and the board's: at the measured
+    // 244.1-unit grant that is (292 + 544.1) / 2 = 418.05, and at 175.0 it is 383.5 — the two the
+    // plan's tables walk.
+    const nine = Math.max(...horizontalOffsets({ labelPlacement: "sides", labelLocus: "wide" }));
+    const ten = Math.max(
+      ...horizontalOffsets({ labelPlacement: "sides", labelLocus: "wide", labelMargin: SIXTEEN_TEN })
+    );
+
+    expect(nine).toBeGreaterThan(ten);
+  });
+
+  it("falls back to the ring locus for 'wide' on a page that could not measure a board", () => {
+    expect(labelsLayer({ labelLocus: "wide" })).toBe(labelsLayer({}));
+  });
+
+  /**
+   * The claim README and two docstrings made about `wide` until a render checked it: that ADR 0009's
+   * circle is *the band-clearing one*. It is not, and the reason is not the ADR's three-o'clock
+   * premise — it is that the ADR solves for a card of width `m + 8` and the shipped rule sizes a card
+   * to the whole granted margin, so the card that actually lands there is far wider than the one the
+   * radius was solved for and its inner edge reaches back over the band.
+   *
+   * Asserted as an inequality against the band rather than at a fixed figure: the point is the
+   * direction of the error, and pinning 246.8 would make this fail on any legitimate change to card
+   * sizing while saying nothing more.
+   */
+  it("does not clear the band at 'wide', which is what the ADR's circle is named for", () => {
+    // The band's outer edge is `OUTER_RADIUS` itself — arcs are drawn outward from it (#74).
+    const bandOuter = OUTER_RADIUS;
+    const clearances = cardClearances({ labelPlacement: "sides", labelLocus: "wide" });
+
+    expect(Math.min(...clearances)).toBeLessThan(bandOuter);
+  });
+
+  /**
+   * And the radius that does clear it, so the pair reads as a measurement rather than as a complaint
+   * about `wide`. 452 is the figure the plan's table lands on for the measured 16:9 grant.
+   */
+  it("clears the band at the radius measured for it", () => {
+    // The band's outer edge is `OUTER_RADIUS` itself — arcs are drawn outward from it (#74).
+    const bandOuter = OUTER_RADIUS;
+    const clearances = cardClearances({ labelPlacement: "sides", labelLocus: 452 });
+
+    expect(Math.min(...clearances)).toBeGreaterThanOrEqual(bandOuter);
+  });
+
+  it("applies the locus to the ring as well, so the fork can be walked either way", () => {
+    expect(labelsLayer({ labelLocus: 380 })).not.toBe(labelsLayer({}));
+  });
+
+  /**
+   * The property the renders found and no table predicted: **a widened locus is only usable on the
+   * sides.** Measured on the fixture at the three pins #138 names, 1920×1080 and 1920×1200 with
+   * `#status` hidden — every radius above the shipped one leaves cards overlapping on the ring (4
+   * pairs across the three pins from R = 320 upward, one of them hiding 339.4 × 32.6 units of a
+   * title at `?now=19:00&freeze=1`) and **none at all on the sides, at every radius tested**.
+   *
+   * The mechanism is the mismatched budget #138 is built on, arriving as the thing that decides the
+   * fork rather than as the thing that motivates it: a wider card needs more vertical separation, the
+   * ring has none to give at twelve and six, and `displaceVertically` runs out of band. So the locus
+   * is what recovers the titles and clears the band, and side placement is what makes a locus that
+   * does either one survivable.
+   *
+   * Counted as pairs rather than asserted card by card, and the ring half is asserted too: without
+   * it this would pass on a dial that draws no colliding card at all and would be measuring the
+   * fixture instead of the placement.
+   */
+  it("leaves no card overlapping at a widened locus, where the ring does", () => {
+    /** The fixture at one of #138's pins, anchored the way `?now=HH:00&freeze=1` anchors it. */
+    const overlappingPairs = (hour: number, overrides: Partial<AnalogClockParams>): number => {
+      const at = new Date(2026, 7, 18, hour, 0, 0, 0);
+      const { element } = analogClock({
+        events: sampleEvents(fixtureAnchor(null, at)),
+        time: at,
+        labelMargin: SIXTEEN_NINE,
+        ...overrides,
+      });
+      const rects = [...element.querySelectorAll('[data-testid^="floating-label-rect-"]')].map(
+        (rect) => ({
+          x: Number(rect.getAttribute("x")),
+          y: Number(rect.getAttribute("y")),
+          width: Number(rect.getAttribute("width")),
+          height: Number(rect.getAttribute("height")),
+        })
+      );
+
+      expect(rects.length, `no card was drawn at ${hour}:00`).toBeGreaterThan(3);
+      return rects.filter((rect, index) =>
+        rects.some((other, otherIndex) => otherIndex > index && rectsOverlap(rect, other))
+      ).length;
+    };
+
+    for (const hour of [11, 13, 19]) {
+      expect(overlappingPairs(hour, { labelPlacement: "sides", labelLocus: 380 })).toBe(0);
+    }
+    expect(
+      [11, 13, 19].reduce(
+        (total, hour) => total + overlappingPairs(hour, { labelPlacement: "ring", labelLocus: 380 }),
+        0
+      )
+    ).toBeGreaterThan(0);
+  });
+
+  /**
+   * How far the deepest connector runs *inside* the band, where it cuts over the arcs.
+   *
+   * Sampled along the segment rather than solved: a chord's minimum radius has a closed form, but
+   * what matters is the arc-length spent below `OUTER_RADIUS`, and the segment can enter and leave.
+   * 2000 samples put the quantisation at ~0.1 units on the longest connector the dial draws.
+   */
+  function deepestConnectorIntrusion(hour: number, overrides: Partial<AnalogClockParams>): number {
+    const at = new Date(2026, 7, 18, hour, 0, 0, 0);
+    const { element } = analogClock({
+      events: sampleEvents(fixtureAnchor(null, at)),
+      time: at,
+      labelMargin: SIXTEEN_NINE,
+      ...overrides,
+    });
+    const connectors = [
+      ...element.querySelectorAll('[data-testid^="floating-label-connector-"]'),
+    ];
+
+    expect(connectors.length, `no connector was drawn at ${hour}:00`).toBeGreaterThan(3);
+
+    return Math.max(
+      ...connectors.map((line) => {
+        const [x1, y1, x2, y2] = ["x1", "y1", "x2", "y2"].map((name) =>
+          Number(line.getAttribute(name))
+        );
+        const steps = 2000;
+        const step = Math.hypot(x2 - x1, y2 - y1) / steps;
+        let inside = 0;
+        for (let index = 0; index < steps; index += 1) {
+          const t = (index + 0.5) / steps;
+          const radius = Math.hypot(x1 + (x2 - x1) * t - CX, y1 + (y2 - y1) * t - CY);
+          if (radius < OUTER_RADIUS) inside += step;
+        }
+        return inside;
+      })
+    );
+  }
+
+  /**
+   * #138 predicted a connector cutting across the band under side placement, the issue's later
+   * corrections withdrew the prediction, and the renders put it back — but **only at the narrow end
+   * of the locus range**, which is the part neither the issue nor the plan had separated.
+   *
+   * Measured on the fixture at `?now=11:00&freeze=1` and the 244.1-unit grant: **129.8 units of
+   * connector inside the band, across 25.9° of it.** That is the shipped locus, so it is what
+   * `?labels=sides` alone draws, and it is the measured half of "at today's radius the sides are a
+   * plain regression".
+   *
+   * **Only that one reading is asserted, and the reason is a limit of this suite.** How intrusion
+   * moves with the locus is not measurable here: jsdom has no text metrics, so a card is sized from
+   * the fallback rather than from its title, and the sequence it computes (127.0 → 103.4 → 0.0 at
+   * R = 297.84 / 340 / 452) is monotone where the browser's is not — 129.8 → 48.9 → 60.7, the
+   * band-clearing locus *worse* than the middle one, because a connector has to reach an arc that is
+   * inside the band however far out its card sits. Asserting the ordering would encode jsdom's
+   * fiction and pass forever; the browser sweep on the PR is the record for the shape.
+   *
+   * Held at all because both earlier claims about this were wrong in opposite directions — #138
+   * predicted the crossing, its corrections withdrew it — and neither was measured.
+   */
+  it("drives a connector deep into the band at the shipped locus", () => {
+    expect(
+      deepestConnectorIntrusion(11, { labelPlacement: "sides", labelLocus: RING_LOCUS })
+    ).toBeGreaterThan(100);
   });
 });
