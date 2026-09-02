@@ -8,6 +8,7 @@ import {
   PANEL_CARD_STROKE,
   PANEL_WIDTH_UNITS,
   agendaEntries,
+  panelAllowed,
   panelFitsBoard,
   planAgendaCards
 } from './panel-layout';
@@ -137,6 +138,59 @@ describe('panelFitsBoard', () => {
   it('treats a negative minimum as none rather than as credit', () => {
     expect(panelFitsBoard({ width: 1300, height: 1000 }, DIAL_SIZE, PANEL_RESERVE_UNITS, -500)).toBe(true);
   });
+});
+
+describe('panelAllowed', () => {
+  /**
+   * The layers as `main.ts` hands them over: the templated attribute first, the page's own query
+   * string second. `undefined` is an absent attribute (a jsdom mount, a page with no `data-panel`),
+   * `''` is a **stripped** one — which is what `build/preview.html` and every real load with no
+   * `?panel=` actually carry, so it is the common case rather than an edge one.
+   */
+  it.each([
+    ['both layers silent', [undefined, null], true],
+    ['a stripped attribute and no parameter — the preview, and every ordinary load', ['', null], true],
+    ['?panel=0 in the query string', ['', '0'], false],
+    ['?panel=1 in the query string', ['', '1'], true],
+    ['the templated attribute, which doGet saw', ['0', null], false],
+    ['the attribute winning over a contrary query string', ['0', '1'], false],
+    ['the attribute winning the other way, so neither direction is special', ['1', '0'], true],
+    ['an unrecognised attribute falling through to the parameter', ['yes', '0'], false],
+    ['an unrecognised value in both layers', ['off', 'false'], true],
+    ['no layers at all', [], true]
+  ])('%s', (_name, layers, expected) => {
+    expect(panelAllowed(layers as (string | null | undefined)[])).toBe(expected);
+  });
+
+  /**
+   * **The asymmetry is deliberate and is the one decision in #185**, so it is asserted rather than
+   * left to the docstring: `1` means "draw it where the board can carry it", which is the default,
+   * and *not* "draw it regardless".
+   *
+   * A force-on would have to overrule `panelFitsBoard`, and a column on a board that fails it either
+   * takes height from the dial — ADR 0009's one absolute — or pushes the labels below the 75.4-unit
+   * knee where the panel and the labels trade width one-for-one. So the parameter can only subtract a
+   * surface, never add one, and every picture it produces is one some real board draws.
+   *
+   * Stated as the property that has to hold: on a board `panelFitsBoard` rejects, no value of the
+   * parameter shows a column.
+   */
+  it.each([['0'], ['1'], [''], ['anything']])(
+    'cannot put a column on a board that fails the fit test: ?panel=%s',
+    (value) => {
+      const tooNarrow = { width: 1184, height: 854 };
+      const fits = panelFitsBoard(
+        tooNarrow,
+        DIAL_SIZE,
+        PANEL_RESERVE_UNITS,
+        LABEL_MARGIN_KNEE_UNITS
+      );
+
+      expect(fits).toBe(false);
+      // `showPanel`'s own expression, which is what makes this the guarantee rather than a hope.
+      expect(panelAllowed(['', value]) && fits).toBe(false);
+    }
+  );
 });
 
 describe('the card geometry against ADR 0009', () => {

@@ -144,8 +144,21 @@ different display.
 - **`showEventDurations` hides a channel.** An absent duration is indistinguishable from an event
   whose geometry could not fit one — which is exactly today's defect, seen from the other side. A
   viewer cannot tell "the teacher turned times off" from "this one didn't fit".
-- **A panel toggle hides a surface.** Its absence is self-announcing: the dial grows to fill the
-  width, and a viewer who knows the display has a panel can see there isn't one.
+- **A panel toggle hides a surface.** Its absence is self-announcing: the column is simply gone from
+  a third of the board, and a viewer who knows the display has a panel can see there isn't one.
+
+  > **The reason first written here was wrong, and #185's flag is what showed it.** This said *"the
+  > dial grows to fill the width"*. Rendered through `?panel=0` at both target boards, it does not:
+  > the dial is bound by the board's **height** on anything wider than it is tall, so the drawing
+  > stays at 833.8 px (16:9) and 926.4 px (16:10) with the column up or down. What the returned width
+  > does is re-centre it — the drawing slides 125 px right at 16:9 — and hand the labels 56.7 more
+  > units a side, which changes no card, because both figures are far above ADR 0009's 75.4-unit
+  > knee. The label set is byte-identical across the two at every pin measured.
+  >
+  > The conclusion survives and the reason does not: a 250 px column of cards vanishing is *more*
+  > self-announcing than a growth would have been, so the panel toggle is still the safer of the two
+  > to ship without a visible control. Recorded rather than quietly amended, because this document's
+  > own argument was that measurement beats intuition and this is the sentence that had neither.
 
 So ADR 0008's hazard — *a mode nobody knows was changed* — binds much harder on the duration toggle
 than on the panel toggle, and #85's argument applies to it in full: a persistent switch that shows
@@ -247,10 +260,28 @@ looked at. They do not settle the decision, but they remove the arithmetic from 
   pin that refutes it is `01:45`, not this one.
 - **Panel at 16:9 and 16:10**, `#status` hidden. The panel is present in **all 192 states**, taking
   276.7 px at 16:9 (dial 1485.6 × 922.3) and 307.4 px at 16:10 (dial 1437.4 × 1024.8). A panel-off
-  render is not available from the preview today — there is no flag for it, and `PREFERENCES` carries
-  three keys (`showSeconds`, `timerMuted`, `timerDurationSeconds`) of which none is the panel — so the
-  second half of the panel-toggle question is still unlooked-at, and that is now the only render
-  outstanding. **#185 is the flag it needs** (#186 was filed for the same thing and duplicates it).
+  render was not available from the preview when this was written — there was no flag for it, and
+  `PREFERENCES` carries three keys (`showSeconds`, `timerMuted`, `timerDurationSeconds`) of which none
+  is the panel — so the second half of the panel-toggle question was the only render outstanding.
+
+  **Taken, in #185, and it answers the question this document could not ask.** The figures above are
+  pre-bar; on `main` with ADR 0008's bar the panel is 250.1 px at 16:9 and 277.9 px at 16:10. Turning
+  it off with `?panel=0`:
+
+  | | panel on | panel off |
+  | --- | --- | --- |
+  | dial **drawing**, 16:9 | 833.8 px | **833.8 px** |
+  | dial **drawing**, 16:10 | 926.4 px | **926.4 px** |
+  | labels' margin, 16:9 | 244.1 u/side | 300.8 u/side |
+  | floating labels drawn | 5 / 4 / 3 / 5 / 4 | **identical** |
+
+  (Label counts at `?now=` 03:00 / 04:15 / 08:30 / 11:00 / 01:30, both boards.) So **what the dial
+  does with the returned 180 units is nothing** — it is height-bound, and the labels' extra 56.7 a
+  side is above the knee where card width has already saturated. The panel toggle's whole cost and
+  benefit is the column's own information against 250 px of empty board; the dial is not a party to
+  the trade. The 56.7 is also not the column's 180 halved: `labelMarginUnits` subtracts
+  `PANEL_RESERVE_UNITS` whether or not a column is drawn, so 90 units a side stay held for an absent
+  panel — #171's finding, arriving from the other direction.
 
 ## Related
 

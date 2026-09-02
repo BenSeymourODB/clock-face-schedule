@@ -174,6 +174,50 @@ describe("main.ts's load path", () => {
     expect(declaration).toMatch(/new Set<string>\(\)/);
   });
 
+  /**
+   * **`?panel=0` gates the column, and it can only ever subtract one** (#185).
+   *
+   * `showPanel` is the single answer to "is the column up" — `trackBoardLayout` draws from it and
+   * `?check=1`'s label-margin row reports from it — so the override belongs inside it rather than at
+   * either call site. Two properties, and the second is the one worth a test: the parameter is an
+   * `&&` term *ahead of* `panelFitsBoard` rather than a replacement for it, so no value of the
+   * parameter can put a column on a board ADR 0009 says cannot carry one. Written as `||`, or with
+   * the fit test dropped, it becomes a force-on that takes height from the dial — a one-character
+   * change with no symptom on any board a reviewer would pin, since 16:9 and 16:10 both pass the fit
+   * test anyway and look identical either way.
+   *
+   * Source shape, for this file's usual reason: `showPanel` closes over a module-level constant read
+   * from the page, so there is no seam to drive it from (#156).
+   */
+  it("gates the column on the panel override, ahead of the fit test and never instead of it", () => {
+    const [declaration] = sourceSays(
+      /function showPanel\([\s\S]*?\n\}/,
+      "`showPanel` is no longer a top-level function"
+    );
+    const body = declaration as string;
+    const overrideAt = body.search(/\bpanelPermitted\b/);
+    const fitAt = body.search(/\bpanelFitsBoard\(/);
+
+    expect(overrideAt).toBeGreaterThanOrEqual(0);
+    expect(fitAt).toBeGreaterThanOrEqual(0);
+    // Conjunction, not disjunction: `||` would show a column wherever the parameter said so.
+    expect(body).toMatch(/panelPermitted\s*&&/);
+    expect(body).not.toMatch(/panelPermitted\s*\|\|/);
+    expect(overrideAt).toBeLessThan(fitAt);
+  });
+
+  /**
+   * The override is read from the page **once**, at module level, not per call.
+   *
+   * `showPanel` runs on every `ResizeObserver` firing, and two reads of `location.search` would also
+   * be two chances for the two callers to disagree — the column drawn saying one thing and the
+   * diagnostics row another, which is the mismatch that row exists to make visible.
+   */
+  it("reads the panel override once, outside the load path", () => {
+    expect(source).toMatch(/^const panelPermitted = panelAllowed\(/m);
+    expect(LOAD_PATH).not.toMatch(/panelAllowed\(/);
+  });
+
   it.each([
     ["the tick", /window\.setInterval\(\(\) => \{[\s\S]*?\n\s*\}, TICK_INTERVAL_MS\)/],
     ["the fixture refresher", /setEvents:\s*\(events\) => \{[\s\S]*?\n\s*\}/],

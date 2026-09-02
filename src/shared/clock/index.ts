@@ -102,6 +102,7 @@ export {
   PANEL_CARD_STROKE,
   PANEL_WIDTH_UNITS,
   agendaEntries,
+  panelAllowed,
   panelFitsBoard,
   planAgendaCards,
   type AgendaCard,

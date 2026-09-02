@@ -16,6 +16,7 @@ import {
   PANEL_RESERVE_UNITS,
   getPeriodBounds,
   labelMarginUnits,
+  panelAllowed,
   panelFitsBoard,
 } from "../shared/clock";
 import {
@@ -61,6 +62,18 @@ const clockPin = readClockPin(
   new Date()
 );
 const now = createTimeSource(clockPin);
+
+/**
+ * Whether `?panel=` permits the agenda column (#185) — read at module level for the reason the pin
+ * is: it is a property of the load, not of a frame, and `showPanel` runs on every board resize.
+ *
+ * One read for both of `showPanel`'s callers, so the column `trackBoardLayout` draws and the state
+ * `?check=1`'s label-margin row reports cannot come apart.
+ */
+const panelPermitted = panelAllowed([
+  mount instanceof HTMLElement ? mount.dataset["panel"] : undefined,
+  new URLSearchParams(window.location.search).get("panel")
+]);
 
 /** google.script.run is callback-based; everything downstream wants to await. */
 function callServer<T>(name: string, ...args: unknown[]): Promise<T> {
@@ -283,13 +296,21 @@ function measureLabelMargin(mount: Element, board: Element, panelShown: boolean)
  *
  * The absent case is also what an unmeasurable page falls into, which is the safe direction: a panel
  * sized from a zero would be a sliver of cards nobody can read.
+ *
+ * `?panel=0` can only take the column *away* (#185) — it is one `&&` term ahead of the measurement
+ * rather than a replacement for it, so no parameter can put a column on a board ADR 0009 says cannot
+ * carry one. `panelAllowed` carries the argument; `main-load-order.test.ts` asserts the term is still
+ * here, since inverting it is a one-character change with no symptom on any board a reviewer pins.
  */
 function showPanel(board: Element): boolean {
-  return panelFitsBoard(
-    board.getBoundingClientRect(),
-    DIAL_VIEWBOX_SIZE,
-    PANEL_RESERVE_UNITS,
-    LABEL_MARGIN_KNEE_UNITS
+  return (
+    panelPermitted &&
+    panelFitsBoard(
+      board.getBoundingClientRect(),
+      DIAL_VIEWBOX_SIZE,
+      PANEL_RESERVE_UNITS,
+      LABEL_MARGIN_KNEE_UNITS
+    )
   );
 }
 

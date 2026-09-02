@@ -24,6 +24,12 @@
         So it has to strip to "" for the same reason the pin does, and for one more — a preview that
         read a stripped attribute as "0" would show a dial with no durations on it at all.
 
+        data-panel carries #185's preview flag and has that second reason and not the first: it
+        overrides no stored preference — there is no panel setting, which is #178's to decide — but a
+        stripped attribute read as "0" would draw every preview, and every real load with no
+        ?panel=, with no agenda column at all. "" is "the URL said nothing", which leaves the answer
+        to panelFitsBoard over the board's measured box.
+
         The two preference attributes carry different layers of the same store, and that is the whole
         point of there being two: data-preferences is the resolved set the display draws with, and
         data-deployment-preferences is the same set without the viewer's own values — the layer a
@@ -57,6 +63,7 @@
           data-freeze="<?= freezeClock ?>"
           data-scale="<?= scaleParam ?>"
           data-durations="<?= durationsParam ?>"
+          data-panel="<?= panelParam ?>"
           data-preferences="<?= preferences ?>"
           data-deployment-preferences="<?= deploymentPreferences ?>"
         ></div>
