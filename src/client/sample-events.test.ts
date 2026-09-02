@@ -133,10 +133,6 @@ const LARGEST_INTERNAL_GAP_MINUTES = (() => {
  * drawn at radii identical to its neighbour's — one arc on top of another, silently, which is the
  * defect this file's other assertions are all shaped around.
  *
- * The fixture comment that used to state this invariant stated it of `"n"`'s own overlaps ("Overlaps
- * only 'b'"), which was false — it overlaps `"k"` for fifteen minutes too — *and* the wrong
- * quantity: what keeps the fifth ring shut is the fixture's peak concurrency, not any one event's.
- *
  * The band is built from the renderer's own exported constants rather than restated, on the
  * precedent `agenda-panel.test.ts` and `event-arc.test.ts` set: a local copy of 75.92 would stay
  * green while the dial divided something else.
@@ -158,17 +154,17 @@ describe("the fixtures against the cap the dial actually applies", () => {
   });
 
   it("keeps the 1-hour fixture inside it too", () => {
-    // Three deep by design there, so this is a ceiling rather than an equality — #90's boundary
-    // case wants that depth specifically.
-    expect(peakClusterDepth(oneHourSampleEvents(ANCHOR), oneHourView, ONE_HOUR_SCALE)).toBe(3);
+    // A ceiling rather than an equality: that fixture is authored three deep for #90's boundary
+    // case, not to reach the cap. Its own depth is asserted downstream against `AUTHORED_DEPTH`;
+    // what is missing there, and here, is the tie to what the band can actually divide.
     expect(peakClusterDepth(oneHourSampleEvents(ANCHOR), oneHourView, ONE_HOUR_SCALE)).toBeLessThanOrEqual(
       maxRingsForBand(DIAL_BAND)
     );
   });
 
-  it("names 🟡 Tidy Up's real overlaps, which its own comment got wrong", () => {
-    // #209: the comment claimed "n" overlaps only "b". Asserted from the fixture's timestamps so
-    // moving either event has to come back through here.
+  it("names 🟡 Tidy Up's real overlaps", () => {
+    // Asserted from the fixture's own timestamps so moving either event has to come back through
+    // here — the comment beside them is the copy nothing checks.
     const events = sampleEvents(ANCHOR);
     const tidyUp = events.find((event) => event.id === "n")!;
     const start = offsetMinutes(tidyUp.startDate);

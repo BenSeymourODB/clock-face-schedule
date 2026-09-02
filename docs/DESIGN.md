@@ -767,9 +767,9 @@ tracks as the maximum number of mutually-overlapping intervals, so it never open
 not need. NDWC's docstring described itself as "greedy rather than optimal — it does not minimise
 ring count"; that self-assessment is too modest, and this paragraph asked for it to be corrected on
 the way across rather than copied. **It was** — `ring-layout.ts` has stated the optimality result
-since it landed, and `git log -S` over that path finds the modest wording nowhere in this repo.
-Recorded because the instruction outlived the work by long enough that #209 went looking for the
-uncorrected text in source.
+since it landed, and `git log -S "greedy rather than optimal" -- src/shared/clock/ring-layout.ts`
+finds the modest wording nowhere in that file's history. It survives only here and in
+`docs/plans/2026-08-15-mvp-clock-face.md`, which is why #209 went looking for it in source.
 
 **Both "remaining gaps" below are closed, and the paragraph above is stale in a third way** — this
 section is the oldest text in the document and describes the port's starting point, not the tree.

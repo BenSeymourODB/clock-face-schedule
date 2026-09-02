@@ -99,8 +99,7 @@ export const RING_GAP_MIN = 2;
  * Exported for the reason `ARC_BAND_RATIO` and `RING_GAP_RATIO` are: so a suite can hold something
  * against the cap the dial actually applies rather than against a literal. The fixture specs need
  * it in particular (#209) — their depth bounds are derived from the fixture itself, deliberately,
- * so nothing in them notices a fixture deepened past what the band can divide. Past the cap events
- * share the innermost ring, which is drawing one arc on top of another rather than an error.
+ * so nothing in them notices a fixture deepened past what the band can divide.
  */
 export function maxRingsForBand(arcThickness: number): number {
   const ringGap = Math.max(RING_GAP_MIN, arcThickness * RING_GAP_RATIO);
@@ -395,10 +394,11 @@ export function analogClock({
       })),
       // `assignRings` rebases onto this before sorting, and its default of 0 is only a no-op for a
       // window that stays inside `[0, 360)` — which stopped being true when the window started
-      // rolling (#25) and is never true on the 1-hour scale, where 10:45 gives 240°–570°. Rebased
-      // onto 0, an event at 380° sorts *before* one at 30°, and interval partitioning walked in
-      // the wrong order silently stacks two overlapping events onto the same ring: the later one
-      // is drawn at identical radii, entirely hidden beneath the earlier.
+      // rolling (#25), and on the 1-hour scale holds for five minutes in every sixty: swept over
+      // the hour, only 10:05 through 10:09 keep both edges in range (10:05 gives 0°–330°, 10:45
+      // gives 240°–570°). Rebased onto 0, an event at 380° sorts *before* one at 30°, and interval
+      // partitioning walked in the wrong order silently stacks two overlapping events onto the
+      // same ring: the later one is drawn at identical radii, entirely hidden beneath the earlier.
       angleForTime(windowStart, periodStart, scale.periodMinutes)
     );
 

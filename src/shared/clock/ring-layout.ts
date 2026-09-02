@@ -36,14 +36,19 @@ export interface RingAssignment {
  *
  * `windowStartAngle` rebases every angle onto how far past it they fall, in `[0, 360)`, before
  * sorting. **Required in practice rather than a backstop**: the default of 0 is a no-op only for
- * angles already inside `[0, 360)`, and today's only caller is not such a caller — it passes the
- * window's own start angle explicitly, because a rolling window (#25) reaches past 360° and the
- * 1-hour scale always does (10:45 gives 240°–570°). Rebased onto 0, the modulo turns 380° into 20°,
- * which sorts before an event at 30°; interval partitioning walked in the wrong order puts two
- * overlapping events on one ring, the later drawn at identical radii and hidden entirely beneath
- * the earlier. Assumes `windowStartAngle` does not fall strictly inside any single candidate's own
- * span; a candidate already straddling the rebase origin sorts incorrectly regardless, and taking
- * the angle from the window's own edge rather than from a point nothing spans avoids that.
+ * angles already inside `[0, 360)`, and today's only caller is mostly not such a caller — it passes
+ * the window's own start angle explicitly, because a rolling window (#25) reaches past 360°, and on
+ * the 1-hour scale so does every minute of the hour but five (swept: only 10:05–10:09 keep both
+ * edges in range). Rebased onto 0, the modulo turns 380° into 20°, which sorts before an event at
+ * 30°; interval partitioning walked in the wrong order puts two overlapping events on one ring, the
+ * later drawn at identical radii and hidden entirely beneath the earlier. The default stays because
+ * it is the identity on an in-range window rather than because anything wants it: making the
+ * parameter required would be a correct change and a churn of every call site and spec for a
+ * hazard the one caller already avoids.
+ *
+ * Assumes `windowStartAngle` does not fall strictly inside any single candidate's own span; a
+ * candidate already straddling the rebase origin sorts incorrectly regardless, and taking the
+ * angle from the window's own edge rather than from a point nothing spans avoids that.
  *
  * Optimal in ring *count* says nothing about ring *thickness*. Callers divide a fixed band by
  * `clusterDepth`, so a deep cluster still yields rings too thin to carry an emoji or a title;
