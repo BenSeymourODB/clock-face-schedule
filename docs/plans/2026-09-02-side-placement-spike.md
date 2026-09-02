@@ -112,10 +112,28 @@ sector cannot hold them all, the pass distributes evenly and leaves the overlap 
 placement is decision 3's second half, and the honest way to answer it is to leave it in and count
 how often it fires.
 
-The angular separation a card needs is taken from its height at its *clamped anchor* bearing, one
-pass. Height depends on bearing depends on height, and the spread is a separation rule rather than a
-proof of non-overlap, so iterating it would buy precision the rule does not have — the same reason
-the band-clearing locus is a measured number rather than a solved one.
+The separation a card needs is **solved, not approximated**, and the first version of this got it
+wrong in a way only review caught. Cards clear each other *vertically*, and a degree of travel along
+the locus is worth `R·sin θ` of vertical — least at the sector's own ends. Allotting arc length
+(`height / radius`) therefore under-separated everywhere and worst where it mattered: two four-line
+cards at that rule's minimum overlap by **19.2 units at 45° on the shipped locus**, 22.1 at R = 418,
+and 2.1 even at three o'clock. The vertical nudges `planOptionalLines` returns were covering it, so
+nothing rendered a visible overlap — the class of latent defect a green suite hides, and the reason it is now asserted directly.
+
+The correction is not `height / (R·sin θ)` either: that uses the slope where the pair *starts* and
+the slope falls away on both sides of three o'clock, so at 90° it still delivers 101.9 against the
+104 needed. `separationDegrees` bisects for the gap that clears the card's height at the **worst
+position the sector allows** — 24.03° at the shipped locus against the arc rule's 20.01°. Bearing-
+independent, so the spread moving a card cannot invalidate its own demand.
+
+The price is over-separation at three o'clock, and capacity is not the constraint that makes it
+matter: **7 two-line slots a side** at the shipped locus and 10 at R = 452, against a fixture that
+peaks at three a side. Measured across the three pins on both boards after the fix, no pair of cards
+overlaps by more than **0.00 units** at any candidate locus.
+
+It also prices decision 2, which #138 states as a pure capacity gain: at [30°, 150°] the same card
+demands **28.88°** instead of 24.03°, so some of the three extra one-line slots a side that range
+buys are spent separating what is already there.
 
 ## Phases
 

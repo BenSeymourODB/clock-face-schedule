@@ -3,7 +3,7 @@ import {
   SIDE_SECTOR_END,
   SIDE_SECTOR_START,
   adrBandClearingCircle,
-  angularHeight,
+  separationDegrees,
   sideCardAngles,
   sideForAngle,
   sideSectorBounds,
@@ -46,20 +46,79 @@ describe('sideSectorBounds', () => {
   });
 });
 
-describe('angularHeight', () => {
-  it('under-states the exact form by 0.103° at the dial’s tightest case', () => {
-    // A four-line card at 17.52 units is about 104 tall; 297.84 is today's locus, the innermost
-    // candidate. The docstring quotes this figure, so the test is what keeps it honest.
-    const exact = 2 * Math.asin(104 / 2 / 297.84) * (180 / Math.PI);
-    expect(exact - angularHeight(104, 297.84)).toBeCloseTo(0.103, 3);
+/** Vertical distance between two bearings on one locus — what a card actually has to clear. */
+function verticalGap(radius: number, first: number, second: number): number {
+  const y = (bearing: number) => radius * Math.cos((bearing * Math.PI) / 180);
+  return Math.abs(y(first) - y(second));
+}
+
+describe('separationDegrees', () => {
+  /**
+   * The defect this function exists to fix, asserted as the shortfall the arc-length rule left. Two
+   * four-line cards (104 units) separated by `height / radius` overlap by 19.2 units at the sector's
+   * own edge and by 2.1 even at three o'clock — measured on review, and latent because `stackLabels`
+   * was nudging it away.
+   */
+  it.each([
+    ['at 45°, the sector edge', 45, 297.84, 19.2],
+    ['at 90°, three o’clock', 90, 297.84, 2.1],
+    ['at 45° on a wider locus', 45, 418, 22.1]
+  ])('records what the arc-length rule left short %s', (_label, bearing, radius, shortfall) => {
+    const arcRule = (104 / (radius as number)) * (180 / Math.PI);
+    const achieved = verticalGap(radius as number, bearing as number, (bearing as number) + arcRule);
+
+    expect(104 - achieved).toBeCloseTo(shortfall as number, 1);
+  });
+
+  /**
+   * The guarantee: the gap clears the card's height at *every* position the sector allows, which is
+   * the claim the local-slope correction could not make — at three o'clock it delivered 101.9.
+   */
+  it('clears the card’s height wherever in the sector the pair sits', () => {
+    const gap = separationDegrees(104, 297.84);
+
+    for (let start = SIDE_SECTOR_START; start + gap <= SIDE_SECTOR_END + 1e-9; start += 0.5) {
+      expect(verticalGap(297.84, start, start + gap)).toBeGreaterThanOrEqual(104 - 1e-6);
+    }
+  });
+
+  it('is the tightest gap that does, not merely a safe one', () => {
+    const gap = separationDegrees(104, 297.84);
+
+    // A hair narrower and the worst position — the midpoint nearest an end — falls short.
+    const narrower = gap - 0.05;
+    expect(
+      verticalGap(297.84, SIDE_SECTOR_START, SIDE_SECTOR_START + narrower)
+    ).toBeLessThan(104);
+  });
+
+  it('asks more than the arc-length rule, and says how much', () => {
+    // 24.03° against 20.01° at the shipped locus: the price of being right at both ends, and the
+    // figure the docstring quotes.
+    expect(separationDegrees(104, 297.84)).toBeCloseTo(24.03, 2);
+    expect((104 / 297.84) * (180 / Math.PI)).toBeCloseTo(20.01, 2);
+  });
+
+  it('prices decision 2’s wider range instead of leaving it a capacity gain', () => {
+    // [30°, 150°] separates more slowly at its ends, so the same card costs more of the sector:
+    // 28.88° against 24.03°, which is the figure the docstring quotes.
+    expect(separationDegrees(104, 297.84, 30)).toBeCloseTo(28.88, 2);
   });
 
   it('shrinks as the locus moves outward', () => {
-    expect(angularHeight(104, 452)).toBeLessThan(angularHeight(104, 297.84));
+    expect(separationDegrees(104, 452)).toBeLessThan(separationDegrees(104, 297.84));
   });
 
-  it('answers zero rather than dividing by a radius of zero', () => {
-    expect(angularHeight(104, 0)).toBe(0);
+  it('gives up the whole sector rather than a gap no sector can grant', () => {
+    // A card taller than the sector's own vertical span cannot be separated from anything inside it.
+    expect(separationDegrees(10_000, 297.84)).toBe(SIDE_SECTOR_END - SIDE_SECTOR_START);
+  });
+
+  it.each([
+    ['a radius of zero', 104, 0],
+    ['a card of no height', 0, 297.84]
+  ])('answers zero for %s', (_label, height, radius) => {
+    expect(separationDegrees(height as number, radius as number)).toBe(0);
   });
 });
 
@@ -130,14 +189,17 @@ describe('spreadInSector', () => {
     ['overfull', [50, 60, 90, 120, 130], [30, 30, 30, 30, 30]],
     ['pinned at the top', [40, 41, 42], [12, 12, 12]],
     ['pinned at the bottom', [140, 141, 142], [12, 12, 12]]
-  ])('keeps the order it was given and stays inside the sector when %s', (_label, targets, heights) => {
-    const placed = spreadInSector(targets as number[], heights as number[], 45, 135);
-    for (let i = 1; i < placed.length; i += 1) {
-      expect(placed[i]).toBeGreaterThanOrEqual(placed[i - 1]);
+  ])(
+    'keeps the order it was given and stays inside the sector when %s',
+    (_label, targets, heights) => {
+      const placed = spreadInSector(targets as number[], heights as number[], 45, 135);
+      for (let i = 1; i < placed.length; i += 1) {
+        expect(placed[i]).toBeGreaterThanOrEqual(placed[i - 1]);
+      }
+      expect(Math.min(...placed)).toBeGreaterThanOrEqual(45 - 1e-9);
+      expect(Math.max(...placed)).toBeLessThanOrEqual(135 + 1e-9);
     }
-    expect(Math.min(...placed)).toBeGreaterThanOrEqual(45 - 1e-9);
-    expect(Math.max(...placed)).toBeLessThanOrEqual(135 + 1e-9);
-  });
+  );
 
   it('returns nothing for no cards', () => {
     expect(spreadInSector([], [], 45, 135)).toEqual([]);
@@ -145,10 +207,11 @@ describe('spreadInSector', () => {
 });
 
 describe('sideCardAngles', () => {
-  const request = (anchorAngle: number, height = 8) => ({ anchorAngle, angularHeight: height });
+  const LOCUS = 297.84;
+  const request = (anchorAngle: number, cardHeight = 8) => ({ anchorAngle, cardHeight });
 
   it('answers in the order it was asked, whichever side each card lands on', () => {
-    const angles = sideCardAngles([request(300), request(60), request(200)]);
+    const angles = sideCardAngles([request(300), request(60), request(200)], LOCUS);
     expect(angles).toHaveLength(3);
     expect(sideForAngle(angles[0])).toBe('left');
     expect(sideForAngle(angles[1])).toBe('right');
@@ -157,7 +220,8 @@ describe('sideCardAngles', () => {
 
   it('puts every card inside one of the two sectors — never at twelve or six', () => {
     const angles = sideCardAngles(
-      [0, 15, 90, 170, 185, 250, 300, 350].map((angle) => request(angle))
+      [0, 15, 90, 170, 185, 250, 300, 350].map((angle) => request(angle)),
+      LOCUS
     );
     for (const angle of angles) {
       const inRight = angle >= RIGHT.start - 1e-9 && angle <= RIGHT.end + 1e-9;
@@ -167,18 +231,15 @@ describe('sideCardAngles', () => {
   });
 
   it('keeps a card that already sits in its sector exactly where it is', () => {
-    expect(sideCardAngles([request(70), request(280)])).toEqual([70, 280]);
+    expect(sideCardAngles([request(70), request(280)], LOCUS)).toEqual([70, 280]);
   });
 
   it('does not let a card on one side spend the other side’s room', () => {
     // Four cards crowding three o'clock and one lone card at nine: the lone one must not move.
-    const angles = sideCardAngles([
-      request(88, 20),
-      request(89, 20),
-      request(90, 20),
-      request(91, 20),
-      request(270, 20)
-    ]);
+    const angles = sideCardAngles(
+      [request(88, 20), request(89, 20), request(90, 20), request(91, 20), request(270, 20)],
+      LOCUS
+    );
     expect(angles[4]).toBeCloseTo(270, 6);
     expect(Math.min(...angles.slice(0, 4))).toBeGreaterThanOrEqual(RIGHT.start - 1e-9);
     expect(Math.max(...angles.slice(0, 4))).toBeLessThanOrEqual(RIGHT.end + 1e-9);
@@ -186,8 +247,29 @@ describe('sideCardAngles', () => {
 
   it('keeps each card nearest its own arc, which even spacing would not', () => {
     // Two cards in the upper right: even spacing would drop one to 3 o'clock and strand it.
-    const angles = sideCardAngles([request(50), request(62)]);
+    const angles = sideCardAngles([request(50), request(62)], LOCUS);
     expect(angles[0]).toBeCloseTo(50, 6);
     expect(angles[1]).toBeCloseTo(62, 6);
+  });
+
+  /**
+   * The property the `sin θ` term exists for, asserted where the renderer would feel it: two
+   * four-line cards on the same bearing must end up far enough apart to clear *vertically*, at the
+   * sector's shallow ends as well as at three o'clock. The arc-length rule passed every other spec
+   * in this file while leaving 19.2 units of overlap here.
+   */
+  it.each([
+    ['at the sector’s upper end', 45],
+    ['at three o’clock', 90],
+    ['at the sector’s lower end', 135],
+    ['on the left sector’s end', 225],
+    ['at nine o’clock', 270]
+  ])('separates a stacked pair vertically %s', (_label, bearing) => {
+    const [first, second] = sideCardAngles(
+      [request(bearing as number, 104), request(bearing as number, 104)],
+      LOCUS
+    );
+
+    expect(verticalGap(LOCUS, first, second)).toBeGreaterThanOrEqual(104 - 1e-9);
   });
 });

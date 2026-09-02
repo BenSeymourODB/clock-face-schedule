@@ -8,7 +8,6 @@ import {
   type DialScaleId,
   adrBandClearingCircle,
   angleForTime,
-  angularHeight,
   assignRings,
   calculateTrueArcAngles,
   combineTitleWithEmoji,
@@ -539,12 +538,12 @@ export function analogClock({
       const cardAngles = sideCardAngles(
         overflowing.map(({ params }) => ({
           anchorAngle: params.anchorAngle,
-          angularHeight: angularHeight(
-            floatingLabelGeometry({ ...params, cardAngle: sectorTarget(params.anchorAngle) }).rect
-              .height,
-            locus
-          ),
-        }))
+          cardHeight: floatingLabelGeometry({
+            ...params,
+            cardAngle: sectorTarget(params.anchorAngle),
+          }).rect.height,
+        })),
+        locus
       );
       overflowing.forEach((entry, index) => {
         entry.params.cardAngle = cardAngles[index];

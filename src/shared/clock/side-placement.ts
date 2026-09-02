@@ -63,20 +63,70 @@ export function sectorTarget(angle: number): number {
 }
 
 /**
- * How much of the sector a card of `height` occupies at `radius`, in degrees.
+ * Vertical distance between two bearings on one locus — what a pair of cards actually has to clear.
  *
- * The chord approximation rather than `2·asin(h/2R)`. Measured at the tightest case the dial reaches
- * — a four-line card, 104 units, on today's 297.84 locus — the two differ by **0.103°**, and the
- * chord is the *smaller*, so this under-states what a card needs rather than over-stating it. At
- * 5.20 units of vertical travel per degree that is half a unit of card, and the exact form would
- * still be an approximation of the real requirement: a card is a rectangle, so what it needs to clear
- * its neighbour depends on both bearings and not on one. The spread pass below is a separation rule,
- * not a proof of non-overlap; the vertical nudges `planOptionalLines` returns, bounded by
- * `labelVerticalBand`, remain the thing that resolves what it leaves overlapping.
+ * `2R·sin(midpoint)·sin(half the gap)`, which is the same quantity as `R(cos a − cos b)` written so
+ * the two things it depends on are separate: how wide the gap is, and where in the sector it sits.
+ * Exact, not the chord approximation the first version of this file carried.
  */
-export function angularHeight(height: number, radius: number): number {
-  if (radius <= 0) return 0;
-  return (height / radius) * (180 / Math.PI);
+function verticalSpan(radius: number, from: number, to: number): number {
+  const half = (((to - from) / 2) * Math.PI) / 180;
+  const midpoint = ((from + to) / 2) * (Math.PI / 180);
+  return Math.abs(2 * radius * Math.sin(midpoint) * Math.sin(half));
+}
+
+/**
+ * Degrees of sector a card of `height` needs to itself on `radius`, anywhere in the sector.
+ *
+ * **Not `height / radius`, and the difference is the whole of this function.** Cards clear each other
+ * on *vertical* separation, and a degree of travel along the locus is worth `R·sin θ` of it — least
+ * at the sector's own ends, which is where #138's argument says cards separate fastest and its
+ * *arithmetic* quietly assumed they separate uniformly. Allotting arc length instead is what the
+ * first version did, and the shortfall was measured on review: two four-line cards placed at that
+ * rule's minimum overlap by **19.2 units at 45° on the shipped locus**, **22.1 at R = 418**, and by
+ * 2.1 even at three o'clock. The vertical nudges `planOptionalLines` returns were covering it, so
+ * nothing rendered a visible overlap — the class of latent defect a green suite hides.
+ *
+ * Solved rather than approximated, because the obvious correction is wrong in the other direction:
+ * dividing by `sin θ` at the card's own bearing uses the slope where the pair *starts*, and the slope
+ * falls away on both sides of three o'clock, so at 90° it asks 20.0° and delivers 101.9 units against
+ * the 104 needed. What this returns instead is the gap that clears `height` at the **worst position
+ * the sector allows** — the midpoint nearest an end, `sectorStart + Δ/2`, which by the sector's
+ * symmetry about three o'clock is the same on either side. `verticalSpan` is monotone in Δ over a
+ * 90° sector, so a bisection is exact to the bit rather than iterative in the sense #184 warns about.
+ *
+ * The price is over-separation at three o'clock — **24.03° asked where the arc rule asked 20.01°**,
+ * at the shipped locus for a four-line card — and it is worth paying: capacity is not the binding
+ * constraint, at **7 two-line slots a side** (10 at R = 452) against a fixture that peaks at three a
+ * side, and the alternative is a rule that is right on average and wrong at both ends.
+ *
+ * It also prices #138's decision 2 rather than leaving it a capacity question: dropping the sector's
+ * start from 45° to 30° takes the same card from 24.03° to **28.88°**, so the three extra one-line
+ * slots a side that range is costed as buying are partly spent separating what is already there.
+ */
+export function separationDegrees(
+  height: number,
+  radius: number,
+  sectorStart = SIDE_SECTOR_START
+): number {
+  if (radius <= 0 || height <= 0) return 0;
+
+  const span = SIDE_SECTOR_END - SIDE_SECTOR_START;
+  const clears = (gap: number) => verticalSpan(radius, sectorStart, sectorStart + gap) >= height;
+
+  // The pair cannot be separated inside the sector at all — `spreadInSector` distributes evenly and
+  // leaves the overlap to the displacement pass, which is the honest answer rather than a gap no
+  // sector can grant.
+  if (!clears(span)) return span;
+
+  let low = 0;
+  let high = span;
+  for (let step = 0; step < 60; step += 1) {
+    const middle = (low + high) / 2;
+    if (clears(middle)) high = middle;
+    else low = middle;
+  }
+  return high;
 }
 
 /**
@@ -99,8 +149,14 @@ export function adrBandClearingCircle(bandOuterRadius: number, boardHalfWidth: n
 export interface SideCardRequest {
   /** The arc's own bearing — where the connector points. */
   anchorAngle: number;
-  /** Degrees the card needs to itself, from `angularHeight`. */
-  angularHeight: number;
+  /**
+   * The card's drawn height in viewBox units.
+   *
+   * The height and not a pre-computed angle: converting one into the other needs the bearing *and*
+   * the locus, and a caller that did it itself was how the `sin θ` term went missing in the first
+   * place. `sideCardAngles` owns the conversion so there is one place it can be wrong.
+   */
+  cardHeight: number;
 }
 
 /**
@@ -180,7 +236,7 @@ export function spreadInSector(
  * bottom-to-top. Angular order is the one that keeps each card nearest its own arc, which is the
  * cost decision 1 names.
  */
-export function sideCardAngles(requests: readonly SideCardRequest[]): number[] {
+export function sideCardAngles(requests: readonly SideCardRequest[], radius: number): number[] {
   const angles = new Array<number>(requests.length).fill(0);
 
   for (const side of ['right', 'left'] as const) {
@@ -191,7 +247,9 @@ export function sideCardAngles(requests: readonly SideCardRequest[]): number[] {
       .map(({ request, index }) => ({
         index,
         target: sectorTarget(request.anchorAngle),
-        height: request.angularHeight,
+        // The card's demand does not depend on where the spread ends up putting it: it is priced at
+        // the worst position the sector allows, so the pass moving a card cannot invalidate it.
+        height: separationDegrees(request.cardHeight, radius),
       }))
       .sort((a, b) => a.target - b.target);
 
