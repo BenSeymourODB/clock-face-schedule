@@ -1,7 +1,6 @@
 # Plan: the side-placement comparison spike
 
-**Status:** in progress — the spike renders the fork; the three decisions in #138 stay open and #138
-says what is outstanding
+**Status:** done — shipped in #216
 **Issue:** #138
 **Docs:** `docs/brainstorms/2026-08-21-label-placement-fork.md` (the reasoning either branch must
 keep), ADR 0009 in `docs/DESIGN.md` (the allocation every locus figure is spent out of)
@@ -113,16 +112,17 @@ which still runs — whether displacement remains necessary under side placement
 half, and the honest way to answer it is to leave it in and count how often it fires.
 
 The angular separation a card needs is taken from its height at its *clamped anchor* bearing, one
-pass. Height depends on bearing depends on height; the spike takes the first-pass height rather than
-iterating, for the same reason the locus is scanned rather than solved.
+pass. Height depends on bearing depends on height, and the spread is a separation rule rather than a
+proof of non-overlap, so iterating it would buy precision the rule does not have — the same reason
+the band-clearing locus is a measured number rather than a solved one.
 
 ## Phases
 
 1. **Shared geometry.** `src/shared/clock/side-placement.ts` — sector assignment, the min-gap spread,
    and the locus rules that need no layout. Unit-tested in node.
 2. **Renderer.** `cardAngle` on `FloatingLabelParams` (the card's bearing, defaulting to the anchor's,
-   so the connector keeps pointing at the arc); `labelPlacement` and `labelLocus` on `analogClock`;
-   the band-clearing scan beside `floatingLabelGeometry`. Tested under jsdom on rendered attributes.
+   so the connector keeps pointing at the arc), and `labelPlacement` / `labelLocus` on `analogClock`.
+   Tested under jsdom on rendered attributes.
 3. **Host.** `?labels=` and `?locus=` in `main.ts`, README's parameter table, and the pin table if
    the numbers there move (they must not — the default path is unchanged).
 4. **Visual pass.** Render `?now=11:00`, `?now=13:00`, `?now=19:00` and unpinned, at 1920×1080 and
