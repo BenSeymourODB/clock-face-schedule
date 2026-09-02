@@ -294,6 +294,32 @@ Where a channel cannot be given to every element, prefer a setting that applies 
 per-element negotiation that varies for reasons only the renderer knows — which is the rule #175 was
 reverted to establish, and #178 is its first application.
 
+**The bar exists now, and it took ADR 0009's priced case rather than a new number.** `--bar-height`
+is `max(3rem, 8.2vh)` — 8.2% of the board's height is the 100 mm bar the consequence list above
+costs out. Measured at 1920×1080 with `#status` hidden: the dial goes 922.3 → **833.8 px** (−9.60%)
+and the labels' margin **234.5 → 300.8 units** a side. The prediction was −8.2%; the extra 1.4 points
+are #115's label frame, which the ADR 0009 model did not carry. Both margins stay far past the
+75.4-unit knee, so the panel is still free and a card still saturates at thirteen characters a line.
+
+Its first occupant is the 1h/12h switch (#85, #34). Two things about it are worth recording here
+rather than in the plan, because they are the ADR's own argument being spent:
+
+- **The state signal is the thumb's position, not the label.** The bar is operated from within
+  touching distance, so its *text* need not meet the dial's legibility-at-distance bar — but the
+  clause above only permits a live scale control because the switch is its own indicator, and an
+  indicator nobody can read across the room is not one. So the two were sized separately: the labels
+  at `clamp(0.95rem, 1.9vmin, 1.35rem)`, and the position signal at a thumb travelling its own full
+  width, measuring **16.13:1 against the `--card` track it slides on**. Whether *that* is enough is
+  #85's remaining open item and wants the hardware.
+- **The press persists; the URL does not.** #85 leaves open which of a stored value and `?scale=`
+  wins, and it is settled here as *both*, split by what caused the change. `?scale=` wins for what is
+  *drawn* — it is what a board is pointed at to check something on the device, and a setting a wall
+  display cannot be pointed at can only be checked from a workstation. But only pressing the switch
+  **writes**, because a URL is a look and not a decision: a board opened once on `?scale=1h` to
+  inspect an arc would otherwise leave every later viewer on the 1-hour dial with nobody having
+  chosen it, which is this ADR's own hazard reached through the store instead of through the switch.
+  Drop the parameter and the board returns to what was last pressed.
+
 **Revisit when** the pilot has real users, or as soon as anyone the top bar excludes is among them —
 whichever comes first.
 
@@ -384,6 +410,14 @@ proportions. Two figures in particular are budgets rather than measurements: the
 come from `CHAR_WIDTH_RATIO = 0.6`, which is deliberately crude, and the distance/150 rule is an AV
 signage convention rather than a measurement of these glyphs at this contrast.
 
+**77.2% since the bar shipped, and the two claimants are separate.** The 85.4% below is the frame's
+doing and stands on its own; ADR 0008's top bar then takes a further 8.2vh off the top, and this ADR
+is the reason that is a trade rather than a loss — the dial is bound by the board's *height*, so
+`--bar-height` converts into horizontal room. Measured at 1920×1080 with `#status` hidden: the dial
+goes 922.3 → **833.8 px** (−9.60%) and the margin below goes 234.5 → 300.8 units a side, still far
+past the 75.4 knee. The derate below becomes **0.772**, so 26 units is 41 mm rather than 45, the
+distance/150 rule gives 6.1 m rather than 6.7, and a 180-unit panel is 283 mm rather than 313.
+
 **The dial takes 85.4% of the board's height, not all of it** (#115). This ADR opens by giving the
 dial the board's full height, and the page did far worse than that until #115: 600 px on any display,
 because `#dial`'s percentage width resolved against a grid track sized by the SVG's own 600-unit
@@ -411,12 +445,14 @@ and the margin grows with it:
 | | board width, in dial units | margin per side |
 | --- | --- | --- |
 | 16:9, dial at full height — as stated above | 1066.7 | 143.3 |
-| **16:9, dial at 85.4% — as it renders** | **1249.0** | **234.5** |
+| 16:9, dial at 85.4% — before the bar | 1249.0 | 234.5 |
+| **16:9, dial at 77.2% — as it renders** | **1381.7** | **300.8** |
 | 16:10, dial at full height | 960.0 | 90.0 |
-| **16:10, dial at 85.4% — as it renders** | **1124.1** | **172.1** |
+| 16:10, dial at 85.4% — before the bar | 1124.1 | 172.1 |
+| **16:10, dial at 77.2% — as it renders** | **1243.5** | **231.8** |
 
-Measured off the rendered page as well as derived: at 1920×1080 the dial draws 922.3 px for its 600
-units, so the viewport is 1249.0 units and `(1249.0 − 600 − 180) / 2 = 234.5`. The amendment above
+Measured off the rendered page as well as derived: at 1920×1080 the dial draws 833.8 px for its 600
+units, so the viewport is 1381.7 units and `(1381.7 − 600 − 180) / 2 = 300.8`. The amendment above
 says "the unit arithmetic and the 180-unit choice are unaffected", and that holds for the knee (75.4)
 and the saturation ceiling (155.2) — both properties of the locus, not of the board — and for the
 180-unit choice and the 209-unit ceiling, which both move further inside their headroom. It does not

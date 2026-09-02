@@ -196,6 +196,19 @@ export interface AnalogClockHandle {
   /** Replace the event set and rebuild the arcs. */
   setEvents(events: ClockEventInput[]): void;
   /**
+   * Redraw the dial at the other time scale (#85's switch, over #34's geometry).
+   *
+   * A redraw and not a transition: the two scales share no drawn element — different outer
+   * numerals, a second numeral ring, different hand lengths, and an arc set taken from a different
+   * window at a different degrees-per-minute — so there is nothing to tween. The host is expected
+   * to hide the change behind a fade; this call is the instant it happens.
+   *
+   * The `<svg>` element itself survives, which is what lets the host fade **one** node rather than
+   * cross-dissolving two dials that would each cost a full layout. A no-op when the scale is
+   * already the one showing.
+   */
+  setScale(scale: DialScaleId): void;
+  /**
    * Re-grant the labels' margin after the page has been re-laid-out (#30 item 1).
    *
    * A no-op when the value has not changed, so a host may call it on every `resize` without
@@ -215,7 +228,11 @@ export function analogClock({
   showDurations = true,
   namedElsewhere,
 }: AnalogClockParams): AnalogClockHandle {
-  const scale = dialScale(scaleId);
+  /**
+   * Both re-bound by `setScale`, so the parameter is the dial's opening scale rather than its
+   * only one. Every read of either is inside `renderEvents`, which runs again on the way out.
+   */
+  let scale = dialScale(scaleId);
   const cx = size / 2;
   const cy = size / 2;
   const outerRadius = size / 2 - EDGE_MARGIN;
@@ -266,7 +283,7 @@ export function analogClock({
 
   const arcsLayer = svg("g", { "data-testid": "event-arcs-layer" });
   const labelsLayer = svg("g", { "data-testid": "floating-labels-layer" });
-  const face = clockFace({ faceRadius, cx, cy, time, showSeconds, scale: scaleId });
+  let face = clockFace({ faceRadius, cx, cy, time, showSeconds, scale: scaleId });
 
   // Face last, so the hands paint over any label bleeding toward the centre.
   element.append(arcsLayer, labelsLayer, face.element);
@@ -548,6 +565,31 @@ export function analogClock({
 
     setEvents(next: ClockEventInput[]): void {
       currentEvents = next;
+      renderEvents();
+      describe();
+    },
+
+    setScale(next: DialScaleId): void {
+      if (next === scaleId) return;
+      scaleId = next;
+      scale = dialScale(next);
+
+      // `clockFace` resolves its numerals, its two rings and both hand lengths at construction, so
+      // the face is rebuilt rather than re-pointed — and built at `currentTime`, not at the `time`
+      // this dial opened on, or the hands would jump back to the load frame.
+      const replacement = clockFace({
+        faceRadius,
+        cx,
+        cy,
+        time: currentTime,
+        showSeconds,
+        scale: scaleId,
+      });
+      element.replaceChild(replacement.element, face.element);
+      face = replacement;
+
+      // `replaceChild` keeps the face last, which is the order that matters: the hands paint over
+      // any label bleeding toward the centre.
       renderEvents();
       describe();
     },

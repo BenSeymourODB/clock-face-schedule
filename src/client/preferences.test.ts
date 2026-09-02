@@ -237,7 +237,8 @@ describe("the store", () => {
       showSeconds: true,
       timerMuted: true,
       timerDurationSeconds: 600,
-      showEventDurations: true
+      showEventDurations: true,
+      dialScale: "12h"
     });
 
     await flush();
@@ -1048,7 +1049,9 @@ describe("resetting, against the write in flight", () => {
 
     store.reset(PREFERENCE_KEYS);
 
-    expect(sent).toEqual(["showSeconds;timerMuted;timerDurationSeconds;showEventDurations"]);
+    expect(sent).toEqual([
+      "showSeconds;timerMuted;timerDurationSeconds;showEventDurations;dialScale"
+    ]);
   });
 });
 

@@ -17,7 +17,6 @@ import {
   getPeriodBounds,
   labelMarginUnits,
   panelFitsBoard,
-  parseDialScaleId,
 } from "../shared/clock";
 import {
   PREFERENCES,
@@ -36,6 +35,8 @@ import {
 import { type AgendaPanelHandle, agendaPanel } from "./render/agenda-panel";
 import { type AnalogClockHandle, DIAL_VIEWBOX_SIZE, analogClock } from "./render/analog-clock";
 import { type ScheduleStatus, describeStatus, nextStatus } from "./schedule-status";
+import { scaleSwapper, withScaleParam } from "./scale-swap";
+import { teacherBar } from "./teacher-bar";
 
 const TICK_INTERVAL_MS = 1_000;
 const POLL_INTERVAL_MS = 5 * 60 * 1_000;
@@ -90,14 +91,81 @@ function fetchWindow(): Promise<ClockEventInput[]> {
 }
 
 /**
- * The templated attribute wins over the query string, so the deployed app honours a stored
- * preference while the server-less preview can still be pointed at either scale by hand.
+ * Which scale the dial opens on — the URL first, then what the teacher last pressed.
+ *
+ * The same four layers `chosenDurations` resolves, and now for the same reason: the parameter is an
+ * *override* of a stored setting rather than the setting itself. `?scale=` is what a board is
+ * pointed at to check something on the device, so it wins where it is present and valid; anything
+ * unrecognised falls *through* to the store rather than being repaired, which is
+ * `resolvePreferences`' own rule applied across raw layers.
+ *
+ * The templated attribute still beats the page's own query string, which is unchanged and still
+ * matters: on the deployed app `window.location` is the sandbox iframe's, so the query string here
+ * is not the one the teacher typed — `doGet` templated that onto the mount. In the preview, which
+ * has no server, the attribute strips to `""` and the query string is the whole of it.
+ *
+ * `parseDialScaleId` is deliberately **not** used: it falls back to `12h` for unrecognised input,
+ * which is right for a URL nobody can correct and wrong for a layer that has another beneath it —
+ * it would answer for the store instead of deferring to it. `PREFERENCES.dialScale` rejects.
  */
-function chosenScale(mount: Element): DialScaleId {
+function chosenScale(mount: Element, preferences: PreferenceStore): DialScaleId {
   const templated = mount instanceof HTMLElement ? mount.dataset["scale"] : undefined;
-  if (templated) return parseDialScaleId(templated);
+  const query = new URLSearchParams(window.location.search).get("scale");
 
-  return parseDialScaleId(new URLSearchParams(window.location.search).get("scale"));
+  return resolveOverride(
+    PREFERENCES.dialScale,
+    [templated, query],
+    preferences.get().dialScale
+  );
+}
+
+/**
+ * Write the scale the switch has just chosen where the page already records it: onto the mount,
+ * which is what `chosenScale` reads, and into `?scale=`, which is the control a board can be pointed
+ * at from a URL.
+ *
+ * Both, rather than either. The attribute alone would leave a URL describing a dial that is no
+ * longer on screen; the parameter alone would leave the two disagreeing about the mode, and the
+ * attribute is the one anything re-reading the page believes.
+ *
+ * **The address bar does not change on the deployed app, and cannot.** The page runs inside an
+ * HtmlService sandbox iframe on a `googleusercontent.com` origin that rotates between sessions, so
+ * `window.location` here is the *frame's* URL — the `script.google.com/…/exec?scale=1h` one a
+ * teacher typed belongs to the parent document, which this page may not touch. `doGet` templates
+ * that parameter onto the mount instead, which is exactly why `chosenScale` prefers the attribute.
+ * On `build/preview.html`, where the page is the document, both halves are the URL the reader sees.
+ *
+ * `replaceState` rather than `pushState`: a back button that silently un-toggles a wall display is
+ * worse than no history at all. Wrapped, because a display must not stop working over a URL it could
+ * not rewrite — `replaceState` throws in a sandbox without `allow-same-origin`, and the dial is
+ * correct either way.
+ */
+function recordScale(mount: Element, scale: DialScaleId): void {
+  if (mount instanceof HTMLElement) mount.dataset["scale"] = scale;
+
+  try {
+    window.history.replaceState(
+      window.history.state,
+      "",
+      withScaleParam(window.location.search, scale) + window.location.hash
+    );
+  } catch (error) {
+    console.warn(`scale not written to the URL — ${(error as Error).message}`);
+  }
+}
+
+/**
+ * Whether the viewer has asked for less motion — in which case the scale swap happens at the press
+ * rather than behind a fade.
+ *
+ * Guarded on `matchMedia` itself: the fade is a nicety and a host without the API must still be able
+ * to change scale.
+ */
+function prefersReducedMotion(): boolean {
+  return (
+    typeof window.matchMedia === "function" &&
+    window.matchMedia("(prefers-reduced-motion: reduce)").matches
+  );
 }
 
 /**
@@ -109,9 +177,10 @@ function chosenScale(mount: Element): DialScaleId {
  * *"a URL parameter for checking it on the device"*, and a setting a wall display cannot be pointed
  * at is one that can only be checked from a workstation.
  *
- * Which inverts `chosenScale`'s precedence, and deliberately: `?scale=` **is** the setting there, so
- * a templated value winning keeps a deployed URL from being overridden by whatever the sandbox
- * iframe carries. Here the setting is the stored preference and the parameter is an override of it.
+ * The same four layers `chosenScale` resolves, and no longer the inverse of them: `?scale=` was the
+ * setting itself until #85 gave the scale a stored value, and both are now a parameter overriding a
+ * preference. The layer *order* is what carried across — templated ahead of the query string,
+ * because on the deployed app the query string is the sandbox iframe's rather than the teacher's.
  *
  * The parameter's alphabet is the preference definition's own — `1` and `0` — because it is parsed
  * by that definition. One parser for both forms, so a value the store accepts and one the URL
@@ -267,14 +336,34 @@ function trackBoardLayout(
 function startDisplay(): void {
   const statusLine = document.querySelector("#status");
   const panelHost = document.querySelector("#panel");
+  // The teacher's controls (ADR 0008). Absent only on a jsdom fixture that mounts a bare `#dial`;
+  // `Index.html` emits it outside every scriptlet, so a real page always has one.
+  const barHost = document.querySelector("#bar");
   // The row the dial and the panel share. `Index.html` emits it outside every scriptlet, so a real
   // page always has one and the fallback below is only reached by a jsdom fixture that mounts a bare
   // `#dial`. Falling back to the mount keeps such a page working with no panel, rather than throwing.
   const board = document.querySelector("#board");
   if (!mount) return;
 
+  /**
+   * The mount, past the guard above.
+   *
+   * `mount` is module-level, and TypeScript does not carry the `if (!mount) return` narrowing into a
+   * nested function — so the closures below would see `Element | null` and have to re-test something
+   * that cannot be null by the time they run. Verified by removing this and reading the error rather
+   * than assumed.
+   */
+  const dial = mount;
+
   const preferences = displayPreferences(mount);
-  const scale = chosenScale(mount);
+  /**
+   * The scale the switch is showing, which the dial follows rather than leads.
+   *
+   * Moved by `changeScale` alone, and moved *there* before the picture catches up: the fade means
+   * the dial arrives a beat late, and a press during that beat has to be answered by the scale the
+   * switch now says rather than by the one the earlier press asked for.
+   */
+  let currentScale = chosenScale(mount, preferences);
   /**
    * Read once for the load, and handed to both drawings so they cannot disagree about it — the same
    * property `loadedAt` has below. A dial stating lengths beside a panel that is not is the mixed
@@ -318,7 +407,7 @@ function startDisplay(): void {
     events: [],
     showSeconds: preferences.get().showSeconds,
     time: loadedAt,
-    scale,
+    scale: currentScale,
     showDurations,
     namedElsewhere: panelNames
   });
@@ -379,12 +468,29 @@ function startDisplay(): void {
    * to ask. Deliberately says so on screen: a wall left in this mode must not be mistaken for a
    * real schedule, and the whole point of the mode is that someone is standing in front of it.
    */
-  if (mount instanceof HTMLElement && mount.dataset["demo"] === "1") {
+  const showingFixture = mount instanceof HTMLElement && mount.dataset["demo"] === "1";
+
+  /** The demo fixture's poll, once one has been seated. Re-seated by every scale change. */
+  let refreshFixture: (() => void) | null = null;
+
+  /**
+   * Point the fixture at a scale.
+   *
+   * Called again on every scale change, because both halves of the fixture are scale-bound (#34):
+   * `demoFixture` picks a different set of sample events per scale, and `fixtureAnchor` places it
+   * against that scale's own window. A refresher kept across a switch would tile the 12-hour
+   * fixture's thirteen hours of events across a window 55 minutes wide.
+   *
+   * Re-seated from `loadedAt` rather than from a fresh `now()`, which is the property #152 bought
+   * and the one a scale switch could quietly spend: the anchor is what fixes every event's offset
+   * from `now`, so reading the clock here would move the fixture's *states* — the elapsed arc, the
+   * one straddling `now` — as a side effect of changing scale.
+   */
+  function seatFixture(forScale: DialScaleId): void {
     // Handed the same `now` the tick above reads, which is the whole of what `fixture-refresh.ts`
     // exists to make checkable: a pinned dial whose copy set kept moving would empty itself (#80).
-    // And the same `loadedAt` the dial was built with, so the anchor and the first frame agree.
-    const refreshFixture = fixtureRefresher({
-      scale,
+    refreshFixture = fixtureRefresher({
+      scale: forScale,
       pin: clockPin,
       loadedAt,
       now,
@@ -394,10 +500,54 @@ function startDisplay(): void {
         clock.setEvents(events);
       }
     });
-
     refreshFixture();
+  }
+
+  /**
+   * Redraw at the other scale — everything a scale change touches, in one place, so the fade below
+   * has one thing to defer.
+   */
+  function drawScale(next: DialScaleId): void {
+    clock.setScale(next);
+    if (showingFixture) seatFixture(next);
+  }
+
+  /** The fade, and the clearing of it on every path out — `scale-swap.ts` owns both. */
+  const swapDial = scaleSwapper({
+    dial: dial instanceof HTMLElement ? dial : null,
+    redraw: drawScale,
+    reducedMotion: prefersReducedMotion
+  });
+
+  /**
+   * The switch's answer: record the choice, then let the dial catch up behind a fade.
+   *
+   * Two steps, in this order and not the other. The URL and the mount are written *now* because they
+   * are the record of what was asked for; the picture is deferred because swapping every mark on the
+   * dial at once reads as a fault rather than as a mode. The switch has already moved by the time
+   * this runs and does not wait either — a control that lagged the press by the fade would feel
+   * broken to whoever is standing at the board.
+   */
+  function changeScale(next: DialScaleId): void {
+    if (next === currentScale) return;
+    currentScale = next;
+    recordScale(dial, next);
+    // The press is what persists, and only the press: a board opened once on `?scale=1h` to check
+    // an arc must not leave every later visitor on the 1-hour dial with nobody having chosen it.
+    // Fire-and-forget, like every write here — a setting the store did not keep costs the next
+    // reload's memory of it, which is not worth interrupting a lesson over.
+    preferences.set({ dialScale: next });
+    swapDial(next);
+  }
+
+  if (barHost) {
+    barHost.append(teacherBar({ scale: currentScale, onScaleChange: changeScale }).element);
+  }
+
+  if (showingFixture) {
+    seatFixture(currentScale);
     setStatusText("Sample events — not a real calendar");
-    window.setInterval(refreshFixture, POLL_INTERVAL_MS);
+    window.setInterval(() => refreshFixture?.(), POLL_INTERVAL_MS);
     return;
   }
 
