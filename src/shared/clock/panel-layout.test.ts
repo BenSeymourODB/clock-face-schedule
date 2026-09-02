@@ -163,34 +163,40 @@ describe('panelAllowed', () => {
   });
 
   /**
-   * **The asymmetry is deliberate and is the one decision in #185**, so it is asserted rather than
-   * left to the docstring: `1` means "draw it where the board can carry it", which is the default,
-   * and *not* "draw it regardless".
+   * **`1` means "draw it where the board can carry it", not "draw it regardless"** — the one decision
+   * in #185, and what this asserts is the half that lives in this function: that no value of the
+   * parameter ever answers `true` for a *reason of its own*. `panelAllowed`'s docstring carries why.
    *
-   * A force-on would have to overrule `panelFitsBoard`, and a column on a board that fails it either
-   * takes height from the dial — ADR 0009's one absolute — or pushes the labels below the 75.4-unit
-   * knee where the panel and the labels trade width one-for-one. So the parameter can only subtract a
-   * surface, never add one, and every picture it produces is one some real board draws.
-   *
-   * Stated as the property that has to hold: on a board `panelFitsBoard` rejects, no value of the
-   * parameter shows a column.
+   * The other half — that `showPanel` puts this ahead of `panelFitsBoard` rather than instead of it —
+   * is not assertable here and is not asserted here. **An earlier version tried, and the attempt was
+   * worse than the omission**: it re-typed `showPanel`'s conjunction as
+   * `expect(panelAllowed([…]) && fits).toBe(false)` on a board where the line above had already
+   * established `fits === false`, so the expectation could not fail for any implementation of
+   * `panelAllowed` at all — four assertions carrying no information, under a title claiming the
+   * guarantee. `main-load-order.test.ts` binds the conjunction to the source instead, which is the
+   * only place that relationship exists.
    */
-  it.each([['0'], ['1'], [''], ['anything']])(
-    'cannot put a column on a board that fails the fit test: ?panel=%s',
-    (value) => {
-      const tooNarrow = { width: 1184, height: 854 };
-      const fits = panelFitsBoard(
-        tooNarrow,
-        DIAL_SIZE,
-        PANEL_RESERVE_UNITS,
-        LABEL_MARGIN_KNEE_UNITS
-      );
-
-      expect(fits).toBe(false);
-      // `showPanel`'s own expression, which is what makes this the guarantee rather than a hope.
-      expect(panelAllowed(['', value]) && fits).toBe(false);
+  it.each([['0', false], ['1', true], ['', true], ['anything', true]])(
+    'answers %s for ?panel=%s with no view of the board',
+    (value, expected) => {
+      expect(panelAllowed(['', value])).toBe(expected);
     }
   );
+
+  /**
+   * The fit test's own answer on a board that fails it, so the two halves of `showPanel`'s expression
+   * are each pinned somewhere.
+   *
+   * **These are `#board`'s dimensions, not a viewport's** — the row the dial and the column share,
+   * after ADR 0008's bar and `--label-frame` have taken theirs. An actual 1184×854 *window* draws a
+   * panel quite happily (the row is 1059 × 659 by then, which passes), so reproducing this by resizing
+   * a browser to 1184×854 and finding a column is the expected result rather than a contradiction.
+   */
+  it('rejects a board too narrow to carry a column without the labels paying', () => {
+    expect(
+      panelFitsBoard({ width: 1184, height: 854 }, DIAL_SIZE, PANEL_RESERVE_UNITS, LABEL_MARGIN_KNEE_UNITS)
+    ).toBe(false);
+  });
 });
 
 describe('the card geometry against ADR 0009', () => {

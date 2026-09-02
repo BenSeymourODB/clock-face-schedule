@@ -179,12 +179,17 @@ describe("main.ts's load path", () => {
    *
    * `showPanel` is the single answer to "is the column up" — `trackBoardLayout` draws from it and
    * `?check=1`'s label-margin row reports from it — so the override belongs inside it rather than at
-   * either call site. Two properties, and the second is the one worth a test: the parameter is an
-   * `&&` term *ahead of* `panelFitsBoard` rather than a replacement for it, so no value of the
-   * parameter can put a column on a board ADR 0009 says cannot carry one. Written as `||`, or with
-   * the fit test dropped, it becomes a force-on that takes height from the dial — a one-character
-   * change with no symptom on any board a reviewer would pin, since 16:9 and 16:10 both pass the fit
-   * test anyway and look identical either way.
+   * either call site. The property: the parameter is an `&&` term *ahead of* `panelFitsBoard` rather
+   * than a replacement for it, so no value of the parameter can put a column on a board ADR 0009 says
+   * cannot carry one. `panelAllowed`'s docstring carries the argument for why.
+   *
+   * **Matched as the whole returned expression, and the first version of this test was not.** It
+   * asserted `/panelPermitted\s*&&/` present and `/panelPermitted\s*\|\|/` absent, which
+   * `!panelPermitted &&` satisfies — so the one-character inversion this test exists to catch left
+   * the whole suite green. Rendered, that mutant draws **no column on any ordinary load** and a
+   * column only under `?panel=0`, which is worse than the defect and looks *more* correct in the one
+   * screenshot anyone would take to check the flag. Found in review by mutating the source rather than
+   * by reading the assertion, which is the only way this class of hole shows up.
    *
    * Source shape, for this file's usual reason: `showPanel` closes over a module-level constant read
    * from the page, so there is no seam to drive it from (#156).
@@ -195,15 +200,14 @@ describe("main.ts's load path", () => {
       "`showPanel` is no longer a top-level function"
     );
     const body = declaration as string;
-    const overrideAt = body.search(/\bpanelPermitted\b/);
-    const fitAt = body.search(/\bpanelFitsBoard\(/);
 
-    expect(overrideAt).toBeGreaterThanOrEqual(0);
-    expect(fitAt).toBeGreaterThanOrEqual(0);
-    // Conjunction, not disjunction: `||` would show a column wherever the parameter said so.
-    expect(body).toMatch(/panelPermitted\s*&&/);
+    // The whole expression, anchored at `return`: a substring match is what let `!panelPermitted`
+    // through, and any negation, cast or call wrapped round the term breaks this instead.
+    expect(body).toMatch(/return\s*\(\s*panelPermitted\s*&&\s*panelFitsBoard\(/);
+    // Stated a second way, against the mutation itself, so the anchor above cannot be loosened
+    // without one of the two failing.
+    expect(body).not.toMatch(/[!~]\s*panelPermitted/);
     expect(body).not.toMatch(/panelPermitted\s*\|\|/);
-    expect(overrideAt).toBeLessThan(fitAt);
   });
 
   /**

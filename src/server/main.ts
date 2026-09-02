@@ -28,11 +28,8 @@ export { resetPreferences, savePreferences } from "./preferences";
  * overrides a *stored* preference, which is what makes a teacher's setting checkable on the wall it
  * runs on rather than only on a workstation.
  *
- * `?panel=0` leaves the agenda column off (#185), which is the one board nobody could put on screen:
- * ADR 0009's narrow-display fallback is undesigned, #178's duration wording was chosen because it
- * survives a panel-less board, and every board a browser can be pointed at draws a column. Tooling
- * rather than a setting — it stores nothing and announces nothing, and `panelAllowed` records why `1`
- * is not a force-on.
+ * `?panel=0` leaves the agenda column off (#185) — tooling for a board that had no way onto a screen,
+ * rather than a setting: it stores nothing and announces nothing. `panelAllowed` carries the rest.
  *
  * `now`, `scale`, `durations` and `panel` are all passed through **as authored**: the browser is
  * authoritative for time (ADR 0005) and the client owns the geometry (ADR 0003), so the server
