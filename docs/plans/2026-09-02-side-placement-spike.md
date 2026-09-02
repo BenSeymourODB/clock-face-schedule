@@ -75,7 +75,9 @@ wrong. Full rendered results in "What the pictures said" below.
 
 ## What the flag does
 
-Two parameters, query-string only, on the preview and behind `?demo=1` on the deployed app:
+Two parameters, query-string only, on the preview and on the deployed app. **Not gated on `?demo=1`**,
+and deliberately: the fork is between loci that differ by seven characters a line, and whether that
+reads from the back of a room is a claim about a real calendar rather than about the fixture:
 
 - `?labels=sides` — confine every card to two side sectors instead of spacing them round the ring.
 - `?locus=<number>` — override the label locus radius in viewBox units. Works on the ring too, which
@@ -181,9 +183,56 @@ Aggregate over the three pins, 15 cards, `?labels=sides`:
    13 characters a line against the ring's 26–50, the *Aftercare* and *Lunch* arc titles covered by
    cards at `?now=19:00`, and a connector travelling **129.8 units inside the band across 25.9° of
    it** — the crossing #138 predicted and the corrections withdrew, which turns out to be real at
-   *today's* radius and negligible (1.5–4°) at every wider one.
+   *today's* radius.
 
-Two limits on all of it. The fixture peaks at six cards, so nothing here tests #138's capacity table:
+   **The connector figure was first written here as "negligible (1.5–4°) at every wider one", and
+   re-measuring it on review reversed that for the radius this plan recommends.** At R = 340 the
+   deepest connector still runs **83.4 units inside the band across 16.4°** (87.2 and 17.2°
+   unpinned); it reaches 4° only at 380, and at the band-clearing 452 it comes back to 60.7 units at
+   `?now=11:00`, because a connector has to reach an arc that is inside the band however far out its
+   card sits. So intrusion is not monotone in the locus, and "wider is safer" does not hold for the
+   connector the way it does for the card.
+
+## The column neither table counted: arc titles a card covers
+
+Added on review. Both tables above count *cards* — cut, in the band, past the box, overlapping each
+other — and none of them counts the thing a card in the band actually costs: **the arc's own title,
+drawn inside the band, with a card on top of it.** That is #98, and it is the failure the whole
+floating-label mechanism exists to avoid, so it is the column the fork wanted. Measured by reading
+every `event-title-*` and `event-duration-*` bounding box back off the browser and intersecting it
+with every card rect, aggregated over the three pins:
+
+| 16:9 | R = 297.84 | 320 | 340 | 380 | 410 | 430 | 452 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| **sides** — labels covered | 13 | 9 | **9** | 7 | 2 | **0** | **0** |
+| **sides** — cards past y 600 | **0** | **0** | **0** | 3 | 7 | 7 | 7 |
+| **ring** — labels covered | 6 | 5 | 4 | 2 | 2 | 2 | **0** |
+| **ring** — cards past y 600 | 7 | 8 | 7 | 8 | 9 | 9 | 10 |
+
+The two properties do not have a radius in common. On the sides, `labels covered = 0` starts at
+**R = 430** and `past y 600 = 0` ends at **R = 340**; on 16:10 the windows are 410 and 340. The ring
+never satisfies the second at any radius, the shipped one included.
+
+So the render adds a fourth property to the three the tables opened with, and it is the one that
+breaks the tie between them:
+
+| property | best on the sides | best on the ring |
+| --- | --- | --- |
+| no title truncated | R ≥ 340 | R ≥ 340 |
+| every card inside the box | R ≤ 340 | **never** |
+| no card overlapping another | every R tested | only R = 297.84 |
+| **no arc title covered** | **R ≥ 430** | R ≥ 452 |
+
+**R = 340 is where three of the four meet, and it is the one that buries a title.** At
+`?now=19:00&freeze=1` on both boards the *Deadline* arc title is **fully** covered (fraction 1.00)
+and *Lunch*'s duration line is 80% covered; at `?now=11:00` *Deadline* is 14% and *Study Skills and
+Exam Revision Group* 24%. R = 430 and up covers nothing on either board — and pays 7 cards past
+y 600 for it, which is #135 returning. That is the trade the fork now turns on, and it is a
+different one from the "ring or sides" the issue opens with.
+
+## Two limits on all of it
+
+The fixture peaks at six cards, so nothing here tests #138's capacity table:
 driven with 22 long-titled events the sector saturates and `spreadInSector` falls back to even spacing
 and lets them overlap, as its docstring says it will. And card counts drift by one between radii,
 because a card the panel already names and that lands on another is discharged to the panel (#172) —

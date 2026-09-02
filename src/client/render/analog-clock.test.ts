@@ -1700,4 +1700,70 @@ describe("analogClock's label placement spike", () => {
       )
     ).toBeGreaterThan(0);
   });
+
+  /**
+   * How far the deepest connector runs *inside* the band, where it cuts over the arcs.
+   *
+   * Sampled along the segment rather than solved: a chord's minimum radius has a closed form, but
+   * what matters is the arc-length spent below `OUTER_RADIUS`, and the segment can enter and leave.
+   * 2000 samples put the quantisation at ~0.1 units on the longest connector the dial draws.
+   */
+  function deepestConnectorIntrusion(hour: number, overrides: Partial<AnalogClockParams>): number {
+    const at = new Date(2026, 7, 18, hour, 0, 0, 0);
+    const { element } = analogClock({
+      events: sampleEvents(fixtureAnchor(null, at)),
+      time: at,
+      labelMargin: SIXTEEN_NINE,
+      ...overrides,
+    });
+    const connectors = [
+      ...element.querySelectorAll('[data-testid^="floating-label-connector-"]'),
+    ];
+
+    expect(connectors.length, `no connector was drawn at ${hour}:00`).toBeGreaterThan(3);
+
+    return Math.max(
+      ...connectors.map((line) => {
+        const [x1, y1, x2, y2] = ["x1", "y1", "x2", "y2"].map((name) =>
+          Number(line.getAttribute(name))
+        );
+        const steps = 2000;
+        const step = Math.hypot(x2 - x1, y2 - y1) / steps;
+        let inside = 0;
+        for (let index = 0; index < steps; index += 1) {
+          const t = (index + 0.5) / steps;
+          const radius = Math.hypot(x1 + (x2 - x1) * t - CX, y1 + (y2 - y1) * t - CY);
+          if (radius < OUTER_RADIUS) inside += step;
+        }
+        return inside;
+      })
+    );
+  }
+
+  /**
+   * #138 predicted a connector cutting across the band under side placement, the issue's later
+   * corrections withdrew the prediction, and the renders put it back — but **only at the narrow end
+   * of the locus range**, which is the part neither the issue nor the plan had separated.
+   *
+   * Measured on the fixture at `?now=11:00&freeze=1` and the 244.1-unit grant: **129.8 units of
+   * connector inside the band, across 25.9° of it.** That is the shipped locus, so it is what
+   * `?labels=sides` alone draws, and it is the measured half of "at today's radius the sides are a
+   * plain regression".
+   *
+   * **Only that one reading is asserted, and the reason is a limit of this suite.** How intrusion
+   * moves with the locus is not measurable here: jsdom has no text metrics, so a card is sized from
+   * the fallback rather than from its title, and the sequence it computes (127.0 → 103.4 → 0.0 at
+   * R = 297.84 / 340 / 452) is monotone where the browser's is not — 129.8 → 48.9 → 60.7, the
+   * band-clearing locus *worse* than the middle one, because a connector has to reach an arc that is
+   * inside the band however far out its card sits. Asserting the ordering would encode jsdom's
+   * fiction and pass forever; the browser sweep on the PR is the record for the shape.
+   *
+   * Held at all because both earlier claims about this were wrong in opposite directions — #138
+   * predicted the crossing, its corrections withdrew it — and neither was measured.
+   */
+  it("drives a connector deep into the band at the shipped locus", () => {
+    expect(
+      deepestConnectorIntrusion(11, { labelPlacement: "sides", labelLocus: RING_LOCUS })
+    ).toBeGreaterThan(100);
+  });
 });
