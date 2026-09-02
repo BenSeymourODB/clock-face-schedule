@@ -94,6 +94,22 @@ export const RING_GAP_RATIO = 0.06;
 export const RING_GAP_MIN = 2;
 
 /**
+ * How many rings a band of this thickness can carry before they stop reading as arcs.
+ *
+ * Exported for the reason `ARC_BAND_RATIO` and `RING_GAP_RATIO` are: so a suite can hold something
+ * against the cap the dial actually applies rather than against a literal. The fixture specs need
+ * it in particular (#209) — their depth bounds are derived from the fixture itself, deliberately,
+ * so nothing in them notices a fixture deepened past what the band can divide.
+ */
+export function maxRingsForBand(arcThickness: number): number {
+  const ringGap = Math.max(RING_GAP_MIN, arcThickness * RING_GAP_RATIO);
+  return Math.max(
+    1,
+    Math.floor((arcThickness + ringGap) / (arcThickness * MIN_RING_THICKNESS_RATIO + ringGap))
+  );
+}
+
+/**
  * Floating labels sit this far beyond the band, as a fraction of the dial's radius.
  *
  * Was 0.6 of the *band*, which put the label ring at 337 units on a dial whose frame is only 300
@@ -242,11 +258,7 @@ export function analogClock({
   const faceRadius = clockRadius - outerRadius * FACE_GAP_RATIO;
 
   const ringGap = Math.max(RING_GAP_MIN, arcThickness * RING_GAP_RATIO);
-  /** How many rings the band can carry before they stop reading as arcs at all. */
-  const maxRings = Math.max(
-    1,
-    Math.floor((arcThickness + ringGap) / (arcThickness * MIN_RING_THICKNESS_RATIO + ringGap))
-  );
+  const maxRings = maxRingsForBand(arcThickness);
 
   const labelRadius = outerRadius * (1 + LABEL_RADIUS_RATIO);
   const labelFontSize = roundCoord(outerRadius * LABEL_FONT_SIZE_RATIO);
@@ -382,10 +394,11 @@ export function analogClock({
       })),
       // `assignRings` rebases onto this before sorting, and its default of 0 is only a no-op for a
       // window that stays inside `[0, 360)` — which stopped being true when the window started
-      // rolling (#25) and is never true on the 1-hour scale, where 10:45 gives 240°–570°. Rebased
-      // onto 0, an event at 380° sorts *before* one at 30°, and interval partitioning walked in
-      // the wrong order silently stacks two overlapping events onto the same ring: the later one
-      // is drawn at identical radii, entirely hidden beneath the earlier.
+      // rolling (#25), and on the 1-hour scale holds for five minutes in every sixty: swept over
+      // the hour, only 10:05 through 10:09 keep both edges in range (10:05 gives 0°–330°, 10:45
+      // gives 240°–570°). Rebased onto 0, an event at 380° sorts *before* one at 30°, and interval
+      // partitioning walked in the wrong order silently stacks two overlapping events onto the
+      // same ring: the later one is drawn at identical radii, entirely hidden beneath the earlier.
       angleForTime(windowStart, periodStart, scale.periodMinutes)
     );
 

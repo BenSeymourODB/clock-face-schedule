@@ -16,6 +16,12 @@ import {
   hasEventInProgress,
 } from "../shared/clock";
 import {
+  ARC_BAND_RATIO,
+  DIAL_VIEWBOX_SIZE,
+  EDGE_MARGIN,
+  maxRingsForBand,
+} from "./render/analog-clock";
+import {
   FIXTURE_PERIOD_MINUTES,
   ONE_HOUR_FIXTURE,
   TWELVE_HOUR_FIXTURE,
@@ -114,6 +120,66 @@ const LARGEST_INTERNAL_GAP_MINUTES = (() => {
   }
   return largest;
 })();
+
+/**
+ * The one bound in this file that is *not* derived from the fixture, and the reason #209 asked for
+ * it.
+ *
+ * `AUTHORED_CLUSTER_DEPTH` and the 1-hour fixture's `AUTHORED_DEPTH` are measured off the fixtures
+ * themselves, deliberately — a literal 3 outlived the three-deep cluster it was written for. The
+ * cost is that both move when the fixture does, so nothing noticed if a fixture were deepened past
+ * what the band can divide: `analog-clock.ts` takes `min(clusterDepth, maxRings)`, so a fifth
+ * concurrent event is not dropped and does not throw. It is folded onto the innermost ring and
+ * drawn at radii identical to its neighbour's — one arc on top of another, silently, which is the
+ * defect this file's other assertions are all shaped around.
+ *
+ * The band is built from the renderer's own exported constants rather than restated, on the
+ * precedent `agenda-panel.test.ts` and `event-arc.test.ts` set: a local copy of 75.92 would stay
+ * green while the dial divided something else.
+ */
+describe("the fixtures against the cap the dial actually applies", () => {
+  const DIAL_BAND = (DIAL_VIEWBOX_SIZE / 2 - EDGE_MARGIN) * ARC_BAND_RATIO;
+
+  /** The 1-hour window at load, as that fixture's own suite below builds it. */
+  const oneHourView = dialWindow(
+    new Date(ANCHOR.getTime() + ONE_HOUR_SCALE.lookbehindMinutes * MINUTE_MS),
+    ONE_HOUR_SCALE
+  );
+
+  it("keeps the 12-hour fixture at the deepest stack the band can carry, and no deeper", () => {
+    // Equality rather than a bound in one direction: the fixture is authored to reach `maxRings`
+    // exactly (`sample-events.ts`), so a shallower fixture stops exercising the geometry #67 added
+    // and a deeper one starts hiding an arc.
+    expect(AUTHORED_CLUSTER_DEPTH).toBe(maxRingsForBand(DIAL_BAND));
+  });
+
+  it("keeps the 1-hour fixture inside it too", () => {
+    // A ceiling rather than an equality: that fixture is authored three deep for #90's boundary
+    // case, not to reach the cap. Its own depth is asserted downstream against `AUTHORED_DEPTH`;
+    // what is missing there, and here, is the tie to what the band can actually divide.
+    expect(peakClusterDepth(oneHourSampleEvents(ANCHOR), oneHourView, ONE_HOUR_SCALE)).toBeLessThanOrEqual(
+      maxRingsForBand(DIAL_BAND)
+    );
+  });
+
+  it("names 🟡 Tidy Up's real overlaps", () => {
+    // Asserted from the fixture's own timestamps so moving either event has to come back through
+    // here — the comment beside them is the copy nothing checks.
+    const events = sampleEvents(ANCHOR);
+    const tidyUp = events.find((event) => event.id === "n")!;
+    const start = offsetMinutes(tidyUp.startDate);
+    const end = offsetMinutes(tidyUp.endDate);
+
+    const clashes = events
+      .filter(
+        (event) =>
+          event.id !== "n" && offsetMinutes(event.startDate) < end && offsetMinutes(event.endDate) > start
+      )
+      .map((event) => event.id);
+
+    expect(clashes.sort()).toEqual(["b", "k"]);
+  });
+});
 
 describe("FIXTURE_PERIOD_MINUTES", () => {
   it("is the fixture's own span, so consecutive copies abut exactly", () => {
