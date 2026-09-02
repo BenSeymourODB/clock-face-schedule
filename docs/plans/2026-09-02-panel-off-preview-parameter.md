@@ -153,4 +153,7 @@ the clock.
 - **The unconditional `PANEL_RESERVE_UNITS`** — 90 units a side held for an absent column. #171.
 - **What a too-narrow board should draw instead of nothing.** #39 item 4 / ADR 0009. This parameter
   is the picture that work needs, not the work.
-- **A teacher-facing panel toggle.** #178. This writes no preference and has no control surface.
+- **A teacher-facing panel toggle.** #214. This writes no preference and has no control surface.
+  #178 is where the question was raised and it **closed** carrying only the durations boolean, so the
+  toggle had no open home until #214 — the same failure mode #180 is open about. #214 carries this
+  plan's measurement, since it is what re-prices the decision.

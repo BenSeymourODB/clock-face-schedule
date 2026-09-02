@@ -7,7 +7,10 @@ argument. **Settled on #178 since, and this document is the input rather than th
 took the chain as `arc → card → panel` with the panel explicitly not guaranteed, and the wording as
 this document's **meaning 3 now, meaning 2 as the destination** — so the leaning below was adopted,
 and #178's comment of 2026-08-22 is the decision. **Still open:** whether the panel becomes a
-teacher's toggle at all, which needs the one render this document could not take (#185). Numbers are
+teacher's toggle at all — **#214** now, since #178 closed carrying only the durations boolean and
+left that half homeless. The render it was waiting on has been taken (#185/#213), and it re-priced
+the question rather than settling it: the correction is recorded below, at the two claims it lands
+on. Numbers are
 from a 192-state sweep of the built preview (every 15 minutes, both scales, 1920×1080), reading
 rendered surfaces rather than code paths.
 
@@ -289,8 +292,10 @@ looked at. They do not settle the decision, but they remove the arithmetic from 
   and the wording were settled
 - #177 — growing and wrapping the card so a title fits; where the trade this replaces went
 - #175 — closed unmerged; the measurement of what a duration costs a title
-- #185 — the panel-off preview flag this document's last render needs, filed because it could not
-  take it
+- #185 / #213 — the panel-off preview flag this document's last render needed, filed because it could
+  not take it, and the PR that took the render
+- #214 — whether the panel becomes a teacher's toggle: the half of the question #178 closed without,
+  carrying #213's measurement of what the toggle actually costs
 - #171 / #39 item 4 / ADR 0009 — the panel-less board that already exists, and the fallback still
   undesigned
 - #145 — why the band cannot be made to carry a third line
