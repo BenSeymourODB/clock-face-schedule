@@ -84,11 +84,11 @@ function overhang(rect: Rect, band: VerticalBand): number {
  * An offer is accepted when the layout it produces satisfies both of:
  *
  * - **No pair of cards buries more of each other than it already did.** Not *no overlaps*: a pile
- *   displacement cannot separate is #30's combined-label case and is not this pass's to fix. But
- *   "no *new* colliding pair" is too weak — inside such a pile every pair already collides, so it
- *   would wave every line through and double the depth. Comparing the overlapped **area** per pair
- *   covers both: a new collision goes from zero to positive, and a deeper one from positive to
- *   larger. A growth that leaves every pair no worse off is still worth taking.
+ *   displacement cannot separate is the combined-label case (#180) and is not this pass's to fix.
+ *   But "no *new* colliding pair" is too weak — inside such a pile every pair already collides,
+ *   so it would wave every line through and double the depth. Comparing the overlapped **area**
+ *   per pair covers both: a new collision goes from zero to positive, and a deeper one from
+ *   positive to larger. A growth that leaves every pair no worse off is still worth taking.
  * - **No card further outside `band` than it already was.** `displaceVertically` refuses a component
  *   it cannot place inside the band, but a card overlapping nothing is never displaced and so is
  *   never checked — and the page's frame is sized from exactly this envelope (#121, #115). Stated
