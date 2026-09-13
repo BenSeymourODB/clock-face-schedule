@@ -135,8 +135,8 @@ function placeComponent(
  * one of its cards wholly inside `band` and clear of every other card on the dial; otherwise it
  * is left exactly as it is today. Part-resolving is not worth having: pushing a card past the clamp
  * is how a label leaves the board (#121), and a pile that cannot be separated is the combined
- * list-label's case (#30) rather than something to approximate here. Components are independent, so
- * one that cannot be placed does not cost the others their fix.
+ * list-label's case (#180) rather than something to approximate here. Components are independent,
+ * so one that cannot be placed does not cost the others their fix.
  */
 export function displaceVertically(
   rects: Rect[],

@@ -169,7 +169,8 @@ Two things it does **not** do, both of which the shorter version of this section
 
 ### Decided on the ring branch, and reusable on the sides
 
-Recorded on #30 and costed there; none of it is invalidated by a move to side arcs:
+Recorded on #30 and costed there, and held in #180 now that #30 is closed; none of it is
+invalidated by a move to side arcs:
 
 - **Displacement is vertical.** Shipped in #134 (`25af2ff`). This was #30 item 2's first question and it
   is answered by implementation, not by argument.
@@ -253,10 +254,10 @@ arcs at all.
 
 ### A. Keep the ring
 
-Finish #30's mechanism: vertical displacement and the duration fixed point are both shipped (#134,
-then #136 in #142, which put both in one `planOptionalLines` pass), so what remains on this branch is
-**the merge fallback alone**, at the granted
-margin and the band-clearing locus on the sides.
+Finish #30's mechanism, which #180 now holds: vertical displacement and the duration fixed point
+are both shipped (#134, then #136 in #142, which put both in one `planOptionalLines` pass), so what
+remains on this branch is **the merge fallback alone**, at the granted margin and the
+band-clearing locus on the sides.
 
 - Cards stay near the arcs they name; a connector points a short distance.
 - #98 resolves on the sides by construction and **survives at twelve and six**, where no locus helps.
