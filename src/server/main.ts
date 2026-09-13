@@ -31,15 +31,21 @@ export { resetPreferences, savePreferences } from "./preferences";
  * `?panel=0` leaves the agenda column off (#185) — tooling for a board that had no way onto a screen,
  * rather than a setting: it stores nothing and announces nothing. `panelAllowed` carries the rest.
  *
- * `now`, `scale`, `durations` and `panel` are all passed through **as authored**: the browser is
- * authoritative for time (ADR 0005) and the client owns the geometry (ADR 0003), so the server
- * decides neither what "04:15" means nor what "1h" means. Templated with `<?= ?>` rather than
- * `<?!= ?>`, since they arrive from the URL. Leaving `scale` unparsed here also keeps the geometry
- * layer's emoji tables out of the server bundle, which is the trap `shared/clock/index.ts` records;
- * `durations` is left to the client so the URL form and the stored form share one parser and cannot
- * drift. `panel` is left to the client because the answer is not the parameter: whether a column is
- * drawn is `panelFitsBoard` over a box only the browser has measured, and this parameter is one term
- * of that — deciding it here would put a layout answer server-side, which ADR 0003 forbids.
+ * `?labels=sides` and `?locus=` are #138's spike, and the reason they are here rather than only on
+ * the local preview is the same one: the fork is between three loci that differ by seven characters a
+ * line, and characters a line is a claim about a classroom rather than about a screenshot. They are
+ * deliberately **not** preferences — a spike is a question and a preference is a decision.
+ *
+ * `now`, `scale`, `durations`, `panel`, `labels` and `locus` are all passed through **as authored**:
+ * the browser is authoritative for time (ADR 0005) and the client owns the geometry (ADR 0003), so
+ * the server decides neither what "04:15" means nor what "1h" means. Templated with `<?= ?>` rather
+ * than `<?!= ?>`, since they arrive from the URL. Leaving `scale` unparsed here also keeps the
+ * geometry layer's emoji tables out of the server bundle, which is the trap
+ * `shared/clock/index.ts` records; `durations` is left to the client so the URL form and the stored
+ * form share one parser and cannot drift. `panel` is left to the client because the answer is not
+ * the parameter: whether a column is drawn is `panelFitsBoard` over a box only the browser has
+ * measured, and this parameter is one term of that — deciding it here would put a layout answer
+ * server-side, which ADR 0003 forbids.
  *
  * The viewer's stored preferences ride along in the same template (#31). Reading them here costs
  * nothing — `doGet` is already running server-side — where fetching them over `google.script.run`
@@ -59,6 +65,8 @@ export function doGet(event?: GoogleAppsScript.Events.DoGet): GoogleAppsScript.H
   template["scaleParam"] = event?.parameter?.["scale"] ?? "";
   template["durationsParam"] = event?.parameter?.["durations"] ?? "";
   template["panelParam"] = event?.parameter?.["panel"] ?? "";
+  template["labelsParam"] = event?.parameter?.["labels"] ?? "";
+  template["locusParam"] = event?.parameter?.["locus"] ?? "";
   template["preferences"] = preferencesWire();
   template["deploymentPreferences"] = deploymentPreferencesWire();
 

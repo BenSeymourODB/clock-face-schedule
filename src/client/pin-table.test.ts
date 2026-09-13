@@ -461,8 +461,8 @@ function problemsWith(row: Row, dial: DrawnDial): string[] {
       // And the rings actually opened, off the members' own radii. `assignRings`' depth is the
       // divisor the dial is *handed*; the dial then caps it at `maxRings`, so a fixture grown past
       // the cap would leave README naming a depth the band never divides into. The fixture sits
-      // exactly at the cap today, which is why the two agree and why nothing would say if they
-      // stopped.
+      // exactly at the cap today, which is why the two agree; `sample-events.test.ts` is what says
+      // so if they stop, holding peak concurrency against `maxRingsForBand` (#209).
       const rings = new Set(drawn.map((id) => dial.states.get(id)?.outerRadius));
 
       if (rings.size !== row.cluster.depth) {

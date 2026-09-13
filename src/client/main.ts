@@ -34,7 +34,13 @@ import {
   readPreferenceWire
 } from "./preferences";
 import { type AgendaPanelHandle, agendaPanel } from "./render/agenda-panel";
-import { type AnalogClockHandle, DIAL_VIEWBOX_SIZE, analogClock } from "./render/analog-clock";
+import {
+  type AnalogClockHandle,
+  type LabelLocus,
+  type LabelPlacement,
+  DIAL_VIEWBOX_SIZE,
+  analogClock,
+} from "./render/analog-clock";
 import { type ScheduleStatus, describeStatus, nextStatus } from "./schedule-status";
 import { scaleSwapper, withScaleParam } from "./scale-swap";
 import { teacherBar } from "./teacher-bar";
@@ -209,6 +215,50 @@ function chosenDurations(mount: Element, preferences: PreferenceStore): boolean 
     [templated, query],
     preferences.get().showEventDurations
   );
+}
+
+/**
+ * Which of #138's two label placements to draw — the shipped ring unless a URL asks for the sides.
+ *
+ * The templated attribute first and the page's own query string second, the same order and for the
+ * same reason as `chosenScale`: on the deployed app `window.location` is the sandbox iframe's, so the
+ * query string here is not the one the teacher typed.
+ *
+ * No stored layer beneath them, unlike `chosenDurations`. A spike is a question, and a board that had
+ * quietly stored the answer would go on drawing an experiment after the experiment ended.
+ */
+function chosenLabelPlacement(mount: Element): LabelPlacement {
+  const templated = mount instanceof HTMLElement ? mount.dataset["labels"] : undefined;
+  const query = new URLSearchParams(window.location.search).get("labels");
+
+  return (templated || query) === "sides" ? "sides" : "ring";
+}
+
+/**
+ * The locus radius a card sits on, in viewBox units — #138's spike, and the parameter that makes the
+ * fork walkable on a board instead of only in a table.
+ *
+ * Two of the four arms are *derived* from whatever margin the board granted, so they track the board
+ * instead of naming a radius for one of them:
+ *
+ * - `wide` — ADR 0009's circle. The widest candidate rather than a clearing one: rendered on the
+ *   sides it leaves a card **45.2 units inside the band at 16:9**, because the ADR solves three
+ *   o'clock only.
+ * - `clear` — `bandClearingLocus`, where no card covers the band at any bearing in the sector.
+ *
+ * The other two are typed, because neither is derived from anything: 297.84 is the shipped locus and
+ * ~380 is where width happens to peak on this fixture. A number is taken as authored and only
+ * sanity-bounded — a value outside `(0, 1000]` is a typo rather than a question, and anything
+ * unparseable falls through to the shipped locus, which is what every other parameter here does with
+ * input it cannot use.
+ */
+function chosenLabelLocus(mount: Element): LabelLocus {
+  const templated = mount instanceof HTMLElement ? mount.dataset["locus"] : undefined;
+  const raw = templated || new URLSearchParams(window.location.search).get("locus") || "";
+
+  if (raw === "wide" || raw === "clear") return raw;
+  const radius = Number(raw);
+  return Number.isFinite(radius) && radius > 0 && radius <= 1000 ? radius : null;
 }
 
 /**
@@ -435,7 +485,9 @@ function startDisplay(): void {
     time: loadedAt,
     scale: currentScale,
     showDurations,
-    namedElsewhere: panelNames
+    namedElsewhere: panelNames,
+    labelPlacement: chosenLabelPlacement(mount),
+    labelLocus: chosenLabelLocus(mount)
   });
   mount.append(clock.element);
 
