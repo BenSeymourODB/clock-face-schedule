@@ -3,6 +3,7 @@ import {
   SIDE_SECTOR_END,
   SIDE_SECTOR_START,
   adrBandClearingCircle,
+  bandClearingLocus,
   separationDegrees,
   sideCardAngles,
   sideForAngle,
@@ -142,6 +143,123 @@ describe('adrBandClearingCircle', () => {
     // Inner edge on the band, outer edge on the board — at three o'clock, where it was solved.
     expect(radius - width / 2).toBeCloseTo(BAND_OUTER, 6);
     expect(radius + width / 2).toBeCloseTo(boardHalf, 6);
+  });
+});
+
+/**
+ * The widest card the frame admits at `bearing`, which is what the solver bounds against.
+ *
+ * `|sin|` because the dial's box is symmetric: on the left half it is the *left* edge that binds, at
+ * the same distance. Writing it as plain `sin` is only right on the right half, and reads as a
+ * card of unbounded width at nine o'clock.
+ */
+function widestCard(radius: number, bearing: number, margin: number): number {
+  return 2 * (300 + margin - radius * Math.abs(Math.sin((bearing * Math.PI) / 180)));
+}
+
+/** A card's nearest approach to the dial centre, laid out at the frame's own limit. */
+function approach(radius: number, bearing: number, margin: number, height: number): number {
+  const radians = (bearing * Math.PI) / 180;
+  return Math.hypot(
+    Math.max(radius * Math.abs(Math.sin(radians)) - widestCard(radius, bearing, margin) / 2, 0),
+    Math.max(radius * Math.abs(Math.cos(radians)) - height / 2, 0)
+  );
+}
+
+describe('bandClearingLocus', () => {
+  const CARD_HEIGHT = 104;
+  const solve = (margin: number) =>
+    bandClearingLocus({
+      bandOuterRadius: BAND_OUTER,
+      halfViewBox: 300,
+      margin,
+      cardHeight: CARD_HEIGHT
+    });
+
+  it.each([
+    ['16:9, margin 244.1', 244.1, 460.5],
+    ['16:10, margin 175.0', 175.0, 435.4]
+  ])('solves %s', (_label, margin, expected) => {
+    expect(solve(margin as number)).toBeCloseTo(expected as number, 1);
+  });
+
+  it('clears the band at every bearing the sector allows', () => {
+    const radius = solve(244.1);
+    expect(radius).not.toBeNull();
+
+    for (let bearing = SIDE_SECTOR_START; bearing <= SIDE_SECTOR_END; bearing += 0.5) {
+      expect(approach(radius as number, bearing, 244.1, CARD_HEIGHT)).toBeGreaterThanOrEqual(
+        BAND_OUTER - 1e-6
+      );
+    }
+  });
+
+  it('is the tightest radius that does — a hair inward and a corner is in the band', () => {
+    const radius = solve(244.1) as number;
+    let worst = Infinity;
+
+    for (let bearing = SIDE_SECTOR_START; bearing <= SIDE_SECTOR_END; bearing += 0.25) {
+      worst = Math.min(worst, approach(radius - 0.5, bearing, 244.1, CARD_HEIGHT));
+    }
+    expect(worst).toBeLessThan(BAND_OUTER);
+  });
+
+  /**
+   * The whole reason this is not `adrBandClearingCircle`. The ADR solves the card's flat inner edge
+   * at three o'clock; away from three o'clock its *corner* reaches further in, and the gap is the
+   * 45.2 units #216's review measured on the rendered dial.
+   */
+  it('sits outside ADR 0009’s circle, which is a three-o’clock point solution', () => {
+    const margin = 244.1;
+    const adr = adrBandClearingCircle(BAND_OUTER, 300 + margin);
+
+    expect(solve(margin)).toBeGreaterThan(adr);
+    // At three o'clock the ADR circle is exactly right, by construction.
+    expect(approach(adr, 90, margin, CARD_HEIGHT)).toBeCloseTo(BAND_OUTER, 6);
+    // Away from it, the corner is inside the band — which is what the sector sweep catches.
+    expect(approach(adr, SIDE_SECTOR_START, margin, CARD_HEIGHT)).toBeLessThan(BAND_OUTER);
+  });
+
+  it('moves outward as the board grants more, because the card grows with the grant', () => {
+    expect(solve(244.1)).toBeGreaterThan(solve(175.0) as number);
+  });
+
+  it('needs less radius for a shorter card, since the corner reaches less far in', () => {
+    const tall = solve(244.1) as number;
+    const short = bandClearingLocus({
+      bandOuterRadius: BAND_OUTER,
+      halfViewBox: 300,
+      margin: 244.1,
+      cardHeight: 30
+    }) as number;
+
+    expect(short).toBeLessThan(tall);
+  });
+
+  /**
+   * The scope of the guarantee, pinned because `?locus=` applies to the ring as well and the name
+   * would otherwise be read as a whole-dial promise. Swept over all 360°, 16:10's binding bearing is
+   * 43.5° — just outside the sector — and a ring card there sits a fraction of a unit inside the
+   * band. The assertion is a bound rather than the figure, so it states the scope without going
+   * stale on a rounding change.
+   */
+  it('is solved for the sector, and off the sector it is close rather than clear', () => {
+    const margin = 175.0;
+    const radius = solve(margin) as number;
+    let worst = Infinity;
+
+    for (let bearing = 0; bearing < 360; bearing += 0.25) {
+      worst = Math.min(worst, approach(radius, bearing, margin, CARD_HEIGHT));
+    }
+
+    expect(worst).toBeLessThan(BAND_OUTER);
+    expect(BAND_OUTER - worst).toBeLessThan(1);
+  });
+
+  it('answers null where the board cannot hold such a card at all', () => {
+    // The inherited 50.4-unit allowance is far below ADR 0009's 75.4 knee: the clearing radius
+    // lands past the board's own edge, and the caller falls back rather than drawing off-screen.
+    expect(solve(50.4)).toBeNull();
   });
 });
 

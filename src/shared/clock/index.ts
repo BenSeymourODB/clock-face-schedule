@@ -122,12 +122,14 @@ export {
   SIDE_SECTOR_END,
   SIDE_SECTOR_START,
   adrBandClearingCircle,
+  bandClearingLocus,
   sectorTarget,
   separationDegrees,
   sideCardAngles,
   sideForAngle,
   sideSectorBounds,
   spreadInSector,
+  type BandClearingLocusParams,
   type DialSide,
   type SideCardRequest
 } from './side-placement';

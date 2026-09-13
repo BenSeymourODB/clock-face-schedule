@@ -147,6 +147,88 @@ export function adrBandClearingCircle(bandOuterRadius: number, boardHalfWidth: n
   return (bandOuterRadius + boardHalfWidth) / 2;
 }
 
+export interface BandClearingLocusParams {
+  /** The band's outer edge — the circle no card may reach inside of. */
+  bandOuterRadius: number;
+  /** Half the dial's viewBox, which with `margin` gives the board's own edge. */
+  halfViewBox: number;
+  /** The board's spare width per side, as the host measured it (#30 item 1). */
+  margin: number;
+  /** The tallest a card may become — four lines, once a duration is offered (#183). */
+  cardHeight: number;
+}
+
+/**
+ * The locus at which **no card can cover the band, at any bearing the sector allows** — the curve
+ * ADR 0009's three-o'clock point solution is read as and is not.
+ *
+ * Solved rather than scanned, which is the whole reason this can exist. An earlier version of this
+ * plan recorded that a band-clearing mode "would have to solve for the radius", that iterating the
+ * implicit form `R = 292 + extent(θ) + gap` never settles for 26.1% of cases (#184's whole-character
+ * floor), and that a scan over the sector costs thousands of layout passes per render. All true of a
+ * scan over *laid-out cards*. None of it is true here, because the widest card the frame can admit is
+ * a closed form and needs no layout at all:
+ *
+ * ```
+ * W(θ) = 2·(halfViewBox + margin − R·sin θ)        the frame limit, which binds on the outer side
+ * dx    = R·sin θ − W/2 = 2R·sin θ − halfViewBox − margin
+ * dy    = R·|cos θ| − cardHeight/2
+ * clear = hypot(max(dx, 0), max(dy, 0)) ≥ bandOuterRadius
+ * ```
+ *
+ * `dy` is why the ADR circle is not enough: at three o'clock it is the card's flat inner *edge* that
+ * approaches the band, and away from three o'clock it is the *corner*. Solving only the first gives
+ * 418.1 on a 16:9 board, which leaves a card **46.2 units inside the band** over the sector.
+ *
+ * Two things make this a bound rather than a prediction, both in the safe direction. `W` is the
+ * widest card the frame admits, so a card carrying a short title is narrower and clears by more; and
+ * `cardHeight` is the tallest a card may become, which makes `dy` smallest. Measured against the real
+ * fixture the slack is about 11 units at 16:9 — the guarantee costs a little radius over the figure a
+ * particular fixture needs, and buys not having to re-measure when the calendar changes.
+ *
+ * **The sector is the scope, and it is not the whole dial** — checked rather than assumed, because
+ * `?locus=` applies to the ring too and the name would otherwise over-promise there. Swept over all
+ * 360°, the solved radius still clears on 16:9 (worst 292.1 at 131.8°, inside the sector) but on
+ * 16:10 the binding bearing is **43.5° — a degree and a half outside it** — where a ring card would
+ * sit 0.3 units inside the band. Far too small to read as anything, and not a guarantee this
+ * function makes: on the ring it is a good radius, not a clearing one.
+ *
+ * Returns `null` where the board cannot hold such a card at all: the radius is pushed past the
+ * board's own edge, which a margin below ADR 0009's knee does. A caller falls back rather than
+ * drawing off-screen.
+ */
+export function bandClearingLocus({
+  bandOuterRadius,
+  halfViewBox,
+  margin,
+  cardHeight,
+}: BandClearingLocusParams): number | null {
+  const clears = (radius: number): boolean => {
+    for (let bearing = SIDE_SECTOR_START; bearing <= SIDE_SECTOR_END; bearing += 0.25) {
+      const radians = (bearing * Math.PI) / 180;
+      const width = 2 * (halfViewBox + margin - radius * Math.sin(radians));
+      const dx = Math.max(radius * Math.sin(radians) - width / 2, 0);
+      const dy = Math.max(radius * Math.abs(Math.cos(radians)) - cardHeight / 2, 0);
+      if (Math.hypot(dx, dy) < bandOuterRadius) return false;
+    }
+    return true;
+  };
+
+  // The board's edge is the widest any card centre may sit at — past it the card is off-screen
+  // whatever the band says.
+  const boardEdge = halfViewBox + margin;
+  if (!clears(boardEdge)) return null;
+
+  let low = bandOuterRadius;
+  let high = boardEdge;
+  for (let step = 0; step < 60; step += 1) {
+    const middle = (low + high) / 2;
+    if (clears(middle)) high = middle;
+    else low = middle;
+  }
+  return high;
+}
+
 export interface SideCardRequest {
   /** The arc's own bearing — where the connector points. */
   anchorAngle: number;

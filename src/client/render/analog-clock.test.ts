@@ -1649,6 +1649,40 @@ describe("analogClock's label placement spike", () => {
   });
 
   /**
+   * `?locus=clear` is the arm the maintainer's ranking selects — no card over an arc's content —
+   * and the reason it is a *name* rather than a number the reviewer could type. A typed 452 clears
+   * at 16:9 and costs 16:10 all but two characters a line; the solved radius tracks the board.
+   */
+  it("clears the band at the solved locus, on either board's grant", () => {
+    // The band's outer edge is `OUTER_RADIUS` itself — arcs are drawn outward from it (#74).
+    for (const margin of [SIXTEEN_NINE, 175.0]) {
+      const clearances = cardClearances({
+        labelPlacement: "sides",
+        labelLocus: "clear",
+        labelMargin: margin,
+      });
+
+      expect(Math.min(...clearances)).toBeGreaterThanOrEqual(OUTER_RADIUS);
+    }
+  });
+
+  it("solves further out than 'wide', which is what the 45.2 units were", () => {
+    const wide = cardClearances({ labelPlacement: "sides", labelLocus: "wide" });
+    const clear = cardClearances({ labelPlacement: "sides", labelLocus: "clear" });
+
+    expect(Math.min(...wide)).toBeLessThan(OUTER_RADIUS);
+    expect(Math.min(...clear)).toBeGreaterThan(Math.min(...wide));
+  });
+
+  it("falls back to the ring locus for 'clear' on a board too narrow to hold one", () => {
+    // Below ADR 0009's 75.4-unit knee the clearing radius lands past the board's own edge, and
+    // `bandClearingLocus` answers null rather than putting a card off-screen.
+    expect(labelsLayer({ labelLocus: "clear", labelMargin: 50.4 })).toBe(
+      labelsLayer({ labelMargin: 50.4 })
+    );
+  });
+
+  /**
    * The property the renders found and no table predicted: **a widened locus is only usable on the
    * sides.** Measured on the fixture at the three pins #138 names, 1920×1080 and 1920×1200 with
    * `#status` hidden — every radius above the shipped one leaves cards overlapping on the ring (4

@@ -86,14 +86,29 @@ reads from the back of a room is a claim about a real calendar rather than about
 `?locus=` is what makes the flag worth having over three hard-coded variants: the three radii above
 are measured against *this* fixture, and a maintainer looking at a real calendar can walk them.
 
-**There is deliberately no `?locus=clear`.** A band-clearing mode would have to *solve* for the
-radius, and the second decision-mode comment measured that the implicit equation
-`R = 292 + extent(θ) + gap` never settles for 26.1% of cases at 16:9 — a bounded limit cycle of mean
-amplitude 27.6 units, because `charBudget` floors to whole characters. The remedy is a scan, and a
-scan over the sector costs thousands of layout passes on every render of a dial that rebuilds once a
-minute. The band-clearing radius is a *measured number* instead — 452 on 16:9, 427 on 16:10 — and
-`?locus=452` is the same picture at none of the cost. If the fork lands on that locus, solving it
-properly is its own piece of work rather than a spike's.
+- `?locus=clear` — the smallest radius at which **no card covers the band at any bearing the sector
+  allows**: 460.5 on 16:9 and 435.4 on 16:10 at the measured grants.
+
+**`?locus=clear` was argued against in this plan and then built, and the reversal is the useful
+part.** What this section said: a band-clearing mode would have to *solve* for the radius; the
+implicit form `R = 292 + extent(θ) + gap` never settles for 26.1% of cases (#184's whole-character
+floor); the remedy is a scan; a scan over the sector costs thousands of layout passes per render;
+so use a measured number and type it.
+
+Every clause is true of a scan over **laid-out cards**, and the argument collapses once you notice
+none of it has to be. The widest card the frame can admit is a closed form —
+`W(θ) = 2·(300 + margin − R·sin θ)` — so the whole sector sweeps in trigonometry, with no layout call
+and no fixed point to converge to. `bandClearingLocus` bisects that in about 11,000 floating-point
+operations, which is microseconds on a dial that rebuilds once a minute.
+
+**And the typed number it was defending is actively wrong on one of the two boards.** `?locus=452`
+clears at 16:9 and costs 16:10 all but **2 characters a line**, where 435.4 — the radius solved for
+16:10's own grant — leaves 5. A derived value tracks the board; a measured one is a measurement of
+whichever board it was taken on.
+
+The cost of the guarantee is about 11 units of radius against what this fixture needs (460.5 against
+452), because the bound takes the widest card the frame admits and the tallest it may become. That
+buys not re-measuring when the calendar changes.
 
 ## Sector assignment and order — decision 1's default, and no more
 

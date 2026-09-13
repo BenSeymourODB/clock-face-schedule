@@ -40,6 +40,20 @@ const ID_PREFIX = "floating-label";
  */
 const MAX_LINES = 3;
 
+/**
+ * The tallest a card may become, for a caller that has to reason about where one reaches before it
+ * has one to measure — `?locus=clear`, which solves for the radius no card's corner reaches the band
+ * from (#138).
+ *
+ * `MAX_LINES + 1` rather than `MAX_LINES`: `fitLabelToClearedWidth` starts at one line past the cap
+ * whenever a duration is *offered*, so a card that merely offers one is cleared against the taller
+ * box whether or not it draws it (#183). Exported as a function rather than as the two constants so
+ * the caller cannot pair one of them with its own copy of the other.
+ */
+export function maxLabelCardHeight(fontSize: number): number {
+  return labelCardHeight(MAX_LINES + 1, fontSize, RECT_PADDING_Y);
+}
+
 const CONNECTOR_OPACITY = 0.6;
 
 /**

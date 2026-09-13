@@ -225,19 +225,25 @@ function chosenLabelPlacement(mount: Element): LabelPlacement {
  * The locus radius a card sits on, in viewBox units — #138's spike, and the parameter that makes the
  * fork walkable on a board instead of only in a table.
  *
- * `wide` is ADR 0009's circle read off whatever margin the board granted, so it tracks the board
- * rather than naming a radius for one of them. It is the widest candidate rather than the one that
- * clears the band: rendered on the sides it leaves a card **45.2 units inside the band at 16:9**,
- * because the ADR solves three o'clock only. A number is taken as authored and only
- * sanity-bounded: the three radii the fork trades between are 297.84, ~380 and ~452, and a value
- * outside `(0, 1000]` is a typo rather than a question — anything unparseable falls through to the
- * shipped locus, which is what every other parameter here does with input it cannot use.
+ * Two of the four arms are *derived* from whatever margin the board granted, so they track the board
+ * instead of naming a radius for one of them:
+ *
+ * - `wide` — ADR 0009's circle. The widest candidate rather than a clearing one: rendered on the
+ *   sides it leaves a card **45.2 units inside the band at 16:9**, because the ADR solves three
+ *   o'clock only.
+ * - `clear` — `bandClearingLocus`, where no card covers the band at any bearing in the sector.
+ *
+ * The other two are typed, because neither is derived from anything: 297.84 is the shipped locus and
+ * ~380 is where width happens to peak on this fixture. A number is taken as authored and only
+ * sanity-bounded — a value outside `(0, 1000]` is a typo rather than a question, and anything
+ * unparseable falls through to the shipped locus, which is what every other parameter here does with
+ * input it cannot use.
  */
 function chosenLabelLocus(mount: Element): LabelLocus {
   const templated = mount instanceof HTMLElement ? mount.dataset["locus"] : undefined;
   const raw = templated || new URLSearchParams(window.location.search).get("locus") || "";
 
-  if (raw === "wide") return "wide";
+  if (raw === "wide" || raw === "clear") return raw;
   const radius = Number(raw);
   return Number.isFinite(radius) && radius > 0 && radius <= 1000 ? radius : null;
 }

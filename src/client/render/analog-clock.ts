@@ -9,6 +9,7 @@ import {
   adrBandClearingCircle,
   angleForTime,
   assignRings,
+  bandClearingLocus,
   calculateTrueArcAngles,
   combineTitleWithEmoji,
   computeArcTitleLayout,
@@ -35,6 +36,7 @@ import {
   type FloatingLabelParams,
   floatingLabel,
   floatingLabelGeometry,
+  maxLabelCardHeight,
 } from "./floating-label";
 import { windowTrack } from "./window-track";
 
@@ -215,14 +217,21 @@ export interface AnalogClockParams {
   /**
    * The radius a card's centre sits on, overriding `LABEL_RADIUS_RATIO` (#138).
    *
-   * A number in viewBox units, or `"wide"` for ADR 0009's circle derived from whatever margin the
-   * board granted — the *widest* candidate, not a clearing one. Rendered on the sides it measures
-   * **246.8 against the band's 292 at 16:9**, so a card is 45.2 units inside the band; the ADR solves
-   * three o'clock only and `adrBandClearingCircle` says so. Also a spike, and useful on the ring as
-   * well as the sides: the three
-   * radii the fork trades between are 297.84 (the only one that keeps a card above `#status`), about
-   * 380 (the width optimum on 16:9) and about 452 (the only one that clears the band), and a
-   * maintainer standing at a board can walk them without a rebuild.
+   * A number in viewBox units, or one of two names that track the board through its granted margin:
+   *
+   * - `"wide"` — ADR 0009's circle, the *widest* candidate and not a clearing one. Rendered on the
+   *   sides it measures **246.8 against the band's 292 at 16:9**, so a card is 45.2 units inside the
+   *   band; the ADR solves three o'clock only and `adrBandClearingCircle` says so.
+   * - `"clear"` — `bandClearingLocus`, the radius at which **no card covers the band at any bearing
+   *   the sector allows**. 460.5 on 16:9 and 435.4 on 16:10 at the measured grants.
+   *
+   * `"clear"` exists because a typed number cannot do its job on both boards: `?locus=452` clears at
+   * 16:9 and costs 16:10 all but **2 characters a line**, where the radius solved for 16:10 leaves 5.
+   * The fork's other two radii have no such name because neither is a derived quantity — 297.84 is
+   * the shipped locus and ~380 is where width happens to peak on this fixture, so both are typed.
+   *
+   * Also a spike, and useful on the ring as well as the sides: a maintainer standing at a board can
+   * walk all four without a rebuild.
    */
   labelLocus?: LabelLocus;
 }
@@ -230,8 +239,12 @@ export interface AnalogClockParams {
 /** #138's fork, as something a render can be asked for. */
 export type LabelPlacement = "ring" | "sides";
 
-/** A locus radius in viewBox units, or ADR 0009's circle read off the granted margin. */
-export type LabelLocus = number | "wide" | null;
+/**
+ * A locus radius in viewBox units, or one of two derived from the granted margin: `"wide"` is ADR
+ * 0009's three-o'clock circle, and `"clear"` the radius at which no card covers the band at any
+ * bearing the sector allows.
+ */
+export type LabelLocus = number | "wide" | "clear" | null;
 
 export interface AnalogClockHandle {
   element: SVGSVGElement;
@@ -299,13 +312,28 @@ export function analogClock({
   /**
    * The locus a card's centre sits on this render (#138's spike).
    *
-   * A function rather than a constant because `"wide"` is derived from the granted margin, which
+   * A function rather than a constant because both names are derived from the granted margin, which
    * `setLabelMargin` re-hands on every resize — the same reason `layoutBox` is rebuilt per render.
-   * `"wide"` without a grant falls back to the ring: ADR 0009's circle is the *board's* edge and a
-   * page that could not measure one has no board to put a card against.
+   * Either without a grant falls back to the ring: both are measured from the *board's* edge, and a
+   * page that could not measure one has no board to put a card against. `"clear"` falls back for a
+   * second reason as well — a margin below ADR 0009's knee puts the clearing radius past the board's
+   * own edge, and `bandClearingLocus` answers `null` rather than drawing a card off-screen.
    */
   function currentLocus(): number {
     if (typeof labelLocus === "number") return labelLocus;
+    if (labelLocus === "clear" && grantedMargin !== null) {
+      return (
+        bandClearingLocus({
+          bandOuterRadius: outerRadius,
+          halfViewBox: size / 2,
+          margin: grantedMargin,
+          // The tallest a card may become: `MAX_LINES` of title plus the duration line it is
+          // cleared against whether or not it draws one (#183). Taking the tallest is what makes
+          // the answer a bound — a shorter card's corner reaches less far in.
+          cardHeight: maxLabelCardHeight(labelFontSize),
+        }) ?? labelRadius
+      );
+    }
     if (labelLocus === "wide" && grantedMargin !== null) {
       return adrBandClearingCircle(outerRadius, size / 2 + grantedMargin);
     }
