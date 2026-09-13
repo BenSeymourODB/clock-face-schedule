@@ -119,6 +119,24 @@ describe("the page template", () => {
   });
 
   /**
+   * #138's spike parameters. Same shape as the pin's and the same failure mode: `chosenLabelPlacement`
+   * and `chosenLabelLocus` read these attributes and nothing else, so a name that does not match
+   * across the boundary leaves the deployed board unable to show the fork at all — silently, since
+   * the ring is what a missing attribute means.
+   */
+  it.each([
+    ["labels", "labelsParam"],
+    ["locus", "locusParam"]
+  ])("templates the %s parameter onto the mount element", (attribute, value) => {
+    expect(TEMPLATE).toContain(`data-${attribute}="<?= ${value} ?>"`);
+    expect(withoutGuardedRegions(TEMPLATE)).toContain(`data-${attribute}=`);
+    // Stripped of scriptlets it must read as "the URL said nothing", or the preview would draw the
+    // spike on every load — the trap the durations attribute above records.
+    expect(TEMPLATE.replace(SCRIPTLET, "")).toContain(`data-${attribute}=""`);
+    expect(TEMPLATE).not.toContain(`<?!= ${value}`);
+  });
+
+  /**
    * ADR 0008's bar, and the one property it cannot be built without: it is on screen on **every**
    * load. The switch inside it is what stops a scale change being a mode nobody knows was made, and
    * a switch that some loads do not carry is not an indicator — so this asserts the host survives
