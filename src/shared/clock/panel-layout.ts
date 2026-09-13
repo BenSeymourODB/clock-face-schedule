@@ -171,6 +171,46 @@ export function panelFitsBoard(
   return board.width >= (board.height * needed) / size;
 }
 
+/**
+ * Whether the column may be drawn at all, before `panelFitsBoard` is asked whether it fits (#185).
+ *
+ * `?panel=0` is preview tooling rather than a setting: ADR 0009's narrow-display fallback (#39 item
+ * 4) is still undesigned, #178's duration wording was chosen *because* it survives a panel-less
+ * board, and #179 names a panel-off render as its only outstanding one — and none of that could be
+ * looked at, because every board anyone can point a browser at draws a column. `CLAUDE.md`'s rule is
+ * that no legibility claim is credible until it is rendered, and this board was exempt by accident.
+ *
+ * Layered like `?durations=`, most specific first: the templated attribute (what `doGet` saw in the
+ * URL), then the page's own query string. On the deployed app `window.location` is the sandbox
+ * iframe's rather than the teacher's, so the attribute has to win; on `build/preview.html`, which has
+ * no server, the attribute strips to `""` and the query string is the whole of it. An empty or
+ * unrecognised layer is *skipped* rather than answered for, which is `resolvePreferences`' own rule —
+ * and here the stripped attribute is the common case rather than an edge one.
+ *
+ * **`1` is not a force-on, and the asymmetry is the point.** It means "draw it where the board can
+ * carry it", which is the default — the measurement still runs. Forcing a column onto a board
+ * `panelFitsBoard` rejects would take height from the dial (ADR 0009's one absolute) or push the
+ * labels below the 75.4-unit knee where the panel and the labels trade width one-for-one, which is
+ * the trade the ADR says its 180 units must not make. So this can only take a surface away, never add
+ * one the board cannot afford: every picture it produces is one some real board actually draws. A
+ * too-narrow board is reached by narrowing the window, which needs no parameter.
+ *
+ * **No preference, and no notice on screen.** Not a teacher-facing toggle — that is #178's territory
+ * — so nothing is stored and there is no control. And unlike `?now=` and `?demo=1` it announces
+ * nothing, for a reason that is arithmetic rather than taste: a notice is a grid row and costs the
+ * dial a row of height (#115), and the panel-off board's measurements are the whole of what this
+ * exists to produce. There is also nothing to announce. A panel-less board is what #171 measures a
+ * board doing on its own as it approaches square, with no notice then either, and the dial drawn here
+ * is truthful — the clock is the clock and the events are whatever the page was already showing.
+ */
+export function panelAllowed(layers: readonly (string | null | undefined)[]): boolean {
+  for (const value of layers) {
+    if (value === "0") return false;
+    if (value === "1") return true;
+  }
+  return true;
+}
+
 /** An event resolved to the text and colour a card draws, before it is wrapped or placed. */
 export interface AgendaEntry {
   id: string;

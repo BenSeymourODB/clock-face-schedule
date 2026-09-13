@@ -8,6 +8,7 @@ import {
   PANEL_CARD_STROKE,
   PANEL_WIDTH_UNITS,
   agendaEntries,
+  panelAllowed,
   panelFitsBoard,
   planAgendaCards
 } from './panel-layout';
@@ -136,6 +137,65 @@ describe('panelFitsBoard', () => {
 
   it('treats a negative minimum as none rather than as credit', () => {
     expect(panelFitsBoard({ width: 1300, height: 1000 }, DIAL_SIZE, PANEL_RESERVE_UNITS, -500)).toBe(true);
+  });
+});
+
+describe('panelAllowed', () => {
+  /**
+   * The layers as `main.ts` hands them over: the templated attribute first, the page's own query
+   * string second. `undefined` is an absent attribute (a jsdom mount, a page with no `data-panel`),
+   * `''` is a **stripped** one — which is what `build/preview.html` and every real load with no
+   * `?panel=` actually carry, so it is the common case rather than an edge one.
+   */
+  it.each([
+    ['both layers silent', [undefined, null], true],
+    ['a stripped attribute and no parameter — the preview, and every ordinary load', ['', null], true],
+    ['?panel=0 in the query string', ['', '0'], false],
+    ['?panel=1 in the query string', ['', '1'], true],
+    ['the templated attribute, which doGet saw', ['0', null], false],
+    ['the attribute winning over a contrary query string', ['0', '1'], false],
+    ['the attribute winning the other way, so neither direction is special', ['1', '0'], true],
+    ['an unrecognised attribute falling through to the parameter', ['yes', '0'], false],
+    ['an unrecognised value in both layers', ['off', 'false'], true],
+    ['no layers at all', [], true]
+  ])('%s', (_name, layers, expected) => {
+    expect(panelAllowed(layers as (string | null | undefined)[])).toBe(expected);
+  });
+
+  /**
+   * **`1` means "draw it where the board can carry it", not "draw it regardless"** — the one decision
+   * in #185, and what this asserts is the half that lives in this function: that no value of the
+   * parameter ever answers `true` for a *reason of its own*. `panelAllowed`'s docstring carries why.
+   *
+   * The other half — that `showPanel` puts this ahead of `panelFitsBoard` rather than instead of it —
+   * is not assertable here and is not asserted here. **An earlier version tried, and the attempt was
+   * worse than the omission**: it re-typed `showPanel`'s conjunction as
+   * `expect(panelAllowed([…]) && fits).toBe(false)` on a board where the line above had already
+   * established `fits === false`, so the expectation could not fail for any implementation of
+   * `panelAllowed` at all — four assertions carrying no information, under a title claiming the
+   * guarantee. `main-load-order.test.ts` binds the conjunction to the source instead, which is the
+   * only place that relationship exists.
+   */
+  it.each([['0', false], ['1', true], ['', true], ['anything', true]])(
+    'answers %s for ?panel=%s with no view of the board',
+    (value, expected) => {
+      expect(panelAllowed(['', value])).toBe(expected);
+    }
+  );
+
+  /**
+   * The fit test's own answer on a board that fails it, so the two halves of `showPanel`'s expression
+   * are each pinned somewhere.
+   *
+   * **These are `#board`'s dimensions, not a viewport's** — the row the dial and the column share,
+   * after ADR 0008's bar and `--label-frame` have taken theirs. An actual 1184×854 *window* draws a
+   * panel quite happily (the row is 1059 × 659 by then, which passes), so reproducing this by resizing
+   * a browser to 1184×854 and finding a column is the expected result rather than a contradiction.
+   */
+  it('rejects a board too narrow to carry a column without the labels paying', () => {
+    expect(
+      panelFitsBoard({ width: 1184, height: 854 }, DIAL_SIZE, PANEL_RESERVE_UNITS, LABEL_MARGIN_KNEE_UNITS)
+    ).toBe(false);
   });
 });
 
