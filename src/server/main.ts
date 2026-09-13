@@ -28,7 +28,12 @@ export { resetPreferences, savePreferences } from "./preferences";
  * overrides a *stored* preference, which is what makes a teacher's setting checkable on the wall it
  * runs on rather than only on a workstation.
  *
- * `now`, `scale` and `durations` are all passed through **as authored**: the browser is
+ * `?labels=sides` and `?locus=` are #138's spike, and the reason they are here rather than only on
+ * the local preview is the same one: the fork is between three loci that differ by seven characters a
+ * line, and characters a line is a claim about a classroom rather than about a screenshot. They are
+ * deliberately **not** preferences — a spike is a question and a preference is a decision.
+ *
+ * `now`, `scale`, `durations`, `labels` and `locus` are all passed through **as authored**: the browser is
  * authoritative for time (ADR 0005) and the client owns the geometry (ADR 0003), so the server
  * decides neither what "04:15" means nor what "1h" means. Templated with `<?= ?>` rather than
  * `<?!= ?>`, since they arrive from the URL. Leaving `scale` unparsed here also keeps the geometry
@@ -53,6 +58,8 @@ export function doGet(event?: GoogleAppsScript.Events.DoGet): GoogleAppsScript.H
   template["freezeClock"] = event?.parameter?.["freeze"] === "1" ? "1" : "";
   template["scaleParam"] = event?.parameter?.["scale"] ?? "";
   template["durationsParam"] = event?.parameter?.["durations"] ?? "";
+  template["labelsParam"] = event?.parameter?.["labels"] ?? "";
+  template["locusParam"] = event?.parameter?.["locus"] ?? "";
   template["preferences"] = preferencesWire();
   template["deploymentPreferences"] = deploymentPreferencesWire();
 

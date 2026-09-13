@@ -119,6 +119,21 @@ export {
 } from './pack-lines';
 export { rectEdgeIntersection, rectsOverlap, type Rect } from './rect-edge';
 export {
+  SIDE_SECTOR_END,
+  SIDE_SECTOR_START,
+  adrBandClearingCircle,
+  bandClearingLocus,
+  sectorTarget,
+  separationDegrees,
+  sideCardAngles,
+  sideForAngle,
+  sideSectorBounds,
+  spreadInSector,
+  type BandClearingLocusParams,
+  type DialSide,
+  type SideCardRequest
+} from './side-placement';
+export {
   displaceVertically,
   overlapComponents,
   type VerticalBand

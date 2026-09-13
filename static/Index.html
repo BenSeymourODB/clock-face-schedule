@@ -8,7 +8,8 @@
   <body>
     <main id="display">
       <!--
-        The pin's two attributes, the scale, the durations switch and the two preference wires are
+        The pin's two attributes, the scale, the durations switch, #138's two spike parameters and
+        the two preference wires are
         emitted unconditionally with a templated *value*, not behind a conditional scriptlet the way
         data-demo is. The preview
         builder strips scriptlets while keeping what they guard — which is how demo mode is always on
@@ -57,6 +58,8 @@
           data-freeze="<?= freezeClock ?>"
           data-scale="<?= scaleParam ?>"
           data-durations="<?= durationsParam ?>"
+          data-labels="<?= labelsParam ?>"
+          data-locus="<?= locusParam ?>"
           data-preferences="<?= preferences ?>"
           data-deployment-preferences="<?= deploymentPreferences ?>"
         ></div>
