@@ -66,8 +66,22 @@ column's 180 halved (that would be 90):
 - `labelMarginUnits` subtracts `PANEL_RESERVE_UNITS` **unconditionally**, panel drawn or not. So the
   reserve costs the labels 90 units a side in *both* columns of the tables above.
 - What changes instead is which width `measureLabelMargin` divides: the **row** while the column is
-  up, the **viewport** once it is down. The difference between them is `--label-frame`, 2 × 78.8 px
-  at 16:9 → 113.4 units of board → **56.7 a side**.
+  up, the **viewport** once it is down. The difference between them is `--label-frame`.
+
+**And the frame is where "identically" stops being a coincidence.** `--label-frame` is `7.3vmin`, so
+it is a *different number of pixels* on the two boards — but the dial is height-bound and therefore
+also scales with `vmin`, so the two divide out and the frame is the **same number of dial units** on
+both:
+
+| board | frame per side | px per unit | frame in units, both sides | per side |
+| --- | --- | --- | --- | --- |
+| 1920×1080 | 78.84 px | 1.38966 | 113.47 | **56.73** |
+| 1920×1200 | **87.60 px** | 1.54404 | 113.47 | **56.73** |
+
+Read off `#display`'s resolved padding rather than computed from the `vmin`. Quoting the 78.84 alone
+as the explanation for both rows is the error `CLAUDE.md`'s "name the ground with the ratio" rule
+covers — the pixel figure is meaningless without the board it was taken on, and it was offered to
+explain a board it is wrong for. Caught in review.
 
 So with the column gone the labels are granted 300.8 units against **390.8** of real slack a side,
 and the 90 a side in between stays held for a column that is not there. That is #171's finding

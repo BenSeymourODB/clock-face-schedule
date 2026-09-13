@@ -244,7 +244,10 @@ own information and the dial's horizontal position, and by nothing else.
 
 The 56.7 units a side the labels gain are the page's `--label-frame`, not the column's 180 halved:
 `labelMarginUnits` subtracts the panel's reserve whether or not a column is drawn, so 90 units a
-side stay held for a panel that is not there (#171).
+side stay held for a panel that is not there (#171). It is the same 56.7 on both boards even though
+the frame is 78.84 px on one and 87.60 px on the other — `--label-frame` is `7.3vmin` and the
+height-bound dial scales with `vmin` too, so the two divide out and the frame is a constant number
+of dial units.
 
 **The times below exercise the demo fixture's states**, and are what the fixture's offsets mean once
 a pin anchors them to midnight — measured by rendering, not predicted. Each claim names one event and

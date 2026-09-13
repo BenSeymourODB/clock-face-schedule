@@ -37,15 +37,30 @@ import TEMPLATE from "../../static/Index.html?raw";
 import CLIENT from "../client/main.ts?raw";
 import SERVER from "./main.ts?raw";
 
-/** Each parameter, with the template variable `doGet` is expected to carry it in. */
-const PARAMETERS: [name: string, templateVar: string][] = [
-  ["scale", "scaleParam"],
-  ["durations", "durationsParam"],
-  ["panel", "panelParam"]
+/**
+ * Each parameter, with the template variable `doGet` is expected to carry it in.
+ *
+ * **Every parameter templated as `<name>Param` belongs here**, which is what makes this a convention
+ * rather than a list of three. `labels` and `locus` arrived from #138's spike while this branch was
+ * open and were added on the merge: they follow the same three-file path, so leaving them out would
+ * have reopened for them exactly the hole this file was written to close.
+ */
+const PARAMETERS: { name: string; templateVar: string }[] = [
+  { name: "scale", templateVar: "scaleParam" },
+  { name: "durations", templateVar: "durationsParam" },
+  { name: "panel", templateVar: "panelParam" },
+  { name: "labels", templateVar: "labelsParam" },
+  { name: "locus", templateVar: "locusParam" }
 ];
 
+/**
+ * Objects rather than tuples **so each case names itself in the report**. With array cases, `%s`
+ * fills positionally and printf-style `%1$s` is not substituted at all — which printed five cases
+ * as the literal `Index.html prints %2$s into data-%1$s`, indistinguishable from each other. A
+ * failure has to say *which* parameter broke; `$name` interpolation is what makes it.
+ */
 describe("a URL parameter's name, across the three files that must agree", () => {
-  it.each(PARAMETERS)("doGet reads ?%s into %s", (name, templateVar) => {
+  it.each(PARAMETERS)("doGet reads ?$name into $templateVar", ({ name, templateVar }) => {
     // The assignment and the key it reads, in one match, so a `panelParam` fed from `["pane"]`
     // fails here rather than on a board.
     expect(SERVER).toMatch(
@@ -53,13 +68,13 @@ describe("a URL parameter's name, across the three files that must agree", () =>
     );
   });
 
-  it.each(PARAMETERS)("Index.html prints %2$s into data-%1$s", (name, templateVar) => {
+  it.each(PARAMETERS)("Index.html prints $templateVar into data-$name", ({ name, templateVar }) => {
     expect(TEMPLATE).toContain(`data-${name}="<?= ${templateVar} ?>"`);
   });
 
   it.each(PARAMETERS)(
-    "the client reads data-%1$s before its own ?%1$s, and reads both",
-    (name) => {
+    "the client reads data-$name before its own ?$name, and reads both",
+    ({ name }) => {
       const attribute = CLIENT.search(new RegExp(`dataset\\["${name}"\\]`));
       const query = CLIENT.search(new RegExp(`\\.get\\("${name}"\\)`));
 
@@ -82,7 +97,7 @@ describe("a URL parameter's name, across the three files that must agree", () =>
    * *containing* their own name somewhere.
    */
   it("gives each parameter its own template variable", () => {
-    const used = PARAMETERS.map(([name]) => {
+    const used = PARAMETERS.map(({ name }) => {
       const [, variable] = new RegExp(`data-${name}="<\\?=\\s*(\\w+)\\s*\\?>"`).exec(TEMPLATE) ?? [];
       return variable;
     });
